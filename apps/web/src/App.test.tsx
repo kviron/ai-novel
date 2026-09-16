@@ -37,7 +37,9 @@ test('changes Akane sprite when an expression is selected', async () => {
   render(<App />)
   await userEvent.click(screen.getByRole('button', { name: /начать историю/i }))
 
-  expect(await screen.findByRole('img', { name: 'Аканэ: Нейтральная' })).toHaveAttribute('data-expression', 'neutral')
+  const sprite = await screen.findByRole('img', { name: 'Аканэ: Нейтральная' })
+  expect(sprite).toHaveAttribute('data-expression', 'neutral')
+  expect(sprite).toHaveStyle({ aspectRatio: '1 / 3' })
   await userEvent.click(screen.getByRole('radio', { name: 'С веером' }))
   expect(screen.getByRole('img', { name: 'Аканэ: С веером' })).toHaveAttribute('data-expression', 'fan')
 })

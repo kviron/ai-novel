@@ -90,7 +90,7 @@ function Play({ story: initialStory }: { story: Story }) {
     <header><div className="logo">МНЕМОЗИНА <b>α</b></div><h1 className="story-title">{story.title}</h1><div className="chapter">ГЛАВА I <span>/</span> {story.current_scene}</div><div className="provider-dots"><i className={providers?.ollama.available ? 'on' : ''}/>ТЕКСТ <i className={providers?.comfyui.available ? 'on' : ''}/>ИЗОБРАЖЕНИЯ</div></header>
     <section className="stage">
       <div className="rain"/><div className="moon"/><div className="city"/>
-      <div className="character-sprite" data-expression={expression} role="img" aria-label={`Аканэ: ${expressionLabel}`} />
+      <div className="character-sprite" data-expression={expression} role="img" aria-label={`Аканэ: ${expressionLabel}`} style={{ aspectRatio: '1 / 3' }} />
       <div className="sprite-controls">
         <span>ЭМОЦИЯ АКАНЭ</span>
         <ToggleGroup type="single" variant="outline" size="sm" value={expression} onValueChange={value => value && setExpression(value as Expression)} aria-label="Эмоция Аканэ">
