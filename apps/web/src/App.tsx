@@ -4,14 +4,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Toaster } from '@/components/ui/sonner'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import './styles.css'
 
 const initial = {
   title: 'Эхо неона',
   premise: 'Курьер находит чужое воспоминание в дождливом мегаполисе.',
-  name: 'Мира', age: 24, personality: 'наблюдательная и осторожная',
-  appearance: 'короткие серебристые волосы, янтарные глаза, тёмное пальто',
+  name: 'Аканэ Куроха', age: 25, personality: 'уверенная, наблюдательная и немного насмешливая',
+  appearance: 'длинные чёрные волосы, красные глаза, чёрные кошачьи ушки, красное платье',
 }
+
+const expressions = [
+  ['neutral', 'Нейтральная'],
+  ['happy', 'Радость'],
+  ['sad', 'Грусть'],
+  ['angry', 'Злость'],
+  ['surprised', 'Удивление'],
+  ['fan', 'С веером'],
+] as const
+
+type Expression = typeof expressions[number][0]
 
 function Setup({ onCreated }: { onCreated: (story: Story) => void }) {
   const [form, setForm] = useState(initial)
@@ -59,7 +71,9 @@ function Play({ story: initialStory }: { story: Story }) {
   const [providers, setProviders] = useState<ProviderStatus | null>(null)
   const [action, setAction] = useState('')
   const [busy, setBusy] = useState(false)
+  const [expression, setExpression] = useState<Expression>('neutral')
   const turn = story.latest_turn
+  const expressionLabel = expressions.find(([value]) => value === expression)?.[1] ?? 'Нейтральная'
 
   useEffect(() => { void api.jobs(story.id).then(setJobs); void api.providers().then(setProviders) }, [story.id])
   async function act(text: string) {
@@ -76,7 +90,13 @@ function Play({ story: initialStory }: { story: Story }) {
     <header><div className="logo">МНЕМОЗИНА <b>α</b></div><h1 className="story-title">{story.title}</h1><div className="chapter">ГЛАВА I <span>/</span> {story.current_scene}</div><div className="provider-dots"><i className={providers?.ollama.available ? 'on' : ''}/>ТЕКСТ <i className={providers?.comfyui.available ? 'on' : ''}/>ИЗОБРАЖЕНИЯ</div></header>
     <section className="stage">
       <div className="rain"/><div className="moon"/><div className="city"/>
-      <div className="character-silhouette"><div className="portrait-mark">{story.characters[0].name.slice(0, 1)}</div></div>
+      <div className="character-sprite" data-expression={expression} role="img" aria-label={`Аканэ: ${expressionLabel}`} />
+      <div className="sprite-controls">
+        <span>ЭМОЦИЯ АКАНЭ</span>
+        <ToggleGroup type="single" variant="outline" size="sm" value={expression} onValueChange={value => value && setExpression(value as Expression)} aria-label="Эмоция Аканэ">
+          {expressions.map(([value, label]) => <ToggleGroupItem key={value} value={value} aria-label={label}>{label}</ToggleGroupItem>)}
+        </ToggleGroup>
+      </div>
       <aside className="job-panel"><div><span>ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ</span><b>в очереди: {queued}</b></div>{jobs.slice(0, 3).map(job => <article key={job.id}><i className={job.status}/><p>{{character_sheet: 'лист персонажа', sprite: 'спрайт', cg: 'полная сцена'}[job.kind]} {job.expression && `· ${{neutral: 'нейтральный', happy: 'радость', sad: 'грусть', angry: 'злость', surprised: 'удивление'}[job.expression] ?? job.expression}`}<small>{job.stage}</small></p></article>)}</aside>
       <div className="dialogue">
         <div className="speaker"><span>{turn?.speaker ?? story.characters[0].name}</span><small>{story.characters[0].personality}</small></div>

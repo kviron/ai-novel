@@ -1,12 +1,14 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import App from './App'
+
+afterEach(() => cleanup())
 
 const story = {
   id: 'story-1', title: 'Эхо неона', premise: 'Дождь и воспоминания',
   state_version: 1, current_scene: 'Прибытие', theme_labels: ['детектив'],
-  characters: [{ id: 'mira', name: 'Мира', age: 24, personality: 'осторожная', appearance: 'серебристые волосы' }],
+  characters: [{ id: 'akane', name: 'Аканэ Куроха', age: 25, personality: 'уверенная', appearance: 'чёрные волосы и красное платье' }],
   latest_turn: null,
 }
 
@@ -20,6 +22,22 @@ test('creates a story and opens the visual novel stage', async () => {
   render(<App />)
   await userEvent.click(screen.getByRole('button', { name: /начать историю/i }))
   expect(await screen.findByRole('heading', { name: 'Эхо неона' })).toBeInTheDocument()
-  expect(screen.getByText('Мира')).toBeInTheDocument()
+  expect(screen.getByText('Аканэ Куроха')).toBeInTheDocument()
   expect(screen.getByText(/Ожидает генератор изображений/i)).toBeInTheDocument()
+})
+
+test('changes Akane sprite when an expression is selected', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/health/providers')) return new Response(JSON.stringify({ ollama: { available: false }, comfyui: { available: false } }))
+    if (url.endsWith('/jobs')) return new Response(JSON.stringify([]))
+    return new Response(JSON.stringify(story), { status: 201 })
+  }))
+
+  render(<App />)
+  await userEvent.click(screen.getByRole('button', { name: /начать историю/i }))
+
+  expect(await screen.findByRole('img', { name: 'Аканэ: Нейтральная' })).toHaveAttribute('data-expression', 'neutral')
+  await userEvent.click(screen.getByRole('radio', { name: 'С веером' }))
+  expect(screen.getByRole('img', { name: 'Аканэ: С веером' })).toHaveAttribute('data-expression', 'fan')
 })
