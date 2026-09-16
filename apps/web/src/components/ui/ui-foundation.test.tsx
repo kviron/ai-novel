@@ -9,13 +9,13 @@ import { Progress } from './progress'
 test('shadcn primitives provide accessible actions and overlays', async () => {
   render(
     <Dialog>
-      <DialogTrigger asChild><Button>Open settings</Button></DialogTrigger>
-      <DialogContent><DialogTitle>Settings</DialogTitle><Progress value={40} /></DialogContent>
+      <DialogTrigger asChild><Button>Открыть настройки</Button></DialogTrigger>
+      <DialogContent><DialogTitle>Настройки</DialogTitle><Progress value={40} /></DialogContent>
     </Dialog>,
   )
 
-  await userEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Открыть настройки' }))
   expect(screen.getByRole('dialog')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Настройки' })).toBeInTheDocument()
   expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40')
 })

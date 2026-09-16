@@ -25,7 +25,7 @@ class Store:
         with self.database.connect() as db:
             db.execute(
                 "INSERT INTO stories VALUES (?, ?, ?, ?, 1, ?, ?)",
-                (story_id, payload.title, payload.premise, json.dumps(payload.theme_labels), "Arrival", timestamp),
+                (story_id, payload.title, payload.premise, json.dumps(payload.theme_labels), "Прибытие", timestamp),
             )
             for character in payload.characters:
                 character_id = str(uuid4())
@@ -35,12 +35,12 @@ class Store:
                 )
                 sheet_id = str(uuid4())
                 db.execute(
-                    "INSERT INTO generation_jobs VALUES (?, ?, ?, 'character_sheet', NULL, NULL, 'queued', 'Waiting for image worker', NULL, ?)",
+                    "INSERT INTO generation_jobs VALUES (?, ?, ?, 'character_sheet', NULL, NULL, 'queued', 'Ожидает генератор изображений', NULL, ?)",
                     (sheet_id, story_id, character_id, timestamp),
                 )
                 for expression in ("neutral", "happy", "sad", "angry", "surprised"):
                     db.execute(
-                        "INSERT INTO generation_jobs VALUES (?, ?, ?, 'sprite', ?, ?, 'queued', 'Waiting for character sheet', NULL, ?)",
+                        "INSERT INTO generation_jobs VALUES (?, ?, ?, 'sprite', ?, ?, 'queued', 'Ожидает лист персонажа', NULL, ?)",
                         (str(uuid4()), story_id, character_id, expression, sheet_id, timestamp),
                     )
         return self.get_story(story_id)
@@ -73,14 +73,14 @@ class Store:
             if not story:
                 raise KeyError(story_id)
             if story["state_version"] != payload.expected_state_version:
-                raise ConflictError("Story state changed; reload before continuing")
+                raise ConflictError("Состояние истории изменилось. Обновите страницу перед продолжением")
             character = db.execute("SELECT name FROM characters WHERE story_id = ? ORDER BY rowid LIMIT 1", (story_id,)).fetchone()
             version = story["state_version"] + 1
             turn_id = str(uuid4())
-            speaker = character["name"] if character else "Narrator"
-            dialogue = f'“{payload.action},” you decide. {speaker} studies the choice, then nods.'
-            narration = "Rain traces silver paths across the window as the story shifts around your decision."
-            choices = ["Ask what happens next", "Look for another path", "Stay silent and observe"]
+            speaker = character["name"] if character else "Рассказчик"
+            dialogue = f'«{payload.action}», — решаете вы. {speaker} обдумывает ваши слова и кивает.'
+            narration = "Дождь рисует серебряные дорожки на стекле, и история меняется вслед за вашим решением."
+            choices = ["Спросить, что будет дальше", "Поискать другой путь", "Промолчать и наблюдать"]
             db.execute("UPDATE stories SET state_version = ? WHERE id = ?", (version, story_id))
             db.execute(
                 "INSERT INTO turns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

@@ -1,19 +1,19 @@
-# Mnemosyne — local AI visual novel
+# Мнемозина — локальная нейровизуальная новелла
 
-An early working scaffold for a private AI-driven visual novel. The browser UI creates a story, renders a visual-novel scene, accepts choices or free-form actions, and shows image-generation jobs. FastAPI stores objective state in SQLite and keeps Ollama/ComfyUI behind local provider boundaries.
+Рабочий каркас приватной визуальной новеллы с локальными нейросетями. Браузерный интерфейс создаёт историю, показывает игровую сцену, принимает готовые варианты и свободные действия, а также отображает очередь генерации изображений. FastAPI хранит объективное состояние в SQLite и взаимодействует с Ollama и ComfyUI через локальные адаптеры.
 
-## Included in v0.1
+## Возможности версии 0.1
 
-- React + TypeScript visual-novel interface with responsive setup and play screens.
-- FastAPI + SQLite stories, adult characters, versioned turns, idempotent requests, and generation jobs.
-- Character-sheet → five cached sprite jobs (`neutral`, `happy`, `sad`, `angry`, `surprised`).
-- Separate `cg` job type in the API contract for future full-scene generation.
-- Independent Ollama and ComfyUI health status; the app remains usable in demo mode when they are offline.
-- Design and implementation documents under `docs/superpowers`.
+- Русскоязычный интерфейс на React и TypeScript с адаптивными экранами создания и прохождения истории.
+- Истории, совершеннолетние персонажи, версионированные ходы, защита от повторных запросов и задания генерации в FastAPI и SQLite.
+- Последовательность «лист персонажа → пять кэшируемых спрайтов»: нейтральный, радость, грусть, злость и удивление.
+- Отдельный тип задания `cg` для будущей генерации полной сцены.
+- Независимая проверка Ollama и ComfyUI. Если сервисы выключены, приложение остаётся доступно в демонстрационном режиме.
+- Основа интерфейса shadcn/ui и проектный skill для последующей работы агента.
 
-## First start on Windows
+## Первый запуск в Windows
 
-Prerequisites: Node.js 20+, npm, and [uv](https://docs.astral.sh/uv/). Ollama and ComfyUI are optional for demo mode.
+Потребуются Node.js 20 или новее, npm и [uv](https://docs.astral.sh/uv/). Для демонстрационного режима Ollama и ComfyUI не обязательны.
 
 ```powershell
 cd D:\develop\ai-visual-novel
@@ -21,27 +21,29 @@ npm run setup
 Copy-Item .env.example .env
 ```
 
-Open two terminals:
+Откройте два терминала. В первом запустите API:
 
 ```powershell
 npm run dev:api
 ```
 
+Во втором запустите интерфейс:
+
 ```powershell
 npm run dev:web
 ```
 
-Then open [http://localhost:5173](http://localhost:5173). API documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+Приложение откроется по адресу [http://localhost:5173](http://localhost:5173). Документация API доступна по адресу [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-## Checks
+## Проверки
 
 ```powershell
 npm test
 npm run build
 ```
 
-## Live providers
+## Подключение локальных моделей
 
-Copy `.env.example` to `.env` and adjust the local URLs/model. Ollama is expected at port `11434`; ComfyUI is expected at port `8188` and is used through its API only. See `workflows/comfyui/README.md` for the workflow boundary.
+Скопируйте `.env.example` в `.env` и при необходимости измените адреса и название модели. По умолчанию Ollama ожидается на порту `11434`, а ComfyUI — на порту `8188`. Интерфейс ComfyUI в игру не встраивается: приложение использует только его API.
 
-The current narrative response and image worker are deterministic demo implementations. The database and HTTP contracts deliberately separate narrative proposals from canonical game state, so live adapters can be added without trusting model output as direct state mutation.
+Текущие ответы сюжета и обработка очереди изображений являются детерминированной демонстрацией. Архитектура отделяет предложения языковой модели от канонического состояния игры, поэтому подключение настоящих адаптеров не позволит модели напрямую и бесконтрольно менять данные.

@@ -1,12 +1,12 @@
-# ComfyUI workflow contract
+# Контракт workflow ComfyUI
 
-Export a ComfyUI workflow in API format and keep it local. The future live adapter will map only named inputs from application configuration:
+Экспортируйте workflow ComfyUI в формате API и храните его локально. Будущий адаптер рабочего режима будет подставлять только явно разрешённые значения:
 
-- positive and negative prompt;
-- seed, width, and height;
-- visual-profile reference images;
-- sprite expression or full-scene composition.
+- положительный и отрицательный промпты;
+- seed, ширину и высоту;
+- референсные изображения визуального профиля;
+- эмоцию спрайта или композицию полной сцены.
 
-Character-sheet jobs run first. Sprite jobs depend on the corresponding sheet. A live workflow must copy completed images into `ASSET_DIR`; arbitrary paths or executable values from the LLM must never be passed to ComfyUI.
+Сначала выполняется задание листа персонажа. Задания спрайтов зависят от соответствующего листа. Готовые изображения должны копироваться в `ASSET_DIR`. Произвольные пути и исполняемые значения из ответа языковой модели нельзя передавать в ComfyUI.
 
-No workflow is bundled because checkpoints, custom nodes, and reference-conditioning choices depend on the user's local ComfyUI installation. Demo mode exercises the complete queue and UI without those dependencies.
+Готовый workflow не включён в репозиторий: выбор checkpoints, custom nodes и способа reference conditioning зависит от локальной установки ComfyUI. Демонстрационный режим позволяет проверить очередь и интерфейс без этих зависимостей.

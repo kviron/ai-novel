@@ -7,10 +7,10 @@ import { Toaster } from '@/components/ui/sonner'
 import './styles.css'
 
 const initial = {
-  title: 'Echoes of Neon',
-  premise: 'A courier discovers a memory hidden in a rainy megacity.',
-  name: 'Mira', age: 24, personality: 'observant and guarded',
-  appearance: 'short silver hair, amber eyes, dark coat',
+  title: 'Эхо неона',
+  premise: 'Курьер находит чужое воспоминание в дождливом мегаполисе.',
+  name: 'Мира', age: 24, personality: 'наблюдательная и осторожная',
+  appearance: 'короткие серебристые волосы, янтарные глаза, тёмное пальто',
 }
 
 function Setup({ onCreated }: { onCreated: (story: Story) => void }) {
@@ -24,31 +24,31 @@ function Setup({ onCreated }: { onCreated: (story: Story) => void }) {
     event.preventDefault(); setLoading(true); setError('')
     try {
       onCreated(await api.createStory({
-        title: form.title, premise: form.premise, theme_labels: ['mystery', 'mature'],
+        title: form.title, premise: form.premise, theme_labels: ['детектив', 'для взрослых'],
         characters: [{ name: form.name, age: form.age, personality: form.personality, appearance: form.appearance }],
       }))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not create story') }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось создать историю') }
     finally { setLoading(false) }
   }
 
   return <main className="setup-shell">
     <section className="brand-panel">
-      <span className="eyebrow">LOCAL STORY ENGINE · V0.1</span>
-      <h1>Every choice<br/><em>leaves an echo.</em></h1>
-      <p>Build a private, persistent world shaped by your words. Narrative by your local model. Art directed by you.</p>
-      <div className="signal"><i /> OLLAMA + COMFYUI READY</div>
+      <span className="eyebrow">ЛОКАЛЬНЫЙ ДВИЖОК ИСТОРИЙ · V0.1</span>
+      <h1>Каждый выбор<br/><em>оставляет эхо.</em></h1>
+      <p>Создайте личный мир, который помнит ваши слова. Сюжет ведёт локальная модель, а визуальный стиль выбираете вы.</p>
+      <div className="signal"><i /> OLLAMA + COMFYUI ПОДКЛЮЧЕНЫ</div>
     </section>
     <form className="setup-card" onSubmit={submit}>
-      <div><span className="step">01</span><h2>Begin a new story</h2><p>Give the engine a spark. You can reshape everything later.</p></div>
-      <label>Story title<Input value={form.title} onChange={field('title')} /></label>
-      <label>Premise<Textarea rows={3} value={form.premise} onChange={field('premise')} /></label>
+      <div><span className="step">01</span><h2>Начните новую историю</h2><p>Дайте движку отправную точку. Позже всё можно будет изменить.</p></div>
+      <label>Название истории<Input value={form.title} onChange={field('title')} /></label>
+      <label>Завязка<Textarea rows={3} value={form.premise} onChange={field('premise')} /></label>
       <div className="rule" />
-      <div className="two"><label>First character<Input value={form.name} onChange={field('name')} /></label><label>Age<Input type="number" min="18" value={form.age} onChange={field('age')} /></label></div>
-      <label>Personality<Input value={form.personality} onChange={field('personality')} /></label>
-      <label>Visual identity<Textarea rows={2} value={form.appearance} onChange={field('appearance')} /></label>
+      <div className="two"><label>Первый персонаж<Input value={form.name} onChange={field('name')} /></label><label>Возраст<Input type="number" min="18" value={form.age} onChange={field('age')} /></label></div>
+      <label>Характер<Input value={form.personality} onChange={field('personality')} /></label>
+      <label>Внешность<Textarea rows={2} value={form.appearance} onChange={field('appearance')} /></label>
       {error && <p className="error">{error}</p>}
-      <Button className="primary" disabled={loading}>{loading ? 'Opening the story…' : 'Begin story'} <span>→</span></Button>
-      <small>All characters must be adults. Everything stays on this machine.</small>
+      <Button className="primary" disabled={loading}>{loading ? 'Создаём историю…' : 'Начать историю'} <span>→</span></Button>
+      <small>Все персонажи должны быть совершеннолетними. Данные остаются только на этом компьютере.</small>
     </form>
   </main>
 }
@@ -73,20 +73,20 @@ function Play({ story: initialStory }: { story: Story }) {
   const queued = jobs.filter(job => job.status === 'queued').length
 
   return <main className="game-shell">
-    <header><div className="logo">MNEMOSYNE <b>α</b></div><h1 className="story-title">{story.title}</h1><div className="chapter">CHAPTER I <span>/</span> {story.current_scene}</div><div className="provider-dots"><i className={providers?.ollama.available ? 'on' : ''}/>LLM <i className={providers?.comfyui.available ? 'on' : ''}/>IMAGE</div></header>
+    <header><div className="logo">МНЕМОЗИНА <b>α</b></div><h1 className="story-title">{story.title}</h1><div className="chapter">ГЛАВА I <span>/</span> {story.current_scene}</div><div className="provider-dots"><i className={providers?.ollama.available ? 'on' : ''}/>ТЕКСТ <i className={providers?.comfyui.available ? 'on' : ''}/>ИЗОБРАЖЕНИЯ</div></header>
     <section className="stage">
       <div className="rain"/><div className="moon"/><div className="city"/>
       <div className="character-silhouette"><div className="portrait-mark">{story.characters[0].name.slice(0, 1)}</div></div>
-      <aside className="job-panel"><div><span>IMAGE PIPELINE</span><b>{queued} queued</b></div>{jobs.slice(0, 3).map(job => <article key={job.id}><i className={job.status}/><p>{job.kind.replace('_', ' ')} {job.expression && `· ${job.expression}`}<small>{job.stage}</small></p></article>)}</aside>
+      <aside className="job-panel"><div><span>ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ</span><b>в очереди: {queued}</b></div>{jobs.slice(0, 3).map(job => <article key={job.id}><i className={job.status}/><p>{{character_sheet: 'лист персонажа', sprite: 'спрайт', cg: 'полная сцена'}[job.kind]} {job.expression && `· ${{neutral: 'нейтральный', happy: 'радость', sad: 'грусть', angry: 'злость', surprised: 'удивление'}[job.expression] ?? job.expression}`}<small>{job.stage}</small></p></article>)}</aside>
       <div className="dialogue">
         <div className="speaker"><span>{turn?.speaker ?? story.characters[0].name}</span><small>{story.characters[0].personality}</small></div>
-        <p className="narration">{turn?.narration ?? 'Neon bleeds through the rain. Somewhere below, a signal repeats your name.'}</p>
-        <p className="line">{turn?.dialogue ?? '“You came. Good. I was beginning to think the city had swallowed you.”'}</p>
-        <div className="choices">{(turn?.choices ?? ['Ask about the signal', 'Study the room', 'Say nothing']).map((choice, index) => <button key={choice} onClick={() => void act(choice)}><b>0{index + 1}</b>{choice}<span>↗</span></button>)}</div>
-        <form onSubmit={event => { event.preventDefault(); void act(action) }}><input aria-label="Your action" placeholder="Write your own action…" value={action} onChange={event => setAction(event.target.value)}/><button disabled={busy || !action.trim()}>SEND</button></form>
+        <p className="narration">{turn?.narration ?? 'Неон растекается по дождю. Где-то внизу сигнал снова и снова повторяет ваше имя.'}</p>
+        <p className="line">{turn?.dialogue ?? '«Вы всё-таки пришли. Хорошо. Я уже начала думать, что город вас проглотил».'}</p>
+        <div className="choices">{(turn?.choices ?? ['Спросить о сигнале', 'Осмотреть комнату', 'Промолчать']).map((choice, index) => <button key={choice} onClick={() => void act(choice)}><b>0{index + 1}</b>{choice}<span>↗</span></button>)}</div>
+        <form onSubmit={event => { event.preventDefault(); void act(action) }}><input aria-label="Ваше действие" placeholder="Напишите своё действие…" value={action} onChange={event => setAction(event.target.value)}/><button disabled={busy || !action.trim()}>ОТПРАВИТЬ</button></form>
       </div>
     </section>
-    <footer><span>STATE · v{story.state_version}</span><span>LOCAL SESSION</span><span>STORY · {story.title}</span></footer>
+    <footer><span>СОСТОЯНИЕ · v{story.state_version}</span><span>ЛОКАЛЬНАЯ СЕССИЯ</span><span>ИСТОРИЯ · {story.title}</span></footer>
   </main>
 }
 

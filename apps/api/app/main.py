@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .database import Database
@@ -21,13 +23,23 @@ def create_app() -> FastAPI:
         settings.asset_dir.mkdir(parents=True, exist_ok=True)
         yield
 
-    app = FastAPI(title="AI Visual Novel API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="API нейровизуальной новеллы", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[value.strip() for value in settings.cors_origins.split(",")],
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_, error: RequestValidationError):
+        has_age_error = any(item.get("loc", ())[-1:] == ("age",) for item in error.errors())
+        detail = (
+            "Возраст каждого персонажа должен быть не меньше 18 лет"
+            if has_age_error
+            else "Проверьте правильность заполнения обязательных полей"
+        )
+        return JSONResponse(status_code=422, content={"detail": detail})
 
     @app.get("/health")
     def health():
@@ -50,13 +62,13 @@ def create_app() -> FastAPI:
     def get_story(story_id: str):
         story = store.get_story(story_id)
         if not story:
-            raise HTTPException(404, "Story not found")
+            raise HTTPException(404, "История не найдена")
         return story
 
     @app.get("/api/stories/{story_id}/jobs")
     def get_jobs(story_id: str):
         if not store.get_story(story_id):
-            raise HTTPException(404, "Story not found")
+            raise HTTPException(404, "История не найдена")
         return store.list_jobs(story_id)
 
     @app.post("/api/stories/{story_id}/turns", status_code=201)
@@ -64,7 +76,7 @@ def create_app() -> FastAPI:
         try:
             turn, created = store.create_turn(story_id, payload)
         except KeyError:
-            raise HTTPException(404, "Story not found") from None
+            raise HTTPException(404, "История не найдена") from None
         except ConflictError as error:
             raise HTTPException(409, str(error)) from None
         if not created:

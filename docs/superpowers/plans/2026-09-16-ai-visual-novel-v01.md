@@ -1,54 +1,39 @@
-# AI Visual Novel v0.1 Implementation Plan
+# План реализации AI Visual Novel v0.1
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Для агентов:** при выполнении плана использовать `superpowers:subagent-driven-development` или `superpowers:executing-plans`. Пункты отслеживаются флажками Markdown.
 
-**Goal:** Create a locally runnable AI visual-novel scaffold with a tested API, playable React UI, persistent SQLite state, and provider boundaries for Ollama and ComfyUI.
+**Цель:** создать локально запускаемый русскоязычный каркас визуальной новеллы с проверенным API, интерфейсом React, состоянием SQLite и границами провайдеров Ollama и ComfyUI.
 
-**Architecture:** A Vite React client consumes a FastAPI JSON API. FastAPI owns SQLite state and provides deterministic demo narrative/image jobs while keeping live providers behind adapters.
+**Архитектура:** клиент Vite React использует JSON API FastAPI. FastAPI владеет состоянием SQLite и предоставляет демонстрационные сюжетные ответы и задания изображений, сохраняя внешние сервисы за адаптерами.
 
-**Tech Stack:** React 19, TypeScript, Vite, FastAPI, Pydantic, SQLAlchemy, SQLite, pytest, Vitest
+**Стек:** React 19, TypeScript, Vite, shadcn/ui, Tailwind CSS, FastAPI, Pydantic, SQLite, pytest и Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-09-16-ai-visual-novel-v01-design.md`
+**Спецификация:** `docs/superpowers/specs/2026-09-16-ai-visual-novel-v01-design.md`.
 
-## Global Constraints
+## Общие ограничения
 
-- Local single-user application.
-- Every character age is at least 18.
-- ComfyUI is headless and is not embedded in the game UI.
-- SQLite is authoritative; narrative output never directly mutates canon.
-- Demo mode must work without Ollama or ComfyUI.
+- Локальное однопользовательское приложение.
+- Возраст каждого персонажа — не менее 18 лет.
+- ComfyUI работает без собственного интерфейса внутри игры.
+- SQLite является источником истины; сюжетная модель не меняет канон напрямую.
+- Демонстрационный режим работает без Ollama и ComfyUI.
+- Все пользовательские тексты и документация проекта ведутся на русском языке.
 
----
+## Задача 1: серверный срез истории
 
-### Task 1: Backend story slice
+- [x] Проверить в API валидацию, сохранение, зависимости заданий, конфликт версий и идемпотентность.
+- [x] Реализовать SQLite, схемы, сервисы, маршруты и демонстрационное продолжение сюжета.
+- [x] Запустить серверные тесты.
 
-**Files:** `apps/api/app/**`, `apps/api/tests/**`, `apps/api/pyproject.toml`
+## Задача 2: игровой клиент
 
-**Interfaces:** Produces `POST /api/stories`, `GET /api/stories/{id}`, `POST /api/stories/{id}/turns`, `GET /api/stories/{id}/jobs`, and health endpoints.
+- [x] Проверить создание истории и отображение игровой сцены.
+- [x] Реализовать API-клиент, экраны, стили и обработку демонстрационного режима.
+- [x] Подключить основу shadcn/ui без потери авторского вида игровой сцены.
+- [x] Запустить клиентские тесты и production-сборку.
 
-- [ ] Write API tests for validation, persistence, job dependencies, version conflicts, and idempotency.
-- [ ] Run tests and confirm they fail because the API does not exist.
-- [ ] Implement the SQLite models, schemas, services, routes, and demo turn generator.
-- [ ] Run the backend suite and keep it green.
+## Задача 3: локальная разработка
 
-### Task 2: Playable web client
-
-**Files:** `apps/web/src/**`, `apps/web/package.json`, `apps/web/vite.config.ts`
-
-**Interfaces:** Consumes the Task 1 JSON API through a typed client and renders setup, stage, dialogue, actions, provider health, and image jobs.
-
-- [ ] Write component tests for setup and play-state rendering.
-- [ ] Run tests and confirm they fail because components do not exist.
-- [ ] Implement the client, screens, styling, and demo-friendly error handling.
-- [ ] Run tests and a production build.
-
-### Task 3: Local developer experience
-
-**Files:** `README.md`, `.env.example`, `.gitignore`, `package.json`, `scripts/**`, `workflows/comfyui/**`
-
-**Interfaces:** Produces documented install/start commands and live-provider configuration contracts.
-
-- [ ] Add configuration examples and a safe ComfyUI API-workflow template description.
-- [ ] Add root commands for installation, development, tests, and build.
-- [ ] Run the complete verification gate and an API smoke check.
-- [ ] Inspect Git state for secrets/generated data and create the initial commit.
+- [x] Добавить конфигурацию и описание контракта ComfyUI.
+- [x] Добавить общие команды установки, разработки, тестов и сборки.
+- [x] Проверить приложение и создать Git-репозиторий.
