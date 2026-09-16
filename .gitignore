@@ -1,0 +1,15 @@
+.env
+.venv/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.db
+*.db-shm
+*.db-wal
+data/
+apps/api/data/
+apps/web/tsconfig.*.tsbuildinfo
+.DS_Store
+Thumbs.db

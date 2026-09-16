@@ -1,0 +1,12 @@
+{
+  "name": "ai-visual-novel",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "setup": "npm --prefix apps/web install && uv sync --directory apps/api --extra test",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "uv run --directory apps/api uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "test": "npm --prefix apps/web test && uv run --directory apps/api pytest -q",
+    "build": "npm --prefix apps/web run build"
+  }
+}
