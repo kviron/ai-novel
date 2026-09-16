@@ -4,6 +4,7 @@
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": { "@/*": ["./src/*"] },
     "noEmit": true
   },
   "include": ["vite.config.ts"]

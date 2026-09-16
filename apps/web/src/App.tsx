@@ -1,5 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { api, Job, ProviderStatus, Story, Turn } from './api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Toaster } from '@/components/ui/sonner'
 import './styles.css'
 
 const initial = {
@@ -36,14 +40,14 @@ function Setup({ onCreated }: { onCreated: (story: Story) => void }) {
     </section>
     <form className="setup-card" onSubmit={submit}>
       <div><span className="step">01</span><h2>Begin a new story</h2><p>Give the engine a spark. You can reshape everything later.</p></div>
-      <label>Story title<input value={form.title} onChange={field('title')} /></label>
-      <label>Premise<textarea rows={3} value={form.premise} onChange={field('premise')} /></label>
+      <label>Story title<Input value={form.title} onChange={field('title')} /></label>
+      <label>Premise<Textarea rows={3} value={form.premise} onChange={field('premise')} /></label>
       <div className="rule" />
-      <div className="two"><label>First character<input value={form.name} onChange={field('name')} /></label><label>Age<input type="number" min="18" value={form.age} onChange={field('age')} /></label></div>
-      <label>Personality<input value={form.personality} onChange={field('personality')} /></label>
-      <label>Visual identity<textarea rows={2} value={form.appearance} onChange={field('appearance')} /></label>
+      <div className="two"><label>First character<Input value={form.name} onChange={field('name')} /></label><label>Age<Input type="number" min="18" value={form.age} onChange={field('age')} /></label></div>
+      <label>Personality<Input value={form.personality} onChange={field('personality')} /></label>
+      <label>Visual identity<Textarea rows={2} value={form.appearance} onChange={field('appearance')} /></label>
       {error && <p className="error">{error}</p>}
-      <button className="primary" disabled={loading}>{loading ? 'Opening the story…' : 'Begin story'} <span>→</span></button>
+      <Button className="primary" disabled={loading}>{loading ? 'Opening the story…' : 'Begin story'} <span>→</span></Button>
       <small>All characters must be adults. Everything stays on this machine.</small>
     </form>
   </main>
@@ -88,5 +92,5 @@ function Play({ story: initialStory }: { story: Story }) {
 
 export default function App() {
   const [story, setStory] = useState<Story | null>(null)
-  return story ? <Play story={story} /> : <Setup onCreated={setStory} />
+  return <>{story ? <Play story={story} /> : <Setup onCreated={setStory} />}<Toaster /></>
 }
