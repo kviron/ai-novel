@@ -4,9 +4,15 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlmodel import Session
 
 from .config import get_settings
+from .core.config import Settings as PersistenceSettings
 from .database import Database
+from .db.engine import create_engine_from_settings
+from .db.migrate import run_migrations
+from .modules.stories.router import router as stories_router
+from .modules.stories.seed import seed_akane_story
 from .providers import provider_health
 from .schemas import StoryCreate, TurnCreate
 from .store import ConflictError, Store
@@ -14,12 +20,22 @@ from .store import ConflictError, Store
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    database = Database(settings.database_path)
+    legacy_database_path = settings.database_path.with_name(
+        f"{settings.database_path.stem}.legacy{settings.database_path.suffix}"
+    )
+    database = Database(legacy_database_path)
     store = Store(database)
+    persistence_settings = PersistenceSettings(database_path=settings.database_path)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(application: FastAPI):
+        run_migrations(persistence_settings.database_path)
+        application.state.engine = create_engine_from_settings(persistence_settings)
+        with Session(application.state.engine) as session:
+            seed_akane_story(session)
+            session.commit()
         database.initialize()
+        application.state.legacy_store = store
         settings.asset_dir.mkdir(parents=True, exist_ok=True)
         yield
 
@@ -30,6 +46,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(stories_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_, error: RequestValidationError):
