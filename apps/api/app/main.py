@@ -20,12 +20,9 @@ from .store import ConflictError, Store
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    legacy_database_path = settings.database_path.with_name(
-        f"{settings.database_path.stem}.legacy{settings.database_path.suffix}"
-    )
-    database = Database(legacy_database_path)
-    store = Store(database)
     persistence_settings = PersistenceSettings(database_path=settings.database_path)
+    database = Database(persistence_settings.database_path)
+    store = Store(database)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -35,7 +32,6 @@ def create_app() -> FastAPI:
             seed_akane_story(session)
             session.commit()
         database.initialize()
-        application.state.legacy_store = store
         settings.asset_dir.mkdir(parents=True, exist_ok=True)
         yield
 

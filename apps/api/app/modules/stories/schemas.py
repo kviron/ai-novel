@@ -47,6 +47,7 @@ class TurnDetail(BaseModel):
     narration: str
     dialogue: str
     choices: list[str]
+    visual_directive: dict[str, str]
 
 
 class SessionDetail(BaseModel):

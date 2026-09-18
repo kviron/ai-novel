@@ -100,7 +100,11 @@ def _story_detail(session: Session, story: Story) -> StoryDetail:
     )
 
 
-def _turn_detail(turn: Turn | None) -> TurnDetail | None:
+def _visual_directive(turn: Turn) -> dict[str, str]:
+    return json.loads(turn.visual_directive)
+
+
+def _turn_detail(turn: Turn | None, visual_directive: dict[str, str] | None) -> TurnDetail | None:
     if turn is None:
         return None
     return TurnDetail(
@@ -110,10 +114,13 @@ def _turn_detail(turn: Turn | None) -> TurnDetail | None:
         narration=turn.narration,
         dialogue=turn.dialogue,
         choices=json.loads(turn.choices),
+        visual_directive=visual_directive or {},
     )
 
 
 def _session_detail(session: Session, story_session: StorySession, story: Story) -> SessionDetail:
+    latest_turn = repository.get_latest_turn(session, story_session.id)
+    visual_directive = _visual_directive(latest_turn) if latest_turn else None
     return SessionDetail(
         id=story_session.id,
         story=_story_summary(story),
@@ -122,6 +129,10 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
         current_scene=story_session.current_scene,
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,
-        latest_turn=_turn_detail(repository.get_latest_turn(session, story_session.id)),
-        visual_state=VisualState(),
+        latest_turn=_turn_detail(latest_turn, visual_directive),
+        visual_state=VisualState(
+            emotion=visual_directive.get("emotion", "neutral") if visual_directive else "neutral",
+            pose=visual_directive.get("pose", "default") if visual_directive else "default",
+            outfit=visual_directive.get("outfit", "red_dress") if visual_directive else "red_dress",
+        ),
     )

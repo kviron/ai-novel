@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.db.engine import get_session
 
-from .schemas import CharacterDetail, SessionDetail, StartSessionRequest, StoryDetail, StorySummary
+from .schemas import SessionDetail, StartSessionRequest, StoryDetail, StorySummary
 from .service import (
     SessionNotFoundError,
     StoryNotFoundError,
@@ -26,34 +26,11 @@ def read_stories(session: SessionDep) -> list[StorySummary]:
 
 
 @router.get("/stories/{story_id}", response_model=StoryDetail)
-def read_story(story_id: str, request: Request, session: SessionDep) -> StoryDetail:
+def read_story(story_id: str, session: SessionDep) -> StoryDetail:
     try:
         return get_story(session, story_id)
     except StoryNotFoundError as error:
-        legacy_story = request.app.state.legacy_store.get_story(story_id)
-        if legacy_story is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found") from error
-        return StoryDetail(
-            id=legacy_story["id"],
-            slug=legacy_story["id"],
-            title=legacy_story["title"],
-            premise=legacy_story["premise"],
-            story_mode="hybrid",
-            recommended_provider_id="ollama",
-            recommended_model_id="qwen3:14b-q4_K_M",
-            current_scene=legacy_story["current_scene"],
-            characters=[
-                CharacterDetail(
-                    id=character["id"],
-                    name=character["name"],
-                    age=character["age"],
-                    personality=character["personality"],
-                    appearance=character["appearance"],
-                    visual_profile_version=character["visual_profile_version"],
-                )
-                for character in legacy_story["characters"]
-            ],
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found") from error
 
 
 @router.post("/stories/{story_id}/sessions", status_code=status.HTTP_201_CREATED, response_model=SessionDetail)

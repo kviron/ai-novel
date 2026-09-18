@@ -24,8 +24,13 @@ class Store:
         timestamp = now()
         with self.database.connect() as db:
             db.execute(
-                "INSERT INTO stories VALUES (?, ?, ?, ?, 1, ?, ?)",
-                (story_id, payload.title, payload.premise, json.dumps(payload.theme_labels), "Прибытие", timestamp),
+                """
+                INSERT INTO stories (
+                    id, slug, title, premise, theme_labels, state_version, story_mode, content_version, current_scene,
+                    recommended_provider_id, recommended_model_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, 1, 'hybrid', 1, ?, 'ollama', 'qwen3:14b-q4_K_M', ?)
+                """,
+                (story_id, story_id, payload.title, payload.premise, json.dumps(payload.theme_labels), "Прибытие", timestamp),
             )
             for character in payload.characters:
                 character_id = str(uuid4())
@@ -51,7 +56,16 @@ class Store:
             if not story:
                 return None
             characters = [dict(row) for row in db.execute("SELECT * FROM characters WHERE story_id = ? ORDER BY rowid", (story_id,))]
-            latest = db.execute("SELECT * FROM turns WHERE story_id = ? ORDER BY rowid DESC LIMIT 1", (story_id,)).fetchone()
+            latest = db.execute(
+                """
+                SELECT turns.* FROM turns
+                JOIN story_sessions ON story_sessions.id = turns.session_id
+                WHERE story_sessions.story_id = ?
+                ORDER BY turns.state_version DESC, turns.created_at DESC, turns.id DESC
+                LIMIT 1
+                """,
+                (story_id,),
+            ).fetchone()
         result = dict(story)
         result["theme_labels"] = json.loads(result["theme_labels"])
         result["characters"] = characters
@@ -63,9 +77,15 @@ class Store:
             return [dict(row) for row in db.execute("SELECT * FROM generation_jobs WHERE story_id = ? ORDER BY rowid", (story_id,))]
 
     def create_turn(self, story_id: str, payload: TurnCreate) -> tuple[dict, bool]:
+        timestamp = now()
         with self.database.connect() as db:
             existing = db.execute(
-                "SELECT * FROM turns WHERE story_id = ? AND request_id = ?", (story_id, payload.request_id)
+                """
+                SELECT turns.* FROM turns
+                JOIN story_sessions ON story_sessions.id = turns.session_id
+                WHERE story_sessions.story_id = ? AND turns.request_id = ?
+                """,
+                (story_id, payload.request_id),
             ).fetchone()
             if existing:
                 return self._turn(existing), False
@@ -81,10 +101,53 @@ class Store:
             dialogue = f'«{payload.action}», — решаете вы. {speaker} обдумывает ваши слова и кивает.'
             narration = "Дождь рисует серебряные дорожки на стекле, и история меняется вслед за вашим решением."
             choices = ["Спросить, что будет дальше", "Поискать другой путь", "Промолчать и наблюдать"]
+            story_session = db.execute(
+                "SELECT * FROM story_sessions WHERE story_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", (story_id,)
+            ).fetchone()
+            if not story_session:
+                session_id = str(uuid4())
+                db.execute(
+                    """
+                    INSERT INTO story_sessions (
+                        id, story_id, state_version, current_scene, provider_id, model_id, created_at, updated_at
+                    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        session_id,
+                        story_id,
+                        story["current_scene"],
+                        story["recommended_provider_id"],
+                        story["recommended_model_id"],
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+            else:
+                session_id = story_session["id"]
             db.execute("UPDATE stories SET state_version = ? WHERE id = ?", (version, story_id))
+            db.execute("UPDATE story_sessions SET state_version = ?, updated_at = ? WHERE id = ?", (version, timestamp, session_id))
             db.execute(
-                "INSERT INTO turns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (turn_id, story_id, payload.request_id, version, payload.action, speaker, dialogue, narration, json.dumps(choices), now()),
+                """
+                INSERT INTO turns (
+                    id, session_id, request_id, state_version, legacy_state_version, action, speaker, narration, dialogue,
+                    choices, visual_directive, raw_response, provider_id, model_id, prompt_version, created_at
+                ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, '', ?, ?, 'legacy-v01', ?)
+                """,
+                (
+                    turn_id,
+                    session_id,
+                    payload.request_id,
+                    version,
+                    payload.action,
+                    speaker,
+                    narration,
+                    dialogue,
+                    json.dumps(choices),
+                    '{"mode":"sprite_scene","emotion":"neutral","pose":"default","outfit":"red_dress"}',
+                    story["recommended_provider_id"],
+                    story["recommended_model_id"],
+                    timestamp,
+                ),
             )
             row = db.execute("SELECT * FROM turns WHERE id = ?", (turn_id,)).fetchone()
             return self._turn(row), True

@@ -1,7 +1,11 @@
+import json
 import os
 import sqlite3
 
 from fastapi.testclient import TestClient
+from sqlmodel import Session
+
+from app.db.models import StorySession, Turn
 
 
 def akane_story(client):
@@ -65,6 +69,37 @@ def test_each_story_start_creates_an_independent_initial_session(client):
     assert second.json()["state_version"] == 1
 
 
+def test_created_story_is_listed_and_can_start_a_session(client):
+    created = client.post(
+        "/api/stories",
+        json={
+            "title": "Проверка единого хранилища",
+            "premise": "История, созданная через прежний маршрут, остаётся доступной игровому API.",
+            "theme_labels": ["проверка"],
+            "characters": [
+                {
+                    "name": "Мира",
+                    "age": 24,
+                    "personality": "наблюдательная",
+                    "appearance": "серебристые волосы",
+                }
+            ],
+        },
+    )
+    assert created.status_code == 201
+    story_id = created.json()["id"]
+
+    listed = client.get("/api/stories")
+    detail = client.get(f"/api/stories/{story_id}")
+    started = client.post(f"/api/stories/{story_id}/sessions", json={})
+
+    assert story_id in {story["id"] for story in listed.json()}
+    assert detail.status_code == 200
+    assert detail.json()["id"] == story_id
+    assert started.status_code == 201
+    assert started.json()["story"]["id"] == story_id
+
+
 def test_start_rejects_unknown_story_without_creating_a_session(client):
     before = session_count()
 
@@ -85,6 +120,20 @@ def test_start_rejects_unsupported_model_without_creating_a_session(client):
     response = client.post(
         f'/api/stories/{akane["id"]}/sessions',
         json={"provider_id": "ollama", "model_id": "unsupported:model"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "validation_error"
+    assert session_count() == before
+
+
+def test_start_rejects_unsupported_provider_without_creating_a_session(client):
+    akane = akane_story(client)
+    before = session_count()
+
+    response = client.post(
+        f'/api/stories/{akane["id"]}/sessions',
+        json={"provider_id": "unsupported", "model_id": "qwen3:14b-q4_K_M"},
     )
 
     assert response.status_code == 422
@@ -123,3 +172,38 @@ def test_session_restores_through_a_fresh_application_client(client):
 
     assert restored.status_code == 200
     assert restored.json()["id"] == created["id"]
+
+
+def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
+    akane = akane_story(client)
+    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    directive = {"mode": "sprite_scene", "emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
+
+    with Session(client.app.state.engine) as session:
+        story_session = session.get(StorySession, game["id"])
+        story_session.state_version = 2
+        session.add(
+            Turn(
+                id="fan-turn",
+                session_id=game["id"],
+                request_id="fan-request",
+                state_version=2,
+                action="Открыть веер",
+                speaker="Аканэ Куроха",
+                narration="Аканэ раскрывает веер.",
+                dialogue="Веер умеет хранить тайны.",
+                choices="[]",
+                visual_directive=json.dumps(directive),
+                raw_response="{}",
+                provider_id="ollama",
+                model_id="qwen3:14b-q4_K_M",
+                prompt_version="v1",
+            )
+        )
+        session.commit()
+
+    restored = client.get(f'/api/sessions/{game["id"]}')
+
+    assert restored.status_code == 200
+    assert restored.json()["visual_state"] == {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
+    assert restored.json()["latest_turn"]["visual_directive"] == directive
