@@ -5,6 +5,7 @@ dist/
 __pycache__/
 .pytest_cache/
 .runlogs/
+.worktrees/
 *.py[cod]
 *.db
 *.db-shm
