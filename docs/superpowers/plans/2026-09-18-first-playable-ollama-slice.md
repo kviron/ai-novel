@@ -23,6 +23,40 @@
 - Не реализовывать в этом плане каталог персонажей, rollback/ветвление, OpenAI, CG, LoRA, обучение или ComfyUI worker.
 - Каждый task выполняется через red-green-refactor и заканчивается отдельным коммитом.
 
+## Инженерные правила и границы архитектуры
+
+Эти правила являются частью контракта каждого task, а не рекомендациями «по возможности».
+
+### Набор навыков для выполнения
+
+| Навык | Статус | Где обязателен | Зачем |
+|---|---|---|---|
+| `fastapi` | уже в проекте | Tasks 1–5 | Современные FastAPI/Pydantic dependencies, lifecycle, sync/async и HTTP-контракты. |
+| `feature-sliced-design` | уже в проекте | Tasks 6–7 | Направление импортов, public API slices, colocated assets и проверка необходимости слоёв. |
+| `shadcn` | уже в проекте | Tasks 6–7 | Использование и адаптация UI-компонентов без самодельной параллельной библиотеки. |
+| `superpowers:test-driven-development` | уже доступен | Tasks 1–8 | Red-green-refactor и наблюдаемое поведение прежде реализации. |
+| `superpowers:systematic-debugging` | уже доступен | при любом неожиданном падении | Поиск первопричины до исправления. |
+| `superpowers:verification-before-completion` | уже доступен | завершение каждого task | Запрет утверждать успех без свежего вывода проверок. |
+| `superpowers:requesting-code-review` | уже доступен | после каждого task | Проверка соответствия контракту до перехода к следующей границе. |
+| `playwright` из `openai/skills` | рекомендуется установить | Task 8 и ручная проверка UI | Стабильный snapshot-first workflow, traces и артефакты браузерной диагностики. Сам `@playwright/test` остаётся частью репозитория. |
+| `security-best-practices` из `openai/skills` | рекомендуется установить | security review после Task 5 и перед облачными провайдерами | Конкретные рекомендации для Python/FastAPI и TypeScript/React, секретов, входных данных и сетевых границ. |
+| `philosophy-of-software-design` из `jordanbyron/agent-skills` | опционально, сторонний | перед новыми provider/story-engine API | Проверка на shallow modules, information leakage и change amplification; полезнее универсального «делай SOLID». |
+
+Не устанавливать отдельный всегда-включённый навык «SOLID/OOP»: он дублирует правила выше и может стимулировать лишние классы. SOLID здесь проверяется через конкретные контракты и тесты, а не через количество интерфейсов.
+
+- **SRP:** модуль владеет одним типом знания, а не одним шагом процесса. Репозиторий знает SQL, provider adapter — внешний протокол, story engine — правила принятия хода, страница — сценарий пользователя.
+- **OCP/DIP:** расширение провайдеров выполняется новым адаптером за `LLMProvider`; story engine не импортирует `OllamaProvider` и не ветвится по `provider_id`.
+- **LSP:** каждый `LLMProvider` обязан проходить один набор contract tests: health, список моделей, успешная генерация, timeout, невалидный ответ. Конкретный провайдер не меняет смысл общих типов ошибок.
+- **ISP:** текстовые LLM, генерация изображений и обучение LoRA в будущих этапах получают разные протоколы. Не создавать универсальный `AIProvider` с необязательными методами.
+- **Композиция вместо наследования:** в прикладном коде использовать функции, dataclass/Pydantic/SQLModel и `Protocol`; базовые классы допустимы только при наличии общего поведения, а не ради структуры.
+- **Глубокие модули:** публичный интерфейс должен быть меньше скрытой реализации. Контроллер не оркестрирует generate → validate → repair → write; это одна операция story engine.
+- **Сокрытие решений:** формат Ollama, SQL и координаты sprite sheet не протекают соответственно в engine, routers и общие API-типы.
+- **Ошибки как контракт:** доменная ошибка имеет стабильный код, русский безопасный текст для UI и HTTP-статус в одном центральном mapping; traceback, prompt и raw model output наружу не возвращаются.
+- **Secure by default:** вход ограничен по длине, идентификаторы непредсказуемы, секреты не попадают в БД/логи/frontend, внешние URL задаются конфигурацией, а CORS не использует wildcard вместе с credentials.
+- **YAGNI:** не создавать `entities`, универсальный event bus, DI-контейнер, generic repository или абстракцию для единственной реализации, если task не определяет вторую необходимую вариацию.
+- **Проверяемость:** каждый внешний эффект имеет seam для fake; время, UUID, HTTP и provider registry передаются явно там, где нужна детерминированность.
+- **Размер изменения:** один task — один независимо проверяемый контракт и один коммит; рефакторинг вне его границы выносится отдельно.
+
 ---
 
 ## Карта файлов
@@ -128,6 +162,14 @@ apps/web/src/
 **Interfaces:**
 - Produces: `Settings`, `create_engine_from_settings(settings)`, `get_session(request)`, `run_migrations(database_path)`, SQLModel tables `Story`, `Character`, `StorySession`, `Turn`.
 - Preserves: данные таблиц `stories`, `characters`, `turns`; новая миграция добавляет новые таблицы/колонки без удаления пользовательских строк.
+
+**Контракт task:**
+- Ответственность: создать единственную границу владения конфигурацией, подключением SQLite, схемой хранения и эволюцией схемы; бизнес-правила здесь не размещаются.
+- Входы: абсолютный или разрешённый относительно корня приложения `database_path`; значения окружения валидируются `Settings` до старта приложения.
+- Выходы: engine с включёнными foreign keys, одна короткоживущая `Session` на запрос и идемпотентный upgrade до `head`.
+- Инварианты: UUID/строковые public IDs не переиспользуются; `Turn.session_id` обязателен; порядок ходов уникален внутри сессии; удаление истории не каскадирует незаметно на пользовательские данные.
+- Ошибки: невалидная конфигурация и migration failure останавливают startup; ошибка БД откатывает текущую транзакцию и не маскируется как HTTP 200.
+- Приёмка: миграция проходит на пустой и legacy-базе, повторный upgrade ничего не меняет, foreign-key violation тестируется, существующие строки сохраняются.
 
 - [ ] **Step 1: Добавить зависимости и команды проверки**
 
@@ -277,6 +319,14 @@ git commit -m "refactor: add migrated SQLModel persistence"
 - Produces: `list_stories(session) -> list[StorySummary]`, `get_story(session, story_id) -> StoryDetail`, `start_story_session(session, story_id, request) -> SessionDetail`.
 - HTTP: `GET /api/stories`, `GET /api/stories/{story_id}`, `POST /api/stories/{story_id}/sessions`, `GET /api/sessions/{session_id}`.
 
+**Контракт task:**
+- Ответственность: stories владеет метаданными новеллы, начальными персонажами и созданием/восстановлением прохождения; он не генерирует продолжение сюжета.
+- Входы: существующий `story_id`, поддерживаемые `provider_id`/`model_id`; для первого среза пользовательский герой отсутствует и не принимается скрытым полем.
+- Выходы: русские DTO без ORM-объектов и стабильная стартовая сцена Аканэ; повторное чтение сессии возвращает последнее зафиксированное состояние.
+- Инварианты: seed идемпотентен по стабильному slug/ID; запуск создаёт ровно одну сессию с `state_version=1`; встроенная история не изменяется из игрового API.
+- Ошибки: неизвестная история/сессия → доменный `not_found`; неподдерживаемая модель → `validation_error`; ни одна из них не создаёт частичную сессию.
+- Приёмка: два startup не дублируют seed, list/detail согласованы, созданная сессия переживает новый процесс приложения.
+
 - [ ] **Step 1: Написать failing story/session tests**
 
 ```python
@@ -369,6 +419,14 @@ git commit -m "feat: add seeded Akane story sessions"
 **Interfaces:**
 - Produces: `TurnProposal`, `LLMProvider.health()`, `LLMProvider.list_models()`, `LLMProvider.generate_turn(request)`.
 - Consumes: `TurnGenerationRequest` and `TurnProposal.model_json_schema()` from the contract created in this task.
+
+**Контракт task:**
+- Ответственность: адаптер переводит общий запрос в протокол Ollama и обратно; он не решает, допустимо ли предложенное изменение мира.
+- Входы: immutable `TurnGenerationRequest`, явный `model_id`, timeout и base URL из `Settings`; prompt уже собран story engine.
+- Выходы: строго типизированный `TurnProposal`; `health` и `list_models` не имеют побочных эффектов; registry выбирает адаптер по стабильному ID.
+- Инварианты: story engine знает только `LLMProvider`; Ollama JSON и HTTPX types не покидают adapter; schema mode использует JSON Schema `TurnProposal`.
+- Ошибки: connect/timeout → `provider_unavailable`, неизвестная модель → `model_unavailable`, malformed payload → `provider_invalid_response`; raw body доступен диагностике, но не UI.
+- Приёмка: fake HTTP transport покрывает успех, timeout, HTTP error, отсутствие модели и битый JSON; общий contract test применим к fake и Ollama adapter.
 
 - [ ] **Step 1: Написать failing adapter tests**
 
@@ -508,6 +566,15 @@ git commit -m "feat: add Ollama provider contract"
 **Interfaces:**
 - Consumes: `ProviderRegistry`, `StorySession`, `Turn`, story/character repository.
 - Produces: `POST /api/sessions/{session_id}/turns`, `TurnResult`, canonical visual directive.
+
+**Контракт task:**
+- Ответственность: `create_turn` — глубокая атомарная операция, скрывающая сбор контекста, генерацию, максимум один repair, каноническую проверку и commit.
+- Входы: `session_id`, непустое действие ограниченной длины, уникальный `request_id`, ожидаемый `state_version`; provider/model берутся из сессии.
+- Выходы: только сохранённый `TurnResult`; визуальная директива содержит разрешённые character/emotion/pose/outfit IDs, а не произвольные пути или CSS.
+- Инварианты: LLM только предлагает; rules принимает решение; один успешный запрос создаёт один turn и увеличивает версию ровно на один; тот же request ID возвращает исходный результат.
+- Ошибки: stale version → 409; недоступность или две невалидные попытки → стабильная русская ошибка без изменения БД; unexpected exception откатывает транзакцию.
+- Конкурентность: unique constraint и conditional version update являются последней защитой от двойной записи; проверка версии только в Python недостаточна.
+- Приёмка: тесты доказывают happy path, repair, полный отказ, replay/idempotency, stale write и rollback после ошибки между insert и version update.
 
 Перед tests добавить fixtures в `tests/conftest.py`:
 
@@ -651,6 +718,14 @@ git commit -m "feat: generate and validate canonical story turns"
 - Consumes: routers/tasks 1–4.
 - Produces: deployable `create_app(settings_override=None, provider_registry_override=None)` for tests and `app` for Uvicorn.
 
+**Контракт task:**
+- Ответственность: composition root только связывает настройки, lifecycle, registry, error mapping и routers; доменная логика в `main.py` запрещена.
+- Входы: production defaults либо явные test overrides; overrides не читаются из глобального mutable state.
+- Выходы: одинаково собранное приложение для Uvicorn и TestClient, детерминированные operation IDs и единый JSON-формат ошибок.
+- Инварианты: migrations завершаются до приёма запросов; seed запускается после migrations; shutdown освобождает HTTP/DB resources; routers не создают собственные registry/engine.
+- Ошибки: startup failure видим процессу и не переводит API в частично рабочее состояние; 404/422/409/503 имеют русское сообщение и машинный `code`.
+- Приёмка: smoke tests проходят через настоящий composition root; после удаления demo Store нет импортов старых модулей и нет второго источника состояния.
+
 - [ ] **Step 1: Переписать API smoke tests**
 
 Проверить `/health`, `/api/providers`, `/api/stories`, session restore, русскую 404 и OpenAPI operation IDs. Удалить assertions демонстрационного fallback и очереди пяти фиксированных эмоций.
@@ -736,6 +811,14 @@ git commit -m "refactor: assemble modular playable API"
 **Interfaces:**
 - Produces routes `/` and `/play/:sessionId`; `api.listStories()`, `api.startSession()`, `api.getSession()`, `api.providers()`, `api.createTurn()`.
 - Does not create `entities`, `features` or `widgets`.
+
+**Контракт task:**
+- Ответственность: `app` владеет bootstrap/router, `pages` — пользовательскими сценариями, `shared/api` — transport и wire DTO; слои не отражают backend-модули механически.
+- Входы: JSON API через один client с configurable base URL и `AbortSignal`; компоненты не вызывают `fetch` напрямую.
+- Выходы: два route-level public API через `index.ts`; внутренние файлы slice не импортируются снаружи deep import-ом.
+- Инварианты: импорты направлены `app → pages → shared`; `shared` не знает страниц; assets, используемые одной страницей, colocated с ней; глобальным остаётся только действительно общее.
+- Ошибки: client преобразует non-2xx и network failures в `ApiRequestError(code, message, status)`; страница отображает безопасный русский message.
+- Приёмка: Steiger, TypeScript и unit tests проходят; поиск не находит старых import paths; добавление `entities/features/widgets` требует отдельного доказанного повторного использования.
 
 - [ ] **Step 1: Добавить router и Steiger**
 
@@ -823,6 +906,15 @@ git commit -m "refactor: migrate web shell to FSD"
 **Interfaces:**
 - Consumes: `StorySession`, `TurnResult`, `ApiRequestError`, `/api/providers`.
 - Produces: working `/play/:sessionId` page; emotion is derived only from `turn.visual_directive.emotion`.
+
+**Контракт task:**
+- Ответственность: model управляет состояниями загрузки/готовности/отправки/ошибки, UI только визуализирует их; API слой не хранит React state.
+- Входы: route `sessionId`, восстановленная сессия, provider status и пользовательское действие; повторная отправка использует новый request ID только для нового намерения пользователя.
+- Выходы: подтверждённый текст, choices и sprite state; typewriter меняет лишь представление и никогда не задерживает сохранение/доступность данных.
+- Инварианты: UI не предсказывает эмоцию из текста; во время запроса и при offline управление заблокировано; sprite сохраняет aspect ratio; stale response не перезаписывает более новое состояние.
+- Ошибки: provider unavailable показывает блокирующее состояние и retry health; 409 перезагружает сессию перед новой попыткой; abort/navigation не показывается как ошибка сюжета.
+- Доступность: управление доступно с клавиатуры, disabled имеет текстовое объяснение, статус объявляется через подходящий live region, prefers-reduced-motion отключает typewriter-анимацию.
+- Приёмка: component tests покрывают restore, offline→retry, double submit, server error, смену подтверждённой эмоции и отсутствие искажения спрайта.
 
 - [ ] **Step 1: Написать failing unavailable-provider test**
 
@@ -930,6 +1022,14 @@ git commit -m "feat: connect story player to canonical Ollama turns"
 **Interfaces:**
 - Consumes: весь вертикальный срез.
 - Produces: воспроизводимая команда `npm run test:e2e` и общий `npm run check`.
+
+**Контракт task:**
+- Ответственность: E2E доказывает один критический путь на реальных процессах web/API и детерминированном fake Ollama; он не повторяет все unit cases.
+- Входы: чистая временная SQLite, фиксированные порты/URL из test config, isolated browser context и fake provider без внешней сети.
+- Выходы: один локальный `npm run check` для lint/typecheck/unit/build и отдельный воспроизводимый `npm run test:e2e`; артефакты падения лежат в `output/playwright/`.
+- Инварианты: тест не зависит от установленной модели, предыдущей БД, порядка запуска или скорости typewriter; локаторы основаны на role/name, а не CSS-классах.
+- Ошибки: webServer processes завершаются после теста; trace/screenshot сохраняются только при падении; таймаут не заменяет ожидание наблюдаемого UI-состояния.
+- Приёмка: clean checkout проходит общий gate; E2E стартует историю, отправляет выбор, видит русский ответ и смену на emotion `fan`, затем после reload восстанавливает тот же ход.
 
 - [ ] **Step 1: Добавить Playwright и scripts**
 
