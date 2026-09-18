@@ -40,6 +40,7 @@ def _create_turns() -> None:
         Column("request_id", String(), nullable=False),
         Column("state_version", Integer(), nullable=False),
         Column("action", String(), nullable=False),
+        Column("speaker", String(), nullable=False),
         Column("narration", String(), nullable=False),
         Column("dialogue", String(), nullable=False),
         Column("choices", String(), nullable=False),
@@ -50,6 +51,7 @@ def _create_turns() -> None:
         Column("prompt_version", String(), nullable=False),
         Column("created_at", String(), nullable=False),
         UniqueConstraint("session_id", "request_id"),
+        UniqueConstraint("session_id", "state_version"),
     )
 
 
@@ -60,6 +62,8 @@ def _create_empty_schema() -> None:
         Column("slug", String(), nullable=False, unique=True, index=True),
         Column("title", String(), nullable=False),
         Column("premise", String(), nullable=False),
+        Column("theme_labels", String(), nullable=False, server_default="[]"),
+        Column("state_version", Integer(), nullable=False, server_default="1"),
         Column("story_mode", String(), nullable=False, server_default="hybrid"),
         Column("content_version", Integer(), nullable=False, server_default="1"),
         Column("current_scene", String(), nullable=False),
@@ -87,7 +91,9 @@ def _migrate_legacy_schema(bind) -> None:
         batch.add_column(Column("story_mode", String(), nullable=False, server_default="hybrid"))
         batch.add_column(Column("content_version", Integer(), nullable=False, server_default="1"))
         batch.add_column(Column("recommended_provider_id", String(), nullable=False, server_default="ollama"))
-        batch.add_column(Column("recommended_model_id", String(), nullable=False, server_default="qwen3:14b-q4_K_M"))
+        batch.add_column(
+            Column("recommended_model_id", String(), nullable=False, server_default="qwen3:14b-q4_K_M")
+        )
     bind.execute(text("UPDATE stories SET slug = id WHERE slug IS NULL"))
     with op.batch_alter_table("stories") as batch:
         batch.alter_column("slug", existing_type=String(), nullable=False)
@@ -127,7 +133,10 @@ def _migrate_legacy_schema(bind) -> None:
             },
         )
         turns = bind.execute(
-            text("SELECT id, request_id, state_version, action, narration, dialogue, choices, created_at FROM turns_legacy WHERE story_id = :story_id"),
+            text(
+                "SELECT id, request_id, state_version, action, speaker, narration, dialogue, choices, created_at "
+                "FROM turns_legacy WHERE story_id = :story_id"
+            ),
             {"story_id": story["id"]},
         ).mappings()
         for turn in turns:
@@ -135,10 +144,11 @@ def _migrate_legacy_schema(bind) -> None:
                 text(
                     """
                     INSERT INTO turns (
-                        id, session_id, request_id, state_version, action, narration, dialogue, choices,
+                        id, session_id, request_id, state_version, action, speaker, narration, dialogue, choices,
                         visual_directive, raw_response, provider_id, model_id, prompt_version, created_at
                     ) VALUES (
-                        :id, :session_id, :request_id, :state_version, :action, :narration, :dialogue, :choices,
+                        :id, :session_id, :request_id, :state_version, :action, :speaker, :narration, :dialogue,
+                        :choices,
                         :visual_directive, :raw_response, :provider_id, :model_id, :prompt_version, :created_at
                     )
                     """

@@ -37,7 +37,10 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         # SQLite batch operations rebuild tables; parent-table rebuilds require
         # temporarily disabling FK enforcement for the migration connection.
+        connection.commit()
         connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        connection.exec_driver_sql("BEGIN")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -45,9 +48,13 @@ def run_migrations_online() -> None:
             transactional_ddl=True,
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
-        connection.commit()
+        try:
+            with context.begin_transaction():
+                context.run_migrations()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
 
 
 if context.is_offline_mode():

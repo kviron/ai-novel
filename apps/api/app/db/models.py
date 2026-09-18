@@ -20,6 +20,8 @@ class Story(SQLModel, table=True):
     slug: str = Field(index=True, unique=True)
     title: str
     premise: str
+    theme_labels: str = "[]"
+    state_version: int = 1
     story_mode: str = "hybrid"
     content_version: int = 1
     current_scene: str
@@ -55,13 +57,17 @@ class StorySession(SQLModel, table=True):
 
 class Turn(SQLModel, table=True):
     __tablename__ = "turns"
-    __table_args__ = (UniqueConstraint("session_id", "request_id"),)
+    __table_args__ = (
+        UniqueConstraint("session_id", "request_id"),
+        UniqueConstraint("session_id", "state_version"),
+    )
 
     id: str = Field(default_factory=new_public_id, primary_key=True)
     session_id: str = Field(foreign_key="story_sessions.id", index=True)
     request_id: str
     state_version: int
     action: str
+    speaker: str
     narration: str
     dialogue: str
     choices: str
