@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     database_path: Path = Path("data/visual-novel.db")
     ollama_base_url: str = "http://127.0.0.1:11434"
-    provider_timeout_seconds: float = 0.35
+    provider_timeout_seconds: float = 120.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

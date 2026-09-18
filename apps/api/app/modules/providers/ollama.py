@@ -48,6 +48,10 @@ class OllamaProvider:
             raise ProviderResponseError(raw_response=response.text) from error
 
     def generate_turn(self, request: TurnGenerationRequest) -> TurnProposal:
+        response_schema = request.model_dump(
+            mode="json",
+            include={"response_schema"},
+        )["response_schema"]
         response = self._request(
             "POST",
             "/api/chat",
@@ -59,7 +63,7 @@ class OllamaProvider:
                     {"role": "user", "content": request.user_prompt},
                 ],
                 "stream": False,
-                "format": request.response_schema,
+                "format": response_schema,
                 "options": {"num_ctx": request.context_tokens},
             },
         )
@@ -73,8 +77,9 @@ class OllamaProvider:
 
         try:
             return TurnProposal.model_validate_json(content)
-        except (ValidationError, ValueError) as error:
-            raise ProviderResponseError(raw_response=response.text) from error
+        except (ValidationError, ValueError):
+            invalid_response = ProviderResponseError(raw_response=response.text)
+        raise invalid_response
 
     def _request(
         self,

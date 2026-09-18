@@ -1,10 +1,12 @@
 import json
+import traceback
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.config import Settings
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.modules.providers.contracts import TurnGenerationRequest
 from app.modules.providers.ollama import OllamaProvider
@@ -68,6 +70,28 @@ def test_ollama_sends_schema_and_parses_turn():
     proposal = provider.generate_turn(turn_request())
 
     assert proposal.dialogue.character_id == "akane"
+
+
+def test_generation_uses_the_configured_120_second_timeout(monkeypatch):
+    monkeypatch.delenv("PROVIDER_TIMEOUT_SECONDS", raising=False)
+    settings = Settings(_env_file=None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.extensions["timeout"] == {
+            "connect": 120.0,
+            "read": 120.0,
+            "write": 120.0,
+            "pool": 120.0,
+        }
+        return httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
+
+    provider = OllamaProvider(
+        settings.ollama_base_url,
+        settings.provider_timeout_seconds,
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    provider.generate_turn(turn_request())
 
 
 def test_ollama_unavailable_raises_typed_error():
@@ -162,6 +186,74 @@ def test_ollama_malformed_payload_has_diagnostic_body_but_safe_message(response)
     assert raised.value.raw_response not in str(raised.value)
 
 
+def test_validation_failure_traceback_does_not_expose_generated_content():
+    sensitive_marker = "SENSITIVE_GENERATED_CONTENT_47A1"
+    invalid_turn = json.loads(VALID_TURN_JSON)
+    invalid_turn["suggested_choices"] = [sensitive_marker]
+    provider = OllamaProvider(
+        "http://ollama.test",
+        1,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(
+                    200,
+                    json={"message": {"content": json.dumps(invalid_turn)}},
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ProviderResponseError) as raised:
+        provider.generate_turn(turn_request())
+
+    formatted_traceback = "".join(
+        traceback.format_exception(raised.type, raised.value, raised.tb)
+    )
+    assert sensitive_marker not in formatted_traceback
+    assert sensitive_marker in raised.value.raw_response
+    assert raised.value.__cause__ is None
+    assert raised.value.__context__ is None
+
+
+def test_request_schema_is_deeply_immutable_and_wire_payload_is_a_defensive_copy():
+    source_schema = TurnProposal.model_json_schema()
+    request = TurnGenerationRequest(
+        model_id="qwen3:14b-q4_K_M",
+        system_prompt="Веди историю.",
+        user_prompt="Игрок спрашивает о веере.",
+        response_schema=source_schema,
+    )
+
+    with pytest.raises(TypeError):
+        request.response_schema["required"][0] = "tampered"
+    source_schema["required"][0] = "caller_tampered"
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        wire_schema = json.loads(http_request.content)["format"]
+        assert isinstance(wire_schema, dict)
+        assert isinstance(wire_schema["required"], list)
+        assert wire_schema["required"][0] == "narration"
+        return httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
+
+    provider = OllamaProvider(
+        "http://ollama.test",
+        1,
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    provider.generate_turn(request)
+
+
+def test_immutable_request_schema_remains_json_serializable():
+    request = turn_request()
+
+    serialized = json.loads(request.model_dump_json())
+
+    assert isinstance(serialized["response_schema"], dict)
+    assert isinstance(serialized["response_schema"]["required"], list)
+    assert serialized["response_schema"]["required"][0] == "narration"
+
+
 def test_ollama_lists_models_and_reports_health():
     response = {"models": [{"name": "qwen3:14b-q4_K_M"}, {"name": "gemma3:4b"}]}
     provider = OllamaProvider(
@@ -183,32 +275,43 @@ def _valid_proposal() -> TurnProposal:
     return TurnProposal.model_validate_json(VALID_TURN_JSON)
 
 
+def _contract_ollama_handler(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/api/tags":
+        return httpx.Response(200, json={"models": [{"name": "qwen3:14b-q4_K_M"}]})
+    return httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
+
+
 @pytest.mark.parametrize(
     "provider_factory",
     [
         pytest.param(
-            lambda: FakeLLMProvider(responses=[_valid_proposal()]),
+            lambda: FakeLLMProvider(
+                responses=[_valid_proposal()],
+                models=["qwen3:14b-q4_K_M"],
+            ),
             id="fake",
         ),
         pytest.param(
             lambda: OllamaProvider(
                 "http://ollama.test",
                 1,
-                httpx.Client(
-                    transport=httpx.MockTransport(
-                        lambda _: httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
-                    )
-                ),
+                httpx.Client(transport=httpx.MockTransport(_contract_ollama_handler)),
             ),
             id="ollama",
         ),
     ],
 )
-def test_provider_contract_returns_a_turn_proposal(provider_factory):
+def test_provider_contract_covers_health_models_and_turn_generation(provider_factory):
     provider = provider_factory()
 
+    status = provider.health()
+    models = provider.list_models()
     result = provider.generate_turn(turn_request())
 
+    assert status.provider_id == "ollama"
+    assert status.available is True
+    assert status.models == ["qwen3:14b-q4_K_M"]
+    assert models == ["qwen3:14b-q4_K_M"]
     assert isinstance(result, TurnProposal)
     assert result.narration == "Дождь стихает."
 
