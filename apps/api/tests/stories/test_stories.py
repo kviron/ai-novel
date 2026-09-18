@@ -5,7 +5,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.db.models import StorySession, Turn
+from app.db.models import Story, StorySession, Turn
 
 
 def akane_story(client):
@@ -93,9 +93,18 @@ def test_created_story_is_listed_and_can_start_a_session(client):
     detail = client.get(f"/api/stories/{story_id}")
     started = client.post(f"/api/stories/{story_id}/sessions", json={})
 
-    assert story_id in {story["id"] for story in listed.json()}
+    listed_story = next(story for story in listed.json() if story["id"] == story_id)
     assert detail.status_code == 200
-    assert detail.json()["id"] == story_id
+    for field in (
+        "id",
+        "slug",
+        "title",
+        "premise",
+        "story_mode",
+        "recommended_provider_id",
+        "recommended_model_id",
+    ):
+        assert detail.json()[field] == listed_story[field]
     assert started.status_code == 201
     assert started.json()["story"]["id"] == story_id
 
@@ -207,3 +216,29 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     assert restored.status_code == 200
     assert restored.json()["visual_state"] == {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
     assert restored.json()["latest_turn"]["visual_directive"] == directive
+
+
+def test_compatibility_turns_do_not_mutate_playable_sessions_or_built_in_story(client):
+    akane = akane_story(client)
+    first_session = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+
+    first_turn = client.post(
+        f'/api/stories/{akane["id"]}/turns',
+        json={"request_id": "legacy-turn-1", "expected_state_version": 1, "action": "Осмотреть улицу"},
+    )
+    second_session = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    second_turn = client.post(
+        f'/api/stories/{akane["id"]}/turns',
+        json={"request_id": "legacy-turn-2", "expected_state_version": 2, "action": "Зажечь неон"},
+    )
+
+    first_restored = client.get(f'/api/sessions/{first_session["id"]}').json()
+    second_restored = client.get(f'/api/sessions/{second_session["id"]}').json()
+    with Session(client.app.state.engine) as session:
+        story = session.get(Story, akane["id"])
+
+    assert first_turn.status_code == 201
+    assert second_turn.status_code == 201
+    assert first_restored["state_version"] == 1
+    assert second_restored["state_version"] == 1
+    assert story.state_version == 1

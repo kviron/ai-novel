@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .database import Database
 from .schemas import StoryCreate, TurnCreate
@@ -79,42 +79,37 @@ class Store:
     def create_turn(self, story_id: str, payload: TurnCreate) -> tuple[dict, bool]:
         timestamp = now()
         with self.database.connect() as db:
-            existing = db.execute(
-                """
-                SELECT turns.* FROM turns
-                JOIN story_sessions ON story_sessions.id = turns.session_id
-                WHERE story_sessions.story_id = ? AND turns.request_id = ?
-                """,
-                (story_id, payload.request_id),
-            ).fetchone()
-            if existing:
-                return self._turn(existing), False
             story = db.execute("SELECT * FROM stories WHERE id = ?", (story_id,)).fetchone()
             if not story:
                 raise KeyError(story_id)
-            if story["state_version"] != payload.expected_state_version:
+            session_id = str(uuid5(NAMESPACE_URL, f"legacy-compat-session:{story_id}"))
+            existing = db.execute(
+                "SELECT * FROM turns WHERE session_id = ? AND request_id = ?", (session_id, payload.request_id)
+            ).fetchone()
+            if existing:
+                return self._turn(existing), False
+            story_session = db.execute("SELECT * FROM story_sessions WHERE id = ?", (session_id,)).fetchone()
+            session_version = story_session["state_version"] if story_session else 1
+            if session_version != payload.expected_state_version:
                 raise ConflictError("Состояние истории изменилось. Обновите страницу перед продолжением")
             character = db.execute("SELECT name FROM characters WHERE story_id = ? ORDER BY rowid LIMIT 1", (story_id,)).fetchone()
-            version = story["state_version"] + 1
+            version = session_version + 1
             turn_id = str(uuid4())
             speaker = character["name"] if character else "Рассказчик"
             dialogue = f'«{payload.action}», — решаете вы. {speaker} обдумывает ваши слова и кивает.'
             narration = "Дождь рисует серебряные дорожки на стекле, и история меняется вслед за вашим решением."
             choices = ["Спросить, что будет дальше", "Поискать другой путь", "Промолчать и наблюдать"]
-            story_session = db.execute(
-                "SELECT * FROM story_sessions WHERE story_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", (story_id,)
-            ).fetchone()
             if not story_session:
-                session_id = str(uuid4())
                 db.execute(
                     """
                     INSERT INTO story_sessions (
                         id, story_id, state_version, current_scene, provider_id, model_id, created_at, updated_at
-                    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         session_id,
                         story_id,
+                        version,
                         story["current_scene"],
                         story["recommended_provider_id"],
                         story["recommended_model_id"],
@@ -123,9 +118,7 @@ class Store:
                     ),
                 )
             else:
-                session_id = story_session["id"]
-            db.execute("UPDATE stories SET state_version = ? WHERE id = ?", (version, story_id))
-            db.execute("UPDATE story_sessions SET state_version = ?, updated_at = ? WHERE id = ?", (version, timestamp, session_id))
+                db.execute("UPDATE story_sessions SET state_version = ?, updated_at = ? WHERE id = ?", (version, timestamp, session_id))
             db.execute(
                 """
                 INSERT INTO turns (
