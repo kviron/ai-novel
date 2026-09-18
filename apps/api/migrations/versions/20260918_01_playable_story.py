@@ -39,6 +39,7 @@ def _create_turns() -> None:
         Column("session_id", String(), ForeignKey("story_sessions.id"), nullable=False, index=True),
         Column("request_id", String(), nullable=False),
         Column("state_version", Integer(), nullable=False),
+        Column("legacy_state_version", Integer(), nullable=True),
         Column("action", String(), nullable=False),
         Column("speaker", String(), nullable=False),
         Column("narration", String(), nullable=False),
@@ -103,13 +104,20 @@ def _migrate_legacy_schema(bind) -> None:
     op.rename_table("turns", "turns_legacy")
     _create_turns()
 
-    stories = bind.execute(text("SELECT id, state_version, current_scene, created_at FROM stories")).mappings()
+    stories = bind.execute(text("SELECT id, current_scene, created_at FROM stories")).mappings()
     for story in stories:
         session_id = str(uuid5(NAMESPACE_URL, f"legacy-story-session:{story['id']}"))
-        has_turn = bind.execute(
-            text("SELECT 1 FROM turns_legacy WHERE story_id = :story_id LIMIT 1"), {"story_id": story["id"]}
-        ).scalar()
-        if not has_turn:
+        turns = list(
+            bind.execute(
+                text(
+                    "SELECT id, request_id, state_version, action, speaker, narration, dialogue, choices, created_at "
+                    "FROM turns_legacy WHERE story_id = :story_id "
+                    "ORDER BY state_version, created_at, id"
+                ),
+                {"story_id": story["id"]},
+            ).mappings()
+        )
+        if not turns:
             continue
         bind.execute(
             text(
@@ -124,7 +132,7 @@ def _migrate_legacy_schema(bind) -> None:
             {
                 "id": session_id,
                 "story_id": story["id"],
-                "state_version": story["state_version"],
+                "state_version": len(turns) + 1,
                 "current_scene": story["current_scene"],
                 "provider_id": LEGACY_PROVIDER_ID,
                 "model_id": LEGACY_MODEL_ID,
@@ -132,23 +140,19 @@ def _migrate_legacy_schema(bind) -> None:
                 "updated_at": story["created_at"] or LEGACY_TIMESTAMP,
             },
         )
-        turns = bind.execute(
-            text(
-                "SELECT id, request_id, state_version, action, speaker, narration, dialogue, choices, created_at "
-                "FROM turns_legacy WHERE story_id = :story_id"
-            ),
-            {"story_id": story["id"]},
-        ).mappings()
-        for turn in turns:
+        # Legacy versions were only story-scoped and may repeat. Preserve the
+        # source version separately, then assign contiguous session versions.
+        for migrated_state_version, turn in enumerate(turns, start=2):
             bind.execute(
                 text(
                     """
                     INSERT INTO turns (
-                        id, session_id, request_id, state_version, action, speaker, narration, dialogue, choices,
+                        id, session_id, request_id, state_version, legacy_state_version, action, speaker, narration,
+                        dialogue, choices,
                         visual_directive, raw_response, provider_id, model_id, prompt_version, created_at
                     ) VALUES (
-                        :id, :session_id, :request_id, :state_version, :action, :speaker, :narration, :dialogue,
-                        :choices,
+                        :id, :session_id, :request_id, :state_version, :legacy_state_version, :action, :speaker,
+                        :narration, :dialogue, :choices,
                         :visual_directive, :raw_response, :provider_id, :model_id, :prompt_version, :created_at
                     )
                     """
@@ -156,6 +160,8 @@ def _migrate_legacy_schema(bind) -> None:
                 {
                     **turn,
                     "session_id": session_id,
+                    "state_version": migrated_state_version,
+                    "legacy_state_version": turn["state_version"],
                     "visual_directive": LEGACY_VISUAL_DIRECTIVE,
                     "raw_response": "",
                     "provider_id": LEGACY_PROVIDER_ID,

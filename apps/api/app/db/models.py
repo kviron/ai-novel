@@ -66,6 +66,7 @@ class Turn(SQLModel, table=True):
     session_id: str = Field(foreign_key="story_sessions.id", index=True)
     request_id: str
     state_version: int
+    legacy_state_version: int | None = None
     action: str
     speaker: str
     narration: str

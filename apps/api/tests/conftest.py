@@ -51,6 +51,27 @@ def create_v01_database(database_path: Path, *, story_id: str, turn_id: str) -> 
         )
 
 
+def create_v01_database_with_duplicate_turn_versions(database_path: Path) -> None:
+    """Create valid v0.1 data whose two turns share the same state version."""
+    create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
+    with sqlite3.connect(database_path) as db:
+        db.execute(
+            "INSERT INTO turns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy-turn-2",
+                "legacy-story",
+                "legacy-request-2",
+                2,
+                "Investigate",
+                "Akane",
+                "Second legacy dialogue",
+                "Second legacy narration",
+                '["Wait"]',
+                "2026-09-18T00:01:00+00:00",
+            ),
+        )
+
+
 @pytest.fixture()
 def client(tmp_path):
     os.environ["DATABASE_PATH"] = str(tmp_path / "test.db")

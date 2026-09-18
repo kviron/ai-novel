@@ -1,7 +1,7 @@
 import sqlite3
 
 import pytest
-from conftest import create_v01_database
+from conftest import create_v01_database, create_v01_database_with_duplicate_turn_versions
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +41,51 @@ def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
     assert story == ("legacy-story",)
     assert session == ("legacy-story", 2)
     assert speaker == ("Narrator",)
+
+
+def test_upgrade_resequences_duplicate_legacy_turn_versions_without_data_loss(tmp_path):
+    database_path = tmp_path / "duplicate-versions.db"
+    create_v01_database_with_duplicate_turn_versions(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        turns = db.execute(
+            """
+            SELECT id, request_id, state_version, legacy_state_version, action, speaker, dialogue, narration, choices,
+                   created_at
+            FROM turns
+            ORDER BY state_version
+            """
+        ).fetchall()
+        session = db.execute("SELECT state_version FROM story_sessions WHERE story_id='legacy-story'").fetchone()
+
+    assert turns == [
+        (
+            "legacy-turn",
+            "legacy-request",
+            2,
+            2,
+            "Continue",
+            "Narrator",
+            "Legacy dialogue",
+            "Legacy narration",
+            "[]",
+            "2026-09-18T00:00:00+00:00",
+        ),
+        (
+            "legacy-turn-2",
+            "legacy-request-2",
+            3,
+            2,
+            "Investigate",
+            "Akane",
+            "Second legacy dialogue",
+            "Second legacy narration",
+            '["Wait"]',
+            "2026-09-18T00:01:00+00:00",
+        ),
+    ]
+    assert session == (3,)
 
 
 def test_upgraded_legacy_database_accepts_a_story_model_insert(tmp_path):
