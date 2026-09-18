@@ -19,7 +19,7 @@ class StateConflictError(Exception):
 
 def find_turn(session: Session, session_id: str, request_id: str) -> TurnResult | None:
     turn = session.exec(select(Turn).where(Turn.session_id == session_id, Turn.request_id == request_id)).first()
-    return _turn_result(turn) if turn else None
+    return _turn_result(session, turn) if turn else None
 
 
 def load_context(session: Session, session_id: str, expected_version: int) -> GenerationContext:
@@ -41,7 +41,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         model_id=story_session.model_id,
         story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
         characters=[character.model_dump() for character in characters],
-        recent_turns=[_turn_result(turn).model_dump(mode="json") for turn in reversed(turns)],
+        recent_turns=[_turn_result(session, turn).model_dump(mode="json") for turn in reversed(turns)],
     )
 
 
@@ -97,17 +97,32 @@ def commit_turn(
             )
             if updated.rowcount != 1:
                 raise StateConflictError
-            result = _turn_result(turn)
+            result = _turn_result(session, turn)
         return result, True
-    except IntegrityError:
-        # A competing writer can only win once under the two unique constraints.
+    except IntegrityError as error:
+        # Recover only when persisted state proves that a competing writer won.
+        # Other constraints/triggers indicate an unexpected persistence failure.
         existing = find_turn(session, context.session_id, request.request_id)
         if existing is not None:
             return existing, False
-        raise StateConflictError from None
+        current = session.get(StorySession, context.session_id, populate_existing=True)
+        if current is not None and current.state_version != context.state_version:
+            raise StateConflictError from None
+        # SQL parameters include diagnostic model output; keep them out of tracebacks.
+        error.hide_parameters = True
+        raise error from None
 
 
-def _turn_result(turn: Turn) -> TurnResult:
+def _turn_result(session: Session, turn: Turn) -> TurnResult:
+    directive = json.loads(turn.visual_directive)
+    if turn.prompt_version == "legacy-v01" and "character_id" not in directive:
+        story_session = session.get(StorySession, turn.session_id)
+        characters = stories.list_characters(session, story_session.story_id)
+        if characters:
+            # Historical visuals had no character identity. Choose the story's
+            # first stable ID, never guess from mutable/nonunique speaker names.
+            # This is a read-only compatibility view; leave saved history intact.
+            directive["character_id"] = characters[0].id
     return TurnResult(
         id=turn.id,
         session_id=turn.session_id,
@@ -118,7 +133,7 @@ def _turn_result(turn: Turn) -> TurnResult:
         narration=turn.narration,
         dialogue=turn.dialogue,
         choices=json.loads(turn.choices),
-        visual_directive=json.loads(turn.visual_directive),
+        visual_directive=directive,
         provider_id=turn.provider_id,
         model_id=turn.model_id,
         prompt_version=turn.prompt_version,

@@ -4,9 +4,9 @@ from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.modules.providers.service import ProviderRegistry
 
 from . import repository
-from .contracts import TurnCreate, TurnResult
+from .contracts import AcceptedTurn, TurnCreate, TurnResult
 from .prompt import build_prompt, repair_prompt
-from .rules import InvalidProposalError, validate_proposal
+from .rules import GenerationContext, InvalidProposalError, validate_proposal
 
 
 class TurnGenerationFailedError(Exception):
@@ -44,6 +44,28 @@ def create_turn(
         # The context contains plain values: release the read transaction before I/O.
         session.rollback()
     try:
+        accepted, raw_response = _generate_turn(registry, context, request)
+    except (ProviderUnavailableError, ProviderResponseError, TurnGenerationFailedError):
+        # A committed duplicate wins even when this request's generation failed.
+        # Discard any prior snapshot before checking, then release the fresh read.
+        session.rollback()
+        try:
+            existing = repository.find_turn(session, session_id, request.request_id)
+        finally:
+            session.rollback()
+        if existing is not None:
+            return existing, False
+        raise
+    return repository.commit_turn(session, context, request, accepted, raw_response)
+
+
+def _generate_turn(
+    registry: ProviderRegistry,
+    context: GenerationContext,
+    request: TurnCreate,
+) -> tuple[AcceptedTurn, str]:
+    """Propose and repair without owning or opening any database transaction."""
+    try:
         provider = registry.get(context.provider_id)
     except KeyError:
         raise ProviderUnavailableError() from None
@@ -65,4 +87,4 @@ def create_turn(
         if attempt == 1:
             raise TurnGenerationFailedError(raw_response=raw_response) from None
         generation_request = repair_prompt(generation_request, validation_error, raw_response)
-    return repository.commit_turn(session, context, request, accepted, raw_response)
+    return accepted, raw_response

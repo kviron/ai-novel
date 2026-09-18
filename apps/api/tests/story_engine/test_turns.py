@@ -1,16 +1,25 @@
 import json
 import re
+import sqlite3
+import traceback
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Event, Lock
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from conftest import create_v01_database
+from fakes import FakeLLMProvider
+from fastapi.testclient import TestClient
 from sqlalchemy import event, text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.core.config import Settings
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
 from app.db.models import StorySession, Turn
+from app.main import create_app
 from app.modules.providers.ollama import OllamaProvider
 from app.modules.providers.router import get_provider_registry
 from app.modules.providers.service import ProviderRegistry
@@ -353,3 +362,128 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
     assert all(
         {"narration", "dialogue", "choices", "visual_directive"} <= turn.keys() for turn in context["recent_turns"]
     )
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "model_unavailable", "invalid_twice", "domain_invalid_twice"])
+def test_late_duplicate_failure_replays_committed_winner(
+    client,
+    fake_provider,
+    akane_session,
+    monkeypatch,
+    caplog,
+    failure,
+):
+    entered = Event()
+    winner_committed = Event()
+    call_lock = Lock()
+    call_count = 0
+
+    def generate(request):
+        nonlocal call_count
+        with call_lock:
+            call_count += 1
+            call_number = call_count
+        if call_number == 2:
+            return proposal()
+        entered.set()
+        assert winner_committed.wait(timeout=10)
+        if failure == "unavailable":
+            raise ProviderUnavailableError(raw_response="PRIVATE DIAGNOSTIC")
+        if failure == "model_unavailable":
+            raise ProviderResponseError("model_unavailable", raw_response="PRIVATE DIAGNOSTIC")
+        if failure == "domain_invalid_twice":
+            return proposal(dialogue={"character_id": "PRIVATE DIAGNOSTIC", "text": "Текст"})
+        raise ProviderResponseError(raw_response="PRIVATE DIAGNOSTIC")
+
+    monkeypatch.setattr(fake_provider, "generate_turn", generate)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        outstanding_duplicate = pool.submit(post_turn, client, akane_session)
+        try:
+            assert entered.wait(timeout=10)
+            winner = post_turn(client, akane_session)
+        finally:
+            winner_committed.set()
+        replay = outstanding_duplicate.result(timeout=10)
+    assert winner.status_code == 201
+    assert replay.status_code == 200
+    assert replay.json() == winner.json()
+    assert call_count == (3 if failure.endswith("twice") else 2)
+    assert "PRIVATE DIAGNOSTIC" not in replay.text + caplog.text
+    with Session(client.app.state.engine) as db:
+        assert db.get(StorySession, akane_session.id).state_version == 2
+        assert len(list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))) == 1
+
+
+@pytest.fixture()
+def migrated_game(tmp_path):
+    path = tmp_path / "legacy-story.db"
+    create_v01_database(path, story_id="old-story", turn_id="old-turn")
+    with sqlite3.connect(path) as connection:
+        # Deliberately unrelated display names and insertion order: neither identifies the visual.
+        connection.executemany(
+            "INSERT INTO characters VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("z-character", "old-story", "Narrator", 25, "Наблюдательная", "Красное платье", 1),
+                ("a-character", "old-story", "Другое имя", 25, "Наблюдательная", "Красное платье", 1),
+            ],
+        )
+    provider = FakeLLMProvider(provider_id="legacy")
+    with TestClient(create_app(Settings(database_path=path), ProviderRegistry([provider]))) as legacy_client:
+        with Session(legacy_client.app.state.engine) as db:
+            game = db.exec(select(StorySession).where(StorySession.story_id == "old-story")).one()
+            original = db.get(Turn, "old-turn").model_dump()
+            game_id = game.id
+        yield legacy_client, SimpleNamespace(id=game_id), provider, original
+
+
+def test_migrated_legacy_replay_derives_character_without_rewriting_history(migrated_game):
+    client, game, provider, original = migrated_game
+    response = post_turn(client, game, request_id="legacy-request")
+    assert response.status_code == 200
+    assert response.json()["id"] == "old-turn"
+    assert response.json()["speaker"] == "Narrator"
+    assert response.json()["visual_directive"]["character_id"] == "a-character"
+    assert provider.call_count == 0
+    with Session(client.app.state.engine) as db:
+        assert db.get(Turn, "old-turn").model_dump() == original
+        assert db.get(StorySession, game.id).state_version == 2
+
+
+def test_migrated_legacy_history_supports_next_strict_canonical_turn(migrated_game, monkeypatch):
+    client, game, provider, original = migrated_game
+    requests = []
+
+    def generate(request):
+        requests.append(request)
+        return proposal(dialogue={"character_id": "z-character", "text": "Продолжим"})
+
+    monkeypatch.setattr(provider, "generate_turn", generate)
+    response = post_turn(client, game, request_id="next-turn", expected_state_version=2)
+    assert response.status_code == 201
+    assert response.json()["state_version"] == 3
+    assert response.json()["visual_directive"]["character_id"] == "z-character"
+    assert requests[0].model_id == "legacy"
+    history = json.loads(requests[0].user_prompt)["recent_turns"]
+    assert history[0]["visual_directive"]["character_id"] == "a-character"
+    assert history[0]["dialogue"] == "Legacy dialogue"
+    with Session(client.app.state.engine) as db:
+        assert db.get(Turn, "old-turn").model_dump() == original
+        turns = list(db.exec(select(Turn).where(Turn.session_id == game.id).order_by(Turn.state_version)))
+        assert len(turns) == 2
+        assert json.loads(turns[1].visual_directive)["character_id"] == "z-character"
+
+
+def test_unrelated_integrity_abort_propagates_and_rolls_back(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal(narration="PRIVATE SQL DIAGNOSTIC")]
+    with client.app.state.engine.begin() as connection:
+        connection.execute(
+            text("""
+            CREATE TRIGGER reject_turn AFTER INSERT ON turns BEGIN
+              SELECT RAISE(ABORT, 'unrelated integrity condition');
+            END
+        """)
+        )
+    with pytest.raises(IntegrityError, match="unrelated integrity condition") as raised:
+        post_turn(client, akane_session)
+    assert "PRIVATE SQL DIAGNOSTIC" not in "".join(traceback.format_exception(raised.value))
+    assert_unchanged(client, akane_session)
