@@ -4,6 +4,7 @@ node_modules/
 dist/
 __pycache__/
 .pytest_cache/
+.runlogs/
 *.py[cod]
 *.db
 *.db-shm
