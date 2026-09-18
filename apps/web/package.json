@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint:fsd": "steiger src",
+    "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -17,11 +19,13 @@
     "radix-ui": "^1.6.7",
     "react": "latest",
     "react-dom": "latest",
+    "react-router-dom": "latest",
     "sonner": "^2.0.8",
     "vite": "latest"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "steiger": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
     "@testing-library/user-event": "latest",
