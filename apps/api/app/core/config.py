@@ -8,9 +8,11 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    """Validated application configuration for persistence infrastructure."""
+    """Validated application infrastructure configuration."""
 
     database_path: Path = Path("data/visual-novel.db")
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    provider_timeout_seconds: float = 0.35
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

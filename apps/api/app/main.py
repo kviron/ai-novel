@@ -11,6 +11,7 @@ from .core.config import Settings as PersistenceSettings
 from .database import Database
 from .db.engine import create_engine_from_settings
 from .db.migrate import run_migrations
+from .modules.providers.router import router as providers_router
 from .modules.stories.router import router as stories_router
 from .modules.stories.seed import seed_akane_story
 from .providers import provider_health
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(stories_router)
+    app.include_router(providers_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_, error: RequestValidationError):
