@@ -57,3 +57,10 @@ test('converts network failures into retryable request errors', async () => {
     retryable: true,
   })
 })
+
+test('preserves an AbortError so callers can suppress cancellation', async () => {
+  const aborted = new DOMException('The operation was aborted.', 'AbortError')
+  vi.stubGlobal('fetch', vi.fn(async () => { throw aborted }))
+
+  await expect(createApiClient().listStories()).rejects.toBe(aborted)
+})

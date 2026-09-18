@@ -42,6 +42,16 @@ export type TurnResult = {
   created_at: string
 }
 
+export type SessionTurn = {
+  id: string
+  state_version: number
+  speaker: string
+  narration: string
+  dialogue: string
+  choices: string[]
+  visual_directive: Record<string, string>
+}
+
 export type StorySession = {
   id: string
   story: StorySummary
@@ -50,7 +60,7 @@ export type StorySession = {
   current_scene: string
   provider_id: string
   model_id: string
-  latest_turn: TurnResult | null
+  latest_turn: SessionTurn | null
   visual_state: { emotion: string; pose: string; outfit: string }
 }
 

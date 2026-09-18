@@ -45,6 +45,10 @@ async function readJson(response: Response): Promise<unknown | undefined> {
   }
 }
 
+function isAbortError(cause: unknown): boolean {
+  return typeof cause === 'object' && cause !== null && (cause as { name?: unknown }).name === 'AbortError'
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { baseUrl = '', body, headers, ...init } = options
   let response: Response
@@ -55,7 +59,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
-  } catch {
+  } catch (cause) {
+    if (isAbortError(cause)) throw cause
     throw new ApiRequestError('Не удалось подключиться к серверу. Повторите попытку.', 0, 'network_error', true)
   }
 

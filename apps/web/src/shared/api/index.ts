@@ -4,6 +4,7 @@ export type {
   Character,
   CreateTurnRequest,
   ProviderStatus,
+  SessionTurn,
   StartSessionRequest,
   StorySession,
   StorySummary,

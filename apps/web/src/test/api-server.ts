@@ -23,15 +23,32 @@ type Session = {
 }
 
 type Provider = { provider_id: string; available: boolean; detail: string; models: string[] }
+type StartSessionRequest = { provider_id: string; model_id?: string }
 
 let stories: Story[] = []
 let nextSession: Session = { id: 'session-1', state_version: 1 }
 let sessions = new Map<string, Session>()
-let providers: Provider[] = []
+let providerQueue: Provider[] = []
+let lastProvider: Provider | null = null
 let turns = new Map<string, unknown>()
+let lastStartRequest: StartSessionRequest | null = null
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+}
+
+async function requestBody(input: RequestInfo | URL, init?: RequestInit): Promise<unknown> {
+  const body = input instanceof Request ? await input.clone().text() : init?.body
+  if (typeof body !== 'string') return undefined
+  try {
+    return JSON.parse(body)
+  } catch {
+    return undefined
+  }
+}
+
+function isStartSessionRequest(value: unknown): value is StartSessionRequest {
+  return typeof value === 'object' && value !== null && typeof (value as StartSessionRequest).provider_id === 'string'
 }
 
 async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -40,12 +57,24 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const { pathname } = new URL(url, 'http://api.test')
 
   if (method === 'GET' && pathname === '/api/stories') return json(stories)
-  if (method === 'GET' && pathname === '/api/providers') return json(providers)
+  if (method === 'GET' && pathname === '/api/providers') {
+    lastProvider = providerQueue.shift() ?? lastProvider
+    return json(lastProvider ? [lastProvider] : [])
+  }
 
   const startMatch = pathname.match(/^\/api\/stories\/([^/]+)\/sessions$/)
   if (method === 'POST' && startMatch) {
     const story = stories.find(({ id }) => id === startMatch[1])
     if (!story) return json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
+    const body = await requestBody(input, init)
+    if (!isStartSessionRequest(body)) {
+      lastStartRequest = null
+      return json({ code: 'validation_error', detail: 'Передайте провайдер и модель.', retryable: false }, 422)
+    }
+    lastStartRequest = body
+    if (body.provider_id !== story.recommended_provider_id || body.model_id !== story.recommended_model_id) {
+      return json({ code: 'validation_error', detail: 'Используйте рекомендуемые провайдер и модель.', retryable: false }, 422)
+    }
     const result = { ...nextSession, story, provider_id: story.recommended_provider_id, model_id: story.recommended_model_id }
     sessions.set(result.id, result)
     return json(result, 201)
@@ -78,20 +107,28 @@ export const apiServer = {
     sessions.set(value.id, value)
   },
   providerSequence(value: Provider[]) {
-    providers = value
+    providerQueue = [...value]
+    lastProvider = null
   },
   providersAvailable(value = true) {
-    providers = [{ provider_id: 'ollama', available: value, detail: value ? 'Готово' : 'Недоступно', models: [] }]
+    providerQueue = [{ provider_id: 'ollama', available: value, detail: value ? 'Готово' : 'Недоступно', models: [] }]
+    lastProvider = null
   },
   turn(sessionId: string, value: unknown) {
     turns.set(sessionId, value)
+  },
+  lastStartSessionRequest() {
+    return lastStartRequest
   },
   reset() {
     stories = []
     nextSession = { id: 'session-1', state_version: 1 }
     sessions = new Map()
-    providers = []
+    providerQueue = []
+    lastProvider = null
     turns = new Map()
-    vi.mocked(fetch).mockClear()
+    lastStartRequest = null
+    vi.mocked(fetch).mockReset()
+    vi.mocked(fetch).mockImplementation(handler)
   },
 }

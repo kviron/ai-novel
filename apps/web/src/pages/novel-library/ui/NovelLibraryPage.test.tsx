@@ -26,5 +26,9 @@ test('показывает встроенную историю и запуска
 
   expect(await screen.findByRole('heading', { name: 'Эхо неона' })).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Начать историю' }))
+  expect(apiServer.lastStartSessionRequest()).toEqual({
+    provider_id: 'ollama',
+    model_id: 'qwen3:14b-q4_K_M',
+  })
   expect(await screen.findByTestId('story-player-route')).toHaveAttribute('data-session-id', 'session-1')
 })
