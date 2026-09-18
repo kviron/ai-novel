@@ -1,9 +1,14 @@
 import os
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fakes import FakeLLMProvider
 from fastapi.testclient import TestClient
+
+from app.core.config import Settings
+from app.modules.providers.service import ProviderRegistry
 
 
 def create_v01_database(database_path: Path, *, story_id: str, turn_id: str) -> None:
@@ -73,12 +78,28 @@ def create_v01_database_with_duplicate_turn_versions(database_path: Path) -> Non
 
 
 @pytest.fixture()
-def client(tmp_path):
+def fake_provider():
+    return FakeLLMProvider()
+
+
+@pytest.fixture()
+def client(tmp_path, fake_provider):
     os.environ["DATABASE_PATH"] = str(tmp_path / "test.db")
     from app.config import get_settings
     from app.main import create_app
 
     get_settings.cache_clear()
-    with TestClient(create_app()) as test_client:
+    app = create_app(
+        Settings(database_path=tmp_path / "test.db", provider_timeout_seconds=1), ProviderRegistry([fake_provider])
+    )
+    with TestClient(app) as test_client:
         yield test_client
     get_settings.cache_clear()
+
+
+@pytest.fixture()
+def akane_session(client):
+    story = next(item for item in client.get("/api/stories").json() if item["slug"] == "akane-neon-echo")
+    result = client.post(f"/api/stories/{story['id']}/sessions", json={"provider_id": "ollama"})
+    assert result.status_code == 201
+    return SimpleNamespace(**result.json())

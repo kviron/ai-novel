@@ -11,17 +11,24 @@ from .core.config import Settings as PersistenceSettings
 from .database import Database
 from .db.engine import create_engine_from_settings
 from .db.migrate import run_migrations
+from .modules.providers.ollama import OllamaProvider
+from .modules.providers.router import get_provider_registry
 from .modules.providers.router import router as providers_router
+from .modules.providers.service import ProviderRegistry
 from .modules.stories.router import router as stories_router
 from .modules.stories.seed import seed_akane_story
+from .modules.story_engine.router import router as story_engine_router
 from .providers import provider_health
 from .schemas import StoryCreate, TurnCreate
 from .store import ConflictError, Store
 
 
-def create_app() -> FastAPI:
+def create_app(
+    persistence_settings: PersistenceSettings | None = None,
+    registry: ProviderRegistry | None = None,
+) -> FastAPI:
     settings = get_settings()
-    persistence_settings = PersistenceSettings(database_path=settings.database_path)
+    persistence_settings = persistence_settings or PersistenceSettings(database_path=settings.database_path)
     database = Database(persistence_settings.database_path)
     store = Store(database)
 
@@ -45,6 +52,17 @@ def create_app() -> FastAPI:
     )
     app.include_router(stories_router)
     app.include_router(providers_router)
+    app.include_router(story_engine_router)
+    if registry is None:
+        registry = ProviderRegistry(
+            [
+                OllamaProvider(
+                    base_url=persistence_settings.ollama_base_url,
+                    timeout_seconds=persistence_settings.provider_timeout_seconds,
+                )
+            ]
+        )
+    app.dependency_overrides[get_provider_registry] = lambda: registry
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_, error: RequestValidationError):
@@ -65,8 +83,12 @@ def create_app() -> FastAPI:
     @app.get("/health/providers")
     def providers():
         return {
-            "ollama": provider_health("Ollama", f"{settings.ollama_base_url}/api/tags", settings.provider_timeout_seconds),
-            "comfyui": provider_health("ComfyUI", f"{settings.comfyui_base_url}/system_stats", settings.provider_timeout_seconds),
+            "ollama": provider_health(
+                "Ollama", f"{settings.ollama_base_url}/api/tags", settings.provider_timeout_seconds
+            ),
+            "comfyui": provider_health(
+                "ComfyUI", f"{settings.comfyui_base_url}/system_stats", settings.provider_timeout_seconds
+            ),
         }
 
     @app.post("/api/stories", status_code=201)

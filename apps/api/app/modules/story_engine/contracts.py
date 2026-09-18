@@ -3,6 +3,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class TurnCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    request_id: str = Field(min_length=1, max_length=100)
+    expected_state_version: int = Field(ge=1)
+    action: str = Field(min_length=1, max_length=4000)
+
+
 class DialogueProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -45,3 +53,29 @@ class TurnProposal(BaseModel):
     visual_directive: VisualDirective
     suggested_choices: list[str] = Field(min_length=2, max_length=4)
     proposed_effects: list[ProposedEffect] = Field(default_factory=list, max_length=20)
+
+
+class CanonicalVisualDirective(VisualDirective):
+    character_id: str
+
+
+class AcceptedTurn(BaseModel):
+    """Canonical content after domain rules; carries no provider diagnostics."""
+
+    speaker: str
+    narration: str
+    dialogue: str
+    choices: list[str]
+    visual_directive: CanonicalVisualDirective
+
+
+class TurnResult(AcceptedTurn):
+    id: str
+    session_id: str
+    request_id: str
+    state_version: int
+    action: str
+    provider_id: str
+    model_id: str
+    prompt_version: str
+    created_at: str
