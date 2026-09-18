@@ -22,7 +22,13 @@ class OllamaProvider:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._owns_client = client is None
         self._client = client or httpx.Client()
+
+    def close(self) -> None:
+        """Release the HTTP client only when this adapter created it."""
+        if self._owns_client:
+            self._client.close()
 
     def health(self) -> ProviderStatus:
         models = self.list_models()

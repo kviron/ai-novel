@@ -1,125 +1,56 @@
-from contextlib import asynccontextmanager
+import re
 
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from sqlmodel import Session
+from fastapi.routing import APIRoute
 
-from .config import get_settings
-from .core.config import Settings as PersistenceSettings
-from .database import Database
-from .db.engine import create_engine_from_settings
-from .db.migrate import run_migrations
-from .modules.providers.ollama import OllamaProvider
-from .modules.providers.router import get_provider_registry
-from .modules.providers.router import router as providers_router
-from .modules.providers.service import ProviderRegistry
-from .modules.stories.router import router as stories_router
-from .modules.stories.seed import seed_akane_story
-from .modules.story_engine.router import router as story_engine_router
-from .providers import provider_health
-from .schemas import StoryCreate, TurnCreate
-from .store import ConflictError, Store
+from app.core.config import Settings, get_settings
+from app.core.errors import install_exception_handlers
+from app.core.lifespan import create_lifespan, create_provider_registry
+from app.core.lifespan import router as health_router
+from app.modules.providers.router import router as providers_router
+from app.modules.providers.service import ProviderRegistry
+from app.modules.stories.router import router as stories_router
+from app.modules.story_engine.router import router as story_engine_router
+
+
+def _operation_id(route: APIRoute) -> str:
+    method = min(route.methods).lower()
+    path = re.sub(r"[^a-zA-Z0-9]+", "_", route.path).strip("_") or "root"
+    return f"{method}_{path}"
 
 
 def create_app(
-    persistence_settings: PersistenceSettings | None = None,
-    registry: ProviderRegistry | None = None,
+    settings_override: Settings | None = None,
+    provider_registry_override: ProviderRegistry | None = None,
 ) -> FastAPI:
-    settings = get_settings()
-    persistence_settings = persistence_settings or PersistenceSettings(database_path=settings.database_path)
-    database = Database(persistence_settings.database_path)
-    store = Store(database)
-
-    @asynccontextmanager
-    async def lifespan(application: FastAPI):
-        run_migrations(persistence_settings.database_path)
-        application.state.engine = create_engine_from_settings(persistence_settings)
-        with Session(application.state.engine) as session:
-            seed_akane_story(session)
-            session.commit()
-        database.initialize()
-        settings.asset_dir.mkdir(parents=True, exist_ok=True)
-        yield
-
-    app = FastAPI(title="API нейровизуальной новеллы", version="0.1.0", lifespan=lifespan)
+    """Assemble one application graph for both Uvicorn and tests."""
+    settings = settings_override if settings_override is not None else get_settings()
+    owns_providers = provider_registry_override is None
+    providers = (
+        provider_registry_override
+        if provider_registry_override is not None
+        else create_provider_registry(settings)
+    )
+    app = FastAPI(
+        title="API нейровизуальной новеллы",
+        version="0.2.0",
+        lifespan=create_lifespan(settings, providers, owns_providers=owns_providers),
+        generate_unique_id_function=_operation_id,
+    )
+    app.state.settings = settings
+    app.state.providers = providers
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[value.strip() for value in settings.cors_origins.split(",")],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
     )
-    app.include_router(stories_router)
+    install_exception_handlers(app)
+    app.include_router(health_router)
     app.include_router(providers_router)
+    app.include_router(stories_router)
     app.include_router(story_engine_router)
-    if registry is None:
-        registry = ProviderRegistry(
-            [
-                OllamaProvider(
-                    base_url=persistence_settings.ollama_base_url,
-                    timeout_seconds=persistence_settings.provider_timeout_seconds,
-                )
-            ]
-        )
-    app.dependency_overrides[get_provider_registry] = lambda: registry
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_error(_, error: RequestValidationError):
-        has_age_error = any(item.get("loc", ())[-1:] == ("age",) for item in error.errors())
-        detail = (
-            "Возраст каждого персонажа должен быть не меньше 18 лет"
-            if has_age_error
-            else "Проверьте правильность заполнения обязательных полей"
-        )
-        return JSONResponse(status_code=422, content={"detail": detail})
-
-    @app.get("/health")
-    def health():
-        with database.connect() as connection:
-            connection.execute("SELECT 1")
-        return {"status": "ok", "mode": settings.app_mode}
-
-    @app.get("/health/providers")
-    def providers():
-        return {
-            "ollama": provider_health(
-                "Ollama", f"{settings.ollama_base_url}/api/tags", settings.provider_timeout_seconds
-            ),
-            "comfyui": provider_health(
-                "ComfyUI", f"{settings.comfyui_base_url}/system_stats", settings.provider_timeout_seconds
-            ),
-        }
-
-    @app.post("/api/stories", status_code=201)
-    def create_story(payload: StoryCreate):
-        return store.create_story(payload)
-
-    @app.get("/api/stories/{story_id}")
-    def get_story(story_id: str):
-        story = store.get_story(story_id)
-        if not story:
-            raise HTTPException(404, "История не найдена")
-        return story
-
-    @app.get("/api/stories/{story_id}/jobs")
-    def get_jobs(story_id: str):
-        if not store.get_story(story_id):
-            raise HTTPException(404, "История не найдена")
-        return store.list_jobs(story_id)
-
-    @app.post("/api/stories/{story_id}/turns", status_code=201)
-    def create_turn(story_id: str, payload: TurnCreate, response: Response):
-        try:
-            turn, created = store.create_turn(story_id, payload)
-        except KeyError:
-            raise HTTPException(404, "История не найдена") from None
-        except ConflictError as error:
-            raise HTTPException(409, str(error)) from None
-        if not created:
-            response.status_code = 200
-        return turn
-
     return app
 
 

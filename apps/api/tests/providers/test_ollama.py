@@ -326,6 +326,25 @@ def test_registry_selects_provider_by_stable_id():
         registry.get("unknown")
 
 
+def test_ollama_closes_only_the_http_client_it_created(monkeypatch):
+    client_type = httpx.Client
+    owned_client = client_type()
+    monkeypatch.setattr(httpx, "Client", lambda: owned_client)
+    owned_provider = OllamaProvider("http://ollama.test", 1)
+
+    owned_provider.close()
+
+    assert owned_client.is_closed
+
+    injected_client = client_type()
+    injected_provider = OllamaProvider("http://ollama.test", 1, injected_client)
+
+    injected_provider.close()
+
+    assert not injected_client.is_closed
+    injected_client.close()
+
+
 def test_provider_status_route_isolates_an_unavailable_provider():
     available = FakeLLMProvider(models=["qwen3:14b-q4_K_M"])
     unavailable = FakeLLMProvider(

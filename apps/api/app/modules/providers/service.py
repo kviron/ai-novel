@@ -17,6 +17,13 @@ class ProviderRegistry:
     def all(self) -> list[LLMProvider]:
         return list(self._providers.values())
 
+    def close(self) -> None:
+        """Close provider-owned resources when the registry itself is application-owned."""
+        for provider in self._providers.values():
+            close = getattr(provider, "close", None)
+            if close is not None:
+                close()
+
 
 def list_provider_statuses(registry: ProviderRegistry) -> list[ProviderStatus]:
     statuses: list[ProviderStatus] = []

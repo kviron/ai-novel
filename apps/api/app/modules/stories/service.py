@@ -3,9 +3,7 @@ import json
 from sqlmodel import Session
 
 from app.db.models import Character, Story, StorySession, Turn
-
-from . import repository
-from .schemas import (
+from app.modules.stories.schemas import (
     CharacterDetail,
     SessionDetail,
     StartSessionRequest,
@@ -14,6 +12,8 @@ from .schemas import (
     TurnDetail,
     VisualState,
 )
+
+from . import repository
 
 
 class StoryNotFoundError(Exception):

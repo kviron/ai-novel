@@ -123,6 +123,10 @@ def _turn_result(session: Session, turn: Turn) -> TurnResult:
             # first stable ID, never guess from mutable/nonunique speaker names.
             # This is a read-only compatibility view; leave saved history intact.
             directive["character_id"] = characters[0].id
+        else:
+            # Very early databases permitted stories without character rows.
+            # Keep those saved turns replayable with an explicit legacy sentinel.
+            directive["character_id"] = "legacy"
     return TurnResult(
         id=turn.id,
         session_id=turn.session_id,

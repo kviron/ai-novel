@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,17 +83,13 @@ def fake_provider():
 
 @pytest.fixture()
 def client(tmp_path, fake_provider):
-    os.environ["DATABASE_PATH"] = str(tmp_path / "test.db")
-    from app.config import get_settings
     from app.main import create_app
 
-    get_settings.cache_clear()
     app = create_app(
         Settings(database_path=tmp_path / "test.db", provider_timeout_seconds=1), ProviderRegistry([fake_provider])
     )
     with TestClient(app) as test_client:
         yield test_client
-    get_settings.cache_clear()
 
 
 @pytest.fixture()

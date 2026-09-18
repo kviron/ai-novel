@@ -1,16 +1,15 @@
 import json
-import os
 import sqlite3
 
 from conftest import create_v01_database
+from fakes import FakeLLMProvider
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app.database import Database
-from app.db.migrate import run_migrations
-from app.db.models import Story, StorySession, Turn
-from app.schemas import TurnCreate
-from app.store import Store
+from app.core.config import Settings
+from app.db.models import StorySession, Turn
+from app.main import create_app
+from app.modules.providers.service import ProviderRegistry
 
 
 def akane_story(client):
@@ -18,21 +17,24 @@ def akane_story(client):
     return next(item for item in stories if item["slug"] == "akane-neon-echo")
 
 
-def session_count() -> int:
-    with sqlite3.connect(os.environ["DATABASE_PATH"]) as database:
+def session_count(client) -> int:
+    with sqlite3.connect(client.app.state.settings.database_path) as database:
         return database.execute("SELECT COUNT(*) FROM story_sessions").fetchone()[0]
 
 
 def test_replaying_migrated_legacy_request_returns_its_original_turn(tmp_path):
     database_path = tmp_path / "legacy-replay.db"
     create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
-    run_migrations(database_path)
-    store = Store(Database(database_path))
+    provider = FakeLLMProvider(provider_id="legacy")
+    app = create_app(Settings(database_path=database_path), ProviderRegistry([provider]))
 
-    turn, created = store.create_turn(
-        "legacy-story",
-        TurnCreate(request_id="legacy-request", expected_state_version=1, action="Continue"),
-    )
+    with TestClient(app) as client:
+        with Session(client.app.state.engine) as session:
+            game = session.exec(select(StorySession).where(StorySession.story_id == "legacy-story")).one()
+        response = client.post(
+            f"/api/sessions/{game.id}/turns",
+            json={"request_id": "legacy-request", "expected_state_version": 1, "action": "Continue"},
+        )
 
     with sqlite3.connect(database_path) as database:
         turn_rows = database.execute("SELECT id, request_id, state_version FROM turns").fetchall()
@@ -40,8 +42,9 @@ def test_replaying_migrated_legacy_request_returns_its_original_turn(tmp_path):
             "SELECT state_version FROM story_sessions WHERE story_id = ?", ("legacy-story",)
         ).fetchall()
 
-    assert created is False
-    assert turn["id"] == "legacy-turn"
+    assert response.status_code == 200
+    assert response.json()["id"] == "legacy-turn"
+    assert provider.call_count == 0
     assert turn_rows == [("legacy-turn", "legacy-request", 2)]
     assert session_rows == [(2,)]
 
@@ -68,12 +71,10 @@ def test_seeded_akane_story_can_start_and_restore(client):
 def test_seed_is_idempotent_across_lifespan_startups(client):
     akane = akane_story(client)
 
-    from app.main import create_app
-
-    with TestClient(create_app()) as restarted_client:
+    with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted_client:
         restarted = akane_story(restarted_client)
 
-    with sqlite3.connect(os.environ["DATABASE_PATH"]) as database:
+    with sqlite3.connect(client.app.state.settings.database_path) as database:
         story_count = database.execute(
             "SELECT COUNT(*) FROM stories WHERE slug = ?", ("akane-neon-echo",)
         ).fetchone()[0]
@@ -97,48 +98,8 @@ def test_each_story_start_creates_an_independent_initial_session(client):
     assert second.json()["state_version"] == 1
 
 
-def test_created_story_is_listed_and_can_start_a_session(client):
-    created = client.post(
-        "/api/stories",
-        json={
-            "title": "Проверка единого хранилища",
-            "premise": "История, созданная через прежний маршрут, остаётся доступной игровому API.",
-            "theme_labels": ["проверка"],
-            "characters": [
-                {
-                    "name": "Мира",
-                    "age": 24,
-                    "personality": "наблюдательная",
-                    "appearance": "серебристые волосы",
-                }
-            ],
-        },
-    )
-    assert created.status_code == 201
-    story_id = created.json()["id"]
-
-    listed = client.get("/api/stories")
-    detail = client.get(f"/api/stories/{story_id}")
-    started = client.post(f"/api/stories/{story_id}/sessions", json={})
-
-    listed_story = next(story for story in listed.json() if story["id"] == story_id)
-    assert detail.status_code == 200
-    for field in (
-        "id",
-        "slug",
-        "title",
-        "premise",
-        "story_mode",
-        "recommended_provider_id",
-        "recommended_model_id",
-    ):
-        assert detail.json()[field] == listed_story[field]
-    assert started.status_code == 201
-    assert started.json()["story"]["id"] == story_id
-
-
 def test_start_rejects_unknown_story_without_creating_a_session(client):
-    before = session_count()
+    before = session_count(client)
 
     response = client.post(
         "/api/stories/missing-story/sessions",
@@ -146,13 +107,13 @@ def test_start_rejects_unknown_story_without_creating_a_session(client):
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "not_found"
-    assert session_count() == before
+    assert response.json()["code"] == "not_found"
+    assert session_count(client) == before
 
 
 def test_start_rejects_unsupported_model_without_creating_a_session(client):
     akane = akane_story(client)
-    before = session_count()
+    before = session_count(client)
 
     response = client.post(
         f'/api/stories/{akane["id"]}/sessions',
@@ -160,13 +121,13 @@ def test_start_rejects_unsupported_model_without_creating_a_session(client):
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "validation_error"
-    assert session_count() == before
+    assert response.json()["code"] == "validation_error"
+    assert session_count(client) == before
 
 
 def test_start_rejects_unsupported_provider_without_creating_a_session(client):
     akane = akane_story(client)
-    before = session_count()
+    before = session_count(client)
 
     response = client.post(
         f'/api/stories/{akane["id"]}/sessions',
@@ -174,13 +135,13 @@ def test_start_rejects_unsupported_provider_without_creating_a_session(client):
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "validation_error"
-    assert session_count() == before
+    assert response.json()["code"] == "validation_error"
+    assert session_count(client) == before
 
 
 def test_start_rejects_a_hidden_player_character_without_creating_a_session(client):
     akane = akane_story(client)
-    before = session_count()
+    before = session_count(client)
 
     response = client.post(
         f'/api/stories/{akane["id"]}/sessions',
@@ -188,23 +149,21 @@ def test_start_rejects_a_hidden_player_character_without_creating_a_session(clie
     )
 
     assert response.status_code == 422
-    assert session_count() == before
+    assert session_count(client) == before
 
 
 def test_restore_rejects_an_unknown_session(client):
     response = client.get("/api/sessions/missing-session")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "not_found"
+    assert response.json()["code"] == "not_found"
 
 
 def test_session_restores_through_a_fresh_application_client(client):
     akane = akane_story(client)
     created = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
 
-    from app.main import create_app
-
-    with TestClient(create_app()) as restarted_client:
+    with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted_client:
         restored = restarted_client.get(f'/api/sessions/{created["id"]}')
 
     assert restored.status_code == 200
@@ -244,29 +203,3 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     assert restored.status_code == 200
     assert restored.json()["visual_state"] == {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
     assert restored.json()["latest_turn"]["visual_directive"] == directive
-
-
-def test_compatibility_turns_do_not_mutate_playable_sessions_or_built_in_story(client):
-    akane = akane_story(client)
-    first_session = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
-
-    first_turn = client.post(
-        f'/api/stories/{akane["id"]}/turns',
-        json={"request_id": "legacy-turn-1", "expected_state_version": 1, "action": "Осмотреть улицу"},
-    )
-    second_session = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
-    second_turn = client.post(
-        f'/api/stories/{akane["id"]}/turns',
-        json={"request_id": "legacy-turn-2", "expected_state_version": 2, "action": "Зажечь неон"},
-    )
-
-    first_restored = client.get(f'/api/sessions/{first_session["id"]}').json()
-    second_restored = client.get(f'/api/sessions/{second_session["id"]}').json()
-    with Session(client.app.state.engine) as session:
-        story = session.get(Story, akane["id"])
-
-    assert first_turn.status_code == 201
-    assert second_turn.status_code == 201
-    assert first_restored["state_version"] == 1
-    assert second_restored["state_version"] == 1
-    assert story.state_version == 1
