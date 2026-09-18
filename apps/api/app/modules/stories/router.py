@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
+from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
 from app.modules.stories.schemas import SessionDetail, StartSessionRequest, StoryDetail, StorySummary
@@ -40,9 +41,14 @@ def read_story(story_id: str, session: SessionDep) -> StoryDetail:
     response_model=SessionDetail,
     responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
 )
-def create_story_session(story_id: str, payload: StartSessionRequest, session: SessionDep) -> SessionDetail:
+def create_story_session(
+    story_id: str,
+    payload: StartSessionRequest,
+    session: SessionDep,
+    settings: RuntimeSettingsDep,
+) -> SessionDetail:
     try:
-        return start_story_session(session, story_id, payload)
+        return start_story_session(session, story_id, payload, settings.ollama_model)
     except StoryNotFoundError as error:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
     except UnsupportedModelError as error:

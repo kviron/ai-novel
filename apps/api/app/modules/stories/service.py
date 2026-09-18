@@ -37,10 +37,15 @@ def get_story(session: Session, story_id: str) -> StoryDetail:
     return _story_detail(session, story)
 
 
-def start_story_session(session: Session, story_id: str, request: StartSessionRequest) -> SessionDetail:
+def start_story_session(
+    session: Session,
+    story_id: str,
+    request: StartSessionRequest,
+    configured_model_id: str,
+) -> SessionDetail:
     story = _require_story(session, story_id)
-    model_id = request.model_id or story.recommended_model_id
-    if request.provider_id != story.recommended_provider_id or model_id != story.recommended_model_id:
+    model_id = request.model_id or configured_model_id
+    if request.provider_id != story.recommended_provider_id or model_id != configured_model_id:
         raise UnsupportedModelError
 
     story_session = StorySession(

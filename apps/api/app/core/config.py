@@ -1,10 +1,14 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
+from fastapi import Depends, Request
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = APP_ROOT.parents[1]
+REPOSITORY_ENV_FILE = REPOSITORY_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -19,7 +23,7 @@ class Settings(BaseSettings):
     provider_timeout_seconds: float = 120.0
     cors_origins: str = "http://localhost:5173"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=REPOSITORY_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("database_path")
     @classmethod
@@ -35,3 +39,11 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_runtime_settings(request: Request) -> Settings:
+    """Return the immutable-by-convention settings selected by the composition root."""
+    return request.app.state.settings
+
+
+RuntimeSettingsDep = Annotated[Settings, Depends(get_runtime_settings)]

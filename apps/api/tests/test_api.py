@@ -8,6 +8,7 @@ from app.core.config import Settings
 from app.core.errors import ProviderUnavailableError
 from app.main import create_app
 from app.modules.providers.service import ProviderRegistry
+from app.modules.story_engine.contracts import TurnProposal
 from tests.fakes import FakeLLMProvider
 
 
@@ -53,6 +54,56 @@ def test_session_restores_through_a_fresh_application(tmp_path):
 
     assert restored.status_code == 200
     assert restored.json()["id"] == created.json()["id"]
+
+
+def test_runtime_model_and_context_config_drive_new_sessions_and_turns(tmp_path):
+    requests = []
+    provider = FakeLLMProvider(models=["review:model"])
+
+    def generate(request):
+        requests.append(request)
+        return TurnProposal.model_validate(
+            {
+                "narration": "Аканэ замечает новый след.",
+                "dialogue": {"character_id": "akane", "text": "Проверим его."},
+                "visual_directive": {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"},
+                "suggested_choices": ["Осмотреть след", "Продолжить разговор"],
+                "proposed_effects": [],
+            }
+        )
+
+    provider.generate_turn = generate
+    settings = Settings(
+        database_path=tmp_path / "runtime-config.db",
+        ollama_model="review:model",
+        ollama_context_tokens=2048,
+    )
+
+    with TestClient(create_app(settings, ProviderRegistry([provider]))) as client:
+        story = _akane_story(client)
+        default_session = client.post(f'/api/stories/{story["id"]}/sessions', json={})
+        explicit_session = client.post(
+            f'/api/stories/{story["id"]}/sessions',
+            json={"provider_id": "ollama", "model_id": "review:model"},
+        )
+        assert default_session.status_code == 201
+        assert explicit_session.status_code == 201
+
+        game = explicit_session.json()
+        turn = client.post(
+            f'/api/sessions/{game["id"]}/turns',
+            json={"request_id": "configured-turn", "expected_state_version": 1, "action": "Искать след"},
+        )
+        restored = client.get(f'/api/sessions/{game["id"]}')
+
+    assert story["recommended_model_id"] == "qwen3:14b-q4_K_M"
+    assert default_session.json()["model_id"] == "review:model"
+    assert game["model_id"] == "review:model"
+    assert turn.status_code == 201
+    assert turn.json()["model_id"] == "review:model"
+    assert restored.json()["model_id"] == "review:model"
+    assert requests[0].model_id == "review:model"
+    assert requests[0].context_tokens == 2048
 
 
 def test_errors_share_one_safe_russian_shape(client, fake_provider, akane_session):

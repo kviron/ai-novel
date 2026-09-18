@@ -22,6 +22,7 @@ def create_turn(
     registry: ProviderRegistry,
     session_id: str,
     request: TurnCreate,
+    context_tokens: int,
 ) -> tuple[TurnResult, bool]:
     """Generate, repair at most once, and save one canonical turn, or replay its saved result.
 
@@ -44,7 +45,7 @@ def create_turn(
         # The context contains plain values: release the read transaction before I/O.
         session.rollback()
     try:
-        accepted, raw_response = _generate_turn(registry, context, request)
+        accepted, raw_response = _generate_turn(registry, context, request, context_tokens)
     except (ProviderUnavailableError, ProviderResponseError, TurnGenerationFailedError):
         # A committed duplicate wins even when this request's generation failed.
         # Discard any prior snapshot before checking, then release the fresh read.
@@ -63,13 +64,14 @@ def _generate_turn(
     registry: ProviderRegistry,
     context: GenerationContext,
     request: TurnCreate,
+    context_tokens: int,
 ) -> tuple[AcceptedTurn, str]:
     """Propose and repair without owning or opening any database transaction."""
     try:
         provider = registry.get(context.provider_id)
     except KeyError:
         raise ProviderUnavailableError() from None
-    generation_request = build_prompt(context, request)
+    generation_request = build_prompt(context, request, context_tokens)
     raw_response = ""
     for attempt in range(2):
         try:

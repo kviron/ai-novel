@@ -9,7 +9,7 @@ from .rules import GenerationContext
 PROMPT_VERSION = "first-playable-v1"
 
 
-def build_prompt(context: GenerationContext, request: TurnCreate) -> TurnGenerationRequest:
+def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens: int) -> TurnGenerationRequest:
     facts = json.dumps({"story": context.story, "characters": context.characters}, ensure_ascii=False)
     return TurnGenerationRequest(
         model_id=context.model_id,
@@ -34,6 +34,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate) -> TurnGenerat
             ensure_ascii=False,
         ),
         response_schema=TurnProposal.model_json_schema(),
+        context_tokens=context_tokens,
     )
 
 

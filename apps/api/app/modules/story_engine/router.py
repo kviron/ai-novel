@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 from sqlmodel import Session
 
+from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
 from app.modules.providers.router import ProviderRegistryDep
@@ -35,9 +36,10 @@ def post_turn(
     response: Response,
     session: SessionDep,
     registry: ProviderRegistryDep,
+    settings: RuntimeSettingsDep,
 ) -> TurnResult:
     try:
-        result, created = create_turn(session, registry, session_id, payload)
+        result, created = create_turn(session, registry, session_id, payload, settings.ollama_context_tokens)
     except SessionNotFoundError:
         raise ApiError(404, "not_found", "Игровая сессия не найдена. Начните новую игру.") from None
     except StateConflictError:
