@@ -82,13 +82,17 @@ class Store:
             story = db.execute("SELECT * FROM stories WHERE id = ?", (story_id,)).fetchone()
             if not story:
                 raise KeyError(story_id)
-            session_id = str(uuid5(NAMESPACE_URL, f"legacy-compat-session:{story_id}"))
+            migrated_session_id = str(uuid5(NAMESPACE_URL, f"legacy-story-session:{story_id}"))
+            story_session = db.execute("SELECT * FROM story_sessions WHERE id = ?", (migrated_session_id,)).fetchone()
+            session_id = migrated_session_id
+            if not story_session:
+                session_id = str(uuid5(NAMESPACE_URL, f"legacy-compat-session:{story_id}"))
+                story_session = db.execute("SELECT * FROM story_sessions WHERE id = ?", (session_id,)).fetchone()
             existing = db.execute(
                 "SELECT * FROM turns WHERE session_id = ? AND request_id = ?", (session_id, payload.request_id)
             ).fetchone()
             if existing:
                 return self._turn(existing), False
-            story_session = db.execute("SELECT * FROM story_sessions WHERE id = ?", (session_id,)).fetchone()
             session_version = story_session["state_version"] if story_session else 1
             if session_version != payload.expected_state_version:
                 raise ConflictError("Состояние истории изменилось. Обновите страницу перед продолжением")

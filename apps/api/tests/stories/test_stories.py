@@ -2,10 +2,15 @@ import json
 import os
 import sqlite3
 
+from conftest import create_v01_database
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.database import Database
+from app.db.migrate import run_migrations
 from app.db.models import Story, StorySession, Turn
+from app.schemas import TurnCreate
+from app.store import Store
 
 
 def akane_story(client):
@@ -16,6 +21,29 @@ def akane_story(client):
 def session_count() -> int:
     with sqlite3.connect(os.environ["DATABASE_PATH"]) as database:
         return database.execute("SELECT COUNT(*) FROM story_sessions").fetchone()[0]
+
+
+def test_replaying_migrated_legacy_request_returns_its_original_turn(tmp_path):
+    database_path = tmp_path / "legacy-replay.db"
+    create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
+    run_migrations(database_path)
+    store = Store(Database(database_path))
+
+    turn, created = store.create_turn(
+        "legacy-story",
+        TurnCreate(request_id="legacy-request", expected_state_version=1, action="Continue"),
+    )
+
+    with sqlite3.connect(database_path) as database:
+        turn_rows = database.execute("SELECT id, request_id, state_version FROM turns").fetchall()
+        session_rows = database.execute(
+            "SELECT state_version FROM story_sessions WHERE story_id = ?", ("legacy-story",)
+        ).fetchall()
+
+    assert created is False
+    assert turn["id"] == "legacy-turn"
+    assert turn_rows == [("legacy-turn", "legacy-request", 2)]
+    assert session_rows == [(2,)]
 
 
 def test_seeded_akane_story_can_start_and_restore(client):
