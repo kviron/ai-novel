@@ -38,9 +38,9 @@
 | `superpowers:systematic-debugging` | уже доступен | при любом неожиданном падении | Поиск первопричины до исправления. |
 | `superpowers:verification-before-completion` | уже доступен | завершение каждого task | Запрет утверждать успех без свежего вывода проверок. |
 | `superpowers:requesting-code-review` | уже доступен | после каждого task | Проверка соответствия контракту до перехода к следующей границе. |
-| `playwright` из `openai/skills` | рекомендуется установить | Task 8 и ручная проверка UI | Стабильный snapshot-first workflow, traces и артефакты браузерной диагностики. Сам `@playwright/test` остаётся частью репозитория. |
-| `security-best-practices` из `openai/skills` | рекомендуется установить | security review после Task 5 и перед облачными провайдерами | Конкретные рекомендации для Python/FastAPI и TypeScript/React, секретов, входных данных и сетевых границ. |
-| `philosophy-of-software-design` из `jordanbyron/agent-skills` | опционально, сторонний | перед новыми provider/story-engine API | Проверка на shallow modules, information leakage и change amplification; полезнее универсального «делай SOLID». |
+| `playwright` из `openai/skills` | установлен в проекте | Task 8 и ручная проверка UI | Стабильный snapshot-first workflow, traces и артефакты браузерной диагностики. Сам `@playwright/test` остаётся частью репозитория. |
+| `security-best-practices` из `openai/skills` | установлен в проекте | security review после Task 5 и перед облачными провайдерами | Конкретные рекомендации для Python/FastAPI и TypeScript/React, секретов, входных данных и сетевых границ. |
+| `philosophy-of-software-design` из `jordanbyron/agent-skills` | установлен в проекте, сторонний | перед новыми provider/story-engine API | Проверка на shallow modules, information leakage и change amplification; полезнее универсального «делай SOLID». |
 
 Не устанавливать отдельный всегда-включённый навык «SOLID/OOP»: он дублирует правила выше и может стимулировать лишние классы. SOLID здесь проверяется через конкретные контракты и тесты, а не через количество интерфейсов.
 
