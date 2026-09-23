@@ -72,10 +72,11 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       return json({ code: 'validation_error', detail: 'Передайте провайдер и модель.', retryable: false }, 422)
     }
     lastStartRequest = body
-    if (body.provider_id !== story.recommended_provider_id || body.model_id !== story.recommended_model_id) {
-      return json({ code: 'validation_error', detail: 'Используйте рекомендуемые провайдер и модель.', retryable: false }, 422)
+    const configuredModel = nextSession.model_id ?? story.recommended_model_id
+    if (body.provider_id !== story.recommended_provider_id || (body.model_id && body.model_id !== configuredModel)) {
+      return json({ code: 'validation_error', detail: 'Используйте настроенные провайдер и модель.', retryable: false }, 422)
     }
-    const result = { ...nextSession, story, provider_id: story.recommended_provider_id, model_id: story.recommended_model_id }
+    const result = { ...nextSession, story, provider_id: story.recommended_provider_id, model_id: configuredModel }
     sessions.set(result.id, result)
     return json(result, 201)
   }

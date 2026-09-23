@@ -31,7 +31,6 @@ export function NovelLibraryPage() {
     try {
       const session = await api.startSession(story.id, {
         provider_id: story.recommended_provider_id,
-        model_id: story.recommended_model_id,
       })
       navigate(routes.storyPlayer(session.id))
     } catch {

@@ -10,7 +10,7 @@ afterEach(() => {
   apiServer.reset()
 })
 
-test('показывает встроенную историю и запускает прохождение', async () => {
+test('запускает историю с моделью, настроенной на сервере, даже если рекомендация истории другая', async () => {
   apiServer.listStories([{
     id: 'story-1',
     slug: 'akane-neon-echo',
@@ -20,7 +20,7 @@ test('показывает встроенную историю и запуска
     recommended_provider_id: 'ollama',
     recommended_model_id: 'qwen3:14b-q4_K_M',
   }])
-  apiServer.startSession({ id: 'session-1', state_version: 1 })
+  apiServer.startSession({ id: 'session-1', state_version: 1, model_id: 'gemma4-local:32k' })
 
   render(<TestRouter initialEntries={['/']} />)
 
@@ -28,7 +28,6 @@ test('показывает встроенную историю и запуска
   await userEvent.click(screen.getByRole('button', { name: 'Начать историю' }))
   expect(apiServer.lastStartSessionRequest()).toEqual({
     provider_id: 'ollama',
-    model_id: 'qwen3:14b-q4_K_M',
   })
   expect(await screen.findByTestId('story-player-route')).toHaveAttribute('data-session-id', 'session-1')
 })
