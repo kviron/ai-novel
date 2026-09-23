@@ -25,7 +25,7 @@ function deferred<T>() {
 }
 function json(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }) }
 const error = (code: string, status: number) => json({ code, detail: 'Не удалось продолжить. Повторите попытку.', retryable: true }, status)
-beforeEach(() => { apiServer.session(session); apiServer.providersAvailable(); apiServer.turn(session.id, turn) })
+beforeEach(() => { apiServer.session(session); apiServer.providersAvailable(true, ['gemma4-local:32k']); apiServer.turn(session.id, turn) })
 afterEach(() => { cleanup(); apiServer.reset(); vi.restoreAllMocks() })
 
 test('восстанавливает подтверждённый ход, версию, модель и пропорции спрайта', async () => {
@@ -46,7 +46,7 @@ test('блокирует действия offline и после проверки
   render(<StoryPlayerPage sessionId="session-1" />)
   expect(await screen.findByText('Нейросеть недоступна')).toBeInTheDocument()
   expect(screen.getByRole('textbox', { name: 'Ваше действие' })).toBeDisabled()
-  apiServer.providersAvailable()
+  apiServer.providersAvailable(true, ['gemma4-local:32k'])
   await userEvent.click(screen.getByRole('button', { name: 'Повторить проверку' }))
   await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled())
 })
@@ -70,7 +70,7 @@ test('медленная проверка блокирует повторные 
   fireEvent.click(retry); fireEvent.click(retry)
   expect(screen.getByRole('button', { name: 'Проверяем…' })).toBeDisabled()
   expect(screen.getByRole('textbox')).toBeDisabled()
-  await act(async () => pending.resolve(json([{ provider_id: 'ollama', available: true, detail: 'Готово', models: [] }])))
+  await act(async () => pending.resolve(json([{ provider_id: 'ollama', available: true, detail: 'Готово', models: ['gemma4-local:32k'] }])))
   expect(screen.getByRole('textbox')).toBeEnabled()
 })
 
@@ -120,6 +120,38 @@ test('provider_unavailable сохраняет действие до успешн
   expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled()
   await userEvent.click(screen.getByRole('button', { name: 'Повторить проверку' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Отправить' })).toBeEnabled())
+})
+
+test.each([{ models: [] }, { models: ['other-model:latest'] }])('отсутствующая модель сессии блокирует управление: $models', async ({ models }) => {
+  apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Подключено', models }])
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByText('Нейросеть недоступна')).toBeInTheDocument()
+  expect(screen.getByRole('textbox')).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Спросить о веере' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Повторить проверку' })).toBeEnabled()
+})
+
+test('model_unavailable блокирует действие до появления нужной модели и сохраняет request ID', async () => {
+  apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Готово', models: ['gemma4-local:32k'] }])
+  render(<StoryPlayerPage sessionId="session-1" />)
+  await userEvent.type(await screen.findByRole('textbox'), 'Продолжить разговор')
+  vi.mocked(fetch).mockResolvedValueOnce(error('model_unavailable', 503))
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  await screen.findByText('Нейросеть недоступна')
+  const first = JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string)
+  expect(screen.getByRole('textbox')).toHaveValue('Продолжить разговор')
+  expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled()
+  apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Подключено', models: ['other-model:latest'] }])
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить проверку' }))
+  await screen.findByText('Нейросеть недоступна')
+  expect(screen.getByRole('textbox')).toBeDisabled()
+  apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Готово', models: ['gemma4-local:32k'] }])
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить проверку' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Отправить' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  const second = JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string)
+  expect(second).toEqual(first)
+  expect(screen.getByRole('img')).toHaveAttribute('data-expression', 'fan')
 })
 
 test('409 перезагружает сессию до новой попытки с новой версией и ID', async () => {
@@ -200,7 +232,7 @@ test('медленный initial health не открывает управлен
   apiServer.providersAvailable(false)
   view.rerender(<StoryPlayerPage sessionId="session-2" />)
   await screen.findByText('Нейросеть недоступна')
-  await act(async () => health.resolve(json([{ provider_id: 'ollama', available: true, detail: 'Готово', models: [] }])))
+  await act(async () => health.resolve(json([{ provider_id: 'ollama', available: true, detail: 'Готово', models: ['gemma4-local:32k'] }])))
   expect(screen.getByRole('textbox')).toBeDisabled()
   expect(screen.getByText('Нейросеть недоступна')).toBeInTheDocument()
 })

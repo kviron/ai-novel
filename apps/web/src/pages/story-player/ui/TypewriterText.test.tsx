@@ -57,3 +57,27 @@ test('естественное завершение останавливает �
   expect(oldDone).not.toHaveBeenCalled()
   expect(vi.getTimerCount()).toBe(0)
 })
+
+test.each([false, true])('завершение reduced motion сохраняется после отключения настройки (initial=%s)', (initiallyReduced) => {
+  vi.useFakeTimers()
+  let notify = () => {}
+  const preference = {
+    matches: initiallyReduced,
+    addEventListener: vi.fn((_event: string, listener: () => void) => { notify = listener }),
+    removeEventListener: vi.fn(),
+  }
+  vi.spyOn(window, 'matchMedia').mockReturnValue(preference as unknown as MediaQueryList)
+  const done = vi.fn()
+  render(<TypewriterText text="Полный текст" charactersPerSecond={10} onComplete={done} />)
+  if (!initiallyReduced) {
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByText('По')).toBeInTheDocument()
+    act(() => { preference.matches = true; notify() })
+  }
+  expect(screen.getByText('Полный текст')).not.toHaveClass('sr-only')
+  act(() => { preference.matches = false; notify() })
+  expect(screen.getByText('Полный текст')).not.toHaveClass('sr-only')
+  expect(screen.queryByRole('button', { name: 'Показать полностью' })).not.toBeInTheDocument()
+  expect(vi.getTimerCount()).toBe(0)
+  expect(done).toHaveBeenCalledTimes(1)
+})

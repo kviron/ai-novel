@@ -25,6 +25,7 @@ function AnimatedText({ text, charactersPerSecond = 35, onComplete }: Typewriter
 
   useEffect(() => {
     if (finished) {
+      setLength(text.length)
       if (!complete.current) { complete.current = true; callback.current?.() }
       return
     }

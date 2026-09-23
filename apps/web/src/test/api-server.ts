@@ -110,8 +110,8 @@ export const apiServer = {
     providerQueue = [...value]
     lastProvider = null
   },
-  providersAvailable(value = true) {
-    providerQueue = [{ provider_id: 'ollama', available: value, detail: value ? 'Готово' : 'Недоступно', models: [] }]
+  providersAvailable(value = true, models = ['qwen3:14b-q4_K_M']) {
+    providerQueue = [{ provider_id: 'ollama', available: value, detail: value ? 'Готово' : 'Недоступно', models: value ? [...models] : [] }]
     lastProvider = null
   },
   turn(sessionId: string, value: unknown) {

@@ -36,7 +36,7 @@ export function useStoryPlayer(sessionId: string) {
         setState((previous) => ({ ...previous, session, message: 'Проверяем нейросеть…' }))
         const providers = await storySessionApi.providers(controller.signal)
         if (controller.signal.aborted) return
-        const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available)
+        const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available && provider.models.includes(session.model_id))
         setState({ ...initial, session, phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
       } catch (cause) {
         if (!controller.signal.aborted && !isAbort(cause)) {
@@ -60,7 +60,7 @@ export function useStoryPlayer(sessionId: string) {
       if (controller.signal.aborted) return
       const providers = await storySessionApi.providers(controller.signal)
       if (controller.signal.aborted) return
-      const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available)
+      const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available && provider.models.includes(session.model_id))
       setState({ session, checking: false, reloadRequired: false, error: null, phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
     } catch (cause) {
       if (!controller.signal.aborted && !isAbort(cause)) setState((previous) => ({ ...previous, error: errorText(cause), message: 'Проверка не завершена. Повторите попытку.' }))
@@ -99,7 +99,7 @@ export function useStoryPlayer(sessionId: string) {
           if (!controller.signal.aborted) setState((previous) => ({ ...previous, phase: 'error', error: isAbort(reloadError) ? null : errorText(reloadError), message: 'Перед следующим ходом нужно обновить прохождение.' }))
         }
       } else {
-        const offline = cause instanceof ApiRequestError && cause.code === 'provider_unavailable'
+        const offline = cause instanceof ApiRequestError && (cause.code === 'provider_unavailable' || cause.code === 'model_unavailable')
         setState((previous) => ({ ...previous, phase: offline ? 'provider_unavailable' : 'error', error: errorText(cause), message: offline ? 'Нейросеть недоступна' : 'Последний подтверждённый ход сохранён.' }))
       }
     } finally {
