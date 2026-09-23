@@ -5,6 +5,7 @@ dist/
 __pycache__/
 .pytest_cache/
 .runlogs/
+output/playwright/
 .worktrees/
 *.py[cod]
 *.db

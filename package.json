@@ -7,6 +7,10 @@
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "uv run --directory apps/api uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
     "test": "npm --prefix apps/web test && uv run --directory apps/api pytest -q",
-    "build": "npm --prefix apps/web run build"
+    "build": "npm --prefix apps/web run build",
+    "lint": "npm --prefix apps/web run lint:fsd && uv run --directory apps/api ruff check app tests",
+    "typecheck": "npm --prefix apps/web run typecheck",
+    "test:e2e": "npm --prefix apps/web run test:e2e",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   }
 }
