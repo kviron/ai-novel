@@ -6,6 +6,7 @@ from app.db.models import Character, Story, StorySession, Turn
 from app.modules.stories.schemas import (
     CharacterDetail,
     SessionDetail,
+    SessionSummary,
     StartSessionRequest,
     StoryDetail,
     StorySummary,
@@ -53,6 +54,7 @@ def start_story_session(
         current_scene=story.current_scene,
         provider_id=request.provider_id,
         model_id=model_id,
+        kind=request.kind,
     )
     session.add(story_session)
     session.commit()
@@ -65,6 +67,20 @@ def get_session_detail(session: Session, session_id: str) -> SessionDetail:
     if story_session is None:
         raise SessionNotFoundError
     return _session_detail(session, story_session, _require_story(session, story_session.story_id))
+
+
+def list_session_summaries(session: Session, kind: str) -> list[SessionSummary]:
+    return [
+        SessionSummary(
+            id=story_session.id,
+            story=_story_summary(story),
+            state_version=story_session.state_version,
+            current_scene=story_session.current_scene,
+            created_at=story_session.created_at,
+            updated_at=story_session.updated_at,
+        )
+        for story_session, story in repository.list_story_sessions(session, kind)
+    ]
 
 
 def _require_story(session: Session, story_id: str) -> Story:
@@ -80,6 +96,8 @@ def _story_summary(story: Story) -> StorySummary:
         slug=story.slug,
         title=story.title,
         premise=story.premise,
+        description=story.description,
+        cover_image_url=story.cover_image_url,
         story_mode=story.story_mode,
         recommended_provider_id=story.recommended_provider_id,
         recommended_model_id=story.recommended_model_id,

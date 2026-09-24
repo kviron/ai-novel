@@ -8,6 +8,7 @@ class StartSessionRequest(BaseModel):
 
     provider_id: str = Field(default="ollama", min_length=1, max_length=40)
     model_id: str | None = Field(default=None, max_length=160)
+    kind: Literal["player", "author"] = "player"
 
 
 class StorySummary(BaseModel):
@@ -15,6 +16,8 @@ class StorySummary(BaseModel):
     slug: str
     title: str
     premise: str
+    description: str
+    cover_image_url: str | None
     story_mode: Literal["hybrid", "free"]
     recommended_provider_id: str
     recommended_model_id: str
@@ -62,3 +65,12 @@ class SessionDetail(BaseModel):
     model_id: str
     latest_turn: TurnDetail | None
     visual_state: VisualState
+
+
+class SessionSummary(BaseModel):
+    id: str
+    story: StorySummary
+    state_version: int
+    current_scene: str
+    created_at: str
+    updated_at: str

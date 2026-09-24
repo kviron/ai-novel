@@ -52,6 +52,8 @@ def test_replaying_migrated_legacy_request_returns_its_original_turn(tmp_path):
 def test_seeded_akane_story_can_start_and_restore(client):
     akane = akane_story(client)
     assert akane["recommended_model_id"] == "qwen3:14b-q4_K_M"
+    assert "Аканэ" in akane["description"]
+    assert akane["cover_image_url"] == "/covers/akane-neon-echo.webp"
 
     created = client.post(
         f'/api/stories/{akane["id"]}/sessions',
@@ -66,6 +68,36 @@ def test_seeded_akane_story_can_start_and_restore(client):
     restored = client.get(f'/api/sessions/{game["id"]}')
     assert restored.status_code == 200
     assert restored.json()["id"] == game["id"]
+
+
+def test_session_library_lists_only_requested_kind_with_lightweight_data(client):
+    akane = akane_story(client)
+    first = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    author = client.post(f'/api/stories/{akane["id"]}/sessions', json={"kind": "author"}).json()
+    second = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+
+    player_saves = client.get("/api/sessions?kind=player")
+    author_saves = client.get("/api/sessions?kind=author")
+
+    assert player_saves.status_code == 200
+    assert [save["id"] for save in player_saves.json()] == [second["id"], first["id"]]
+    assert [save["id"] for save in author_saves.json()] == [author["id"]]
+    save = player_saves.json()[0]
+    assert save["story"]["id"] == akane["id"]
+    assert save["current_scene"] == "Ночной перекрёсток"
+    assert save["state_version"] == 1
+    assert save["created_at"]
+    assert save["updated_at"]
+    assert "latest_turn" not in save
+    assert "raw_response" not in str(save)
+
+    with Session(client.app.state.engine) as session:
+        earlier = session.get(StorySession, first["id"])
+        earlier.updated_at = "2099-01-01T00:00:00+00:00"
+        session.commit()
+
+    refreshed = client.get("/api/sessions?kind=player")
+    assert [save["id"] for save in refreshed.json()] == [first["id"], second["id"]]
 
 
 def test_seed_is_idempotent_across_lifespan_startups(client):

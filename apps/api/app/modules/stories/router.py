@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
@@ -6,7 +6,7 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
-from app.modules.stories.schemas import SessionDetail, StartSessionRequest, StoryDetail, StorySummary
+from app.modules.stories.schemas import SessionDetail, SessionSummary, StartSessionRequest, StoryDetail, StorySummary
 
 from .service import (
     SessionNotFoundError,
@@ -14,6 +14,7 @@ from .service import (
     UnsupportedModelError,
     get_session_detail,
     get_story,
+    list_session_summaries,
     list_stories,
     start_story_session,
 )
@@ -57,6 +58,11 @@ def create_story_session(
             "validation_error",
             "Выбранные провайдер или модель не поддерживаются.",
         ) from error
+
+
+@router.get("/sessions", response_model=list[SessionSummary])
+def read_sessions(session: SessionDep, kind: Literal["player", "author"] = "player") -> list[SessionSummary]:
+    return list_session_summaries(session, kind)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail, responses={404: {"model": ErrorResponse}})
