@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('игра сохраняется под настройками, а выбор способа сворачивания переживает перезагрузку', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать историю' }).click()
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   const sessionUrl = page.url()
   const sidebar = page.locator('[data-slot="sidebar"][data-side="left"]')
@@ -39,7 +39,7 @@ test('игра сохраняется под настройками, а выбо
 test('на узком экране навигация открывается поверх новеллы и закрывается после перехода', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать историю' }).click()
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await page.getByRole('button', { name: 'Открыть навигацию' }).click()
   await expect(page.locator('[data-mobile="true"]')).toBeVisible()
@@ -57,7 +57,7 @@ test('на узком экране навигация открывается п�
 
 test('настройки поверх тестовой сцены не сбрасывают инспектор автора', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать историю' }).click()
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   await expect(page).toHaveURL(/\/studio\/[^/]+$/)

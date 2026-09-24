@@ -2,13 +2,22 @@ import { expect, test } from '@playwright/test'
 
 test('игрок проходит один ход и восстанавливает его после перезагрузки', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать историю' }).click()
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await expect(page).toHaveURL(/\/play\/[^/]+$/)
+  const sessionUrl = page.url()
   await expect(page.getByRole('heading', { name: 'Эхо неона' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Варианты (3)' }).click()
   await page.getByRole('button', { name: 'Спросить о веере' }).click()
   await expect(page.getByRole('img', { name: /Аканэ.*С веером/ })).toBeVisible()
   await page.getByRole('button', { name: 'Показать полностью' }).click()
+  await expect(page.getByText(/Я ждала этого вопроса/)).toBeVisible()
+  await page.goto('/')
+  await page.getByRole('tab', { name: /Начатые/ }).click()
+  const saveCard = page.locator(`[data-session-id="${sessionUrl.split('/').at(-1)}"]`)
+  await expect(saveCard.getByText('Сцена: Ночной перекрёсток')).toBeVisible()
+  await saveCard.getByRole('button', { name: 'Продолжить' }).click()
+  await expect(page).toHaveURL(sessionUrl)
   await expect(page.getByText(/Я ждала этого вопроса/)).toBeVisible()
 
   await page.reload()
