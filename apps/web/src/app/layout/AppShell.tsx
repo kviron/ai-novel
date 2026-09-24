@@ -29,7 +29,7 @@ export function AppShell() {
 
 function AppShellContent({ pathname, open }: { pathname: string; open: boolean }) {
   const { showIconsWhenCollapsed } = useSidebarPreference()
-  const { setOpenMobile } = useSidebar()
+  const { isMobile, openMobile, setOpenMobile } = useSidebar()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsTrigger = useRef<HTMLButtonElement>(null)
   const sessionView = isSessionPath(pathname)
@@ -67,7 +67,7 @@ function AppShellContent({ pathname, open }: { pathname: string; open: boolean }
       </SidebarContent>
     </Sidebar>
     <SidebarInset className="min-w-0">
-      <div className="app-shell-trigger"><SidebarTrigger aria-label={open ? 'Свернуть навигацию' : 'Открыть навигацию'} /></div>
+      <div className="app-shell-trigger"><SidebarTrigger aria-label={(isMobile ? openMobile : open) ? 'Свернуть навигацию' : 'Открыть навигацию'} /></div>
       <Outlet />
     </SidebarInset>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
