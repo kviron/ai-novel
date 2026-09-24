@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import Settings
-from app.db.models import Character, StorySession, Turn
+from app.db.models import Character, CharacterRevision, StoryCharacter, StorySession, Turn
 from app.main import create_app
 from app.modules.providers.service import ProviderRegistry
 
@@ -84,9 +84,26 @@ def test_seeded_story_contains_distinct_female_and_male_profiles(client):
     assert "серебрист" in mark["appearance"].lower()
 
 
+def test_fresh_seed_creates_canonical_character_revisions_and_story_links(client):
+    story = akane_story(client)
+    with Session(client.app.state.engine) as session:
+        for character_id in ("akane", "mark"):
+            character = session.get(Character, character_id)
+            link = session.get(StoryCharacter, (story["id"], character_id))
+            revision = session.get(CharacterRevision, character.current_revision_id)
+            assert revision is not None
+            assert revision.character_id == character_id
+            assert revision.revision_number == 1
+            assert link.revision_id == revision.id
+
+
 def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
     akane = akane_story(client)
     with Session(client.app.state.engine) as session:
+        character = session.get(Character, "mark")
+        session.delete(session.get(StoryCharacter, (akane["id"], "mark")))
+        session.delete(session.get(CharacterRevision, character.current_revision_id))
+        session.flush()
         session.delete(session.get(Character, "mark"))
         session.commit()
 

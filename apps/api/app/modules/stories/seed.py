@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sqlmodel import Session
 
-from app.db.models import Character, Story
+from app.db.models import Character, CharacterRevision, Story, StoryCharacter
 
 from .content import AKANE_EMOTIONS, AKANE_SLUG
 from .repository import get_story_by_slug
@@ -37,15 +37,39 @@ def seed_akane_story(session: Session) -> None:
 
     assets = Path(__file__).resolve().parents[5] / "assets" / "characters"
     for character_id in ("akane", "mark"):
-        if session.get(Character, character_id) is not None:
-            continue
-        profile = json.loads((assets / character_id / "character-profile.json").read_text(encoding="utf-8"))
-        session.add(Character(
-            id=profile["id"],
-            story_id=story.id,
-            name=profile["name"],
-            gender=profile["gender"],
-            age=profile["age"],
-            personality=profile["personality"],
-            appearance=json.dumps(profile["appearance"], ensure_ascii=False),
-        ))
+        character = session.get(Character, character_id)
+        if character is None:
+            profile = json.loads((assets / character_id / "character-profile.json").read_text(encoding="utf-8"))
+            character = Character(
+                id=profile["id"],
+                story_id=story.id,
+                name=profile["name"],
+                gender=profile["gender"],
+                age=profile["age"],
+                personality=profile["personality"],
+                appearance=json.dumps(profile["appearance"], ensure_ascii=False),
+                source_type="builtin",
+            )
+            session.add(character)
+            session.flush()
+
+        # Seed only missing canonical records; a restart must never move an author's pin.
+        if character.current_revision_id is None:
+            revision = CharacterRevision(
+                character_id=character.id,
+                revision_number=1,
+                name=character.name,
+                gender=character.gender,
+                age=character.age,
+                personality=character.personality,
+                appearance=character.appearance,
+            )
+            session.add(revision)
+            session.flush()
+            character.current_revision_id = revision.id
+        if session.get(StoryCharacter, (story.id, character.id)) is None:
+            session.add(StoryCharacter(
+                story_id=story.id,
+                character_id=character.id,
+                revision_id=character.current_revision_id,
+            ))
