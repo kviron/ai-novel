@@ -2,6 +2,7 @@ import type {
   ApiError,
   CreateTurnRequest,
   ProviderStatus,
+  SessionSummary,
   StartSessionRequest,
   StorySession,
   StoryDetail,
@@ -88,6 +89,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   return {
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })
+    },
+    listSessions(kind: 'player' | 'author' = 'player', signal?: AbortSignal) {
+      return request<SessionSummary[]>(`/api/sessions?kind=${kind}`, { baseUrl, signal })
     },
     getStory(storyId: string, signal?: AbortSignal) {
       return request<StoryDetail>(`/api/stories/${encodeURIComponent(storyId)}`, { baseUrl, signal })

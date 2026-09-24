@@ -5,6 +5,7 @@ export type {
   CreateTurnRequest,
   ProviderStatus,
   SessionTurn,
+  SessionSummary,
   StartSessionRequest,
   StorySession,
   StoryDetail,

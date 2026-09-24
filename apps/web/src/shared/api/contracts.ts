@@ -3,6 +3,8 @@ export type StorySummary = {
   slug: string
   title: string
   premise: string
+  description: string
+  cover_image_url: string | null
   story_mode: 'hybrid' | 'free'
   recommended_provider_id: string
   recommended_model_id: string
@@ -71,6 +73,15 @@ export type StorySession = {
   visual_state: { emotion: string; pose: string; outfit: string }
 }
 
+export type SessionSummary = {
+  id: string
+  story: StorySummary
+  state_version: number
+  current_scene: string
+  created_at: string
+  updated_at: string
+}
+
 export type ProviderStatus = {
   provider_id: string
   available: boolean
@@ -87,6 +98,7 @@ export type ApiError = {
 export type StartSessionRequest = {
   provider_id: string
   model_id?: string
+  kind?: 'player' | 'author'
 }
 
 export type CreateTurnRequest = {

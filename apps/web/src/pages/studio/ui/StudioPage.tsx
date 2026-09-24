@@ -31,7 +31,7 @@ function StudioEntry() {
     setPending(true)
     setError(null)
     try {
-      const session = await api.startSession(story.id, { provider_id: story.recommended_provider_id })
+      const session = await api.startSession(story.id, { provider_id: story.recommended_provider_id, kind: 'author' })
       navigate(routes.studioSession(session.id))
     } catch {
       setError('Не удалось создать тестовую сессию. Проверьте сервер и повторите попытку.')

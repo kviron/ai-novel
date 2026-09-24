@@ -7,7 +7,7 @@ import { apiServer } from '@/test/api-server'
 import { TestRouter } from '@/test/TestRouter'
 
 const story: StorySession['story'] = {
-  id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', story_mode: 'hybrid',
+  id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', description: 'Дождливый город', cover_image_url: null, story_mode: 'hybrid',
   recommended_provider_id: 'ollama', recommended_model_id: 'gemma4-local:32k',
 }
 const session: StorySession = {
@@ -35,7 +35,7 @@ test('создаёт отдельную тестовую сессию с нас�
   render(<TestRouter initialEntries={['/studio']} />)
   await userEvent.click(await screen.findByRole('button', { name: 'Новая тестовая сессия' }))
   expect(await screen.findByText('Крыша')).toBeInTheDocument()
-  expect(apiServer.lastStartSessionRequest()).toEqual({ provider_id: 'ollama' })
+  expect(apiServer.lastStartSessionRequest()).toEqual({ provider_id: 'ollama', kind: 'author' })
   expect(screen.getByRole('link', { name: 'Открыть как игрок' })).toHaveAttribute('href', '/play/session-1')
 })
 

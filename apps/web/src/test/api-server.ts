@@ -5,6 +5,8 @@ type Story = {
   slug: string
   title: string
   premise: string
+  description?: string
+  cover_image_url?: string | null
   story_mode: 'hybrid' | 'free'
   recommended_provider_id: string
   recommended_model_id: string
@@ -23,17 +25,20 @@ type Session = {
 }
 
 type Provider = { provider_id: string; available: boolean; detail: string; models: string[] }
-type StartSessionRequest = { provider_id: string; model_id?: string }
+type StartSessionRequest = { provider_id: string; model_id?: string; kind?: 'player' | 'author' }
+type Save = { id: string; story: Story; state_version: number; current_scene: string; created_at: string; updated_at: string; kind: 'player' | 'author' }
 
 let stories: Story[] = []
 let storyDetails = new Map<string, Story & { current_scene: string; characters: unknown[] }>()
 let failNextStoryList = false
+let failNextSaveList = false
 let nextSession: Session = { id: 'session-1', state_version: 1 }
 let sessions = new Map<string, Session>()
 let providerQueue: Provider[] = []
 let lastProvider: Provider | null = null
 let turns = new Map<string, unknown>()
 let lastStartRequest: StartSessionRequest | null = null
+let saves: Save[] = []
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -56,7 +61,7 @@ function isStartSessionRequest(value: unknown): value is StartSessionRequest {
 async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input)
   const method = input instanceof Request ? input.method : init?.method ?? 'GET'
-  const { pathname } = new URL(url, 'http://api.test')
+  const { pathname, searchParams } = new URL(url, 'http://api.test')
 
   if (method === 'GET' && pathname === '/api/stories') {
     if (failNextStoryList) {
@@ -64,6 +69,13 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       return json({ code: 'temporarily_unavailable', detail: 'Недоступно', retryable: true }, 503)
     }
     return json(stories)
+  }
+  if (method === 'GET' && pathname === '/api/sessions') {
+    if (failNextSaveList) {
+      failNextSaveList = false
+      return json({ code: 'temporarily_unavailable', detail: 'Недоступно', retryable: true }, 503)
+    }
+    return json(saves.filter((save) => save.kind === (searchParams.get('kind') ?? 'player')))
   }
   const storyMatch = pathname.match(/^\/api\/stories\/([^/]+)$/)
   if (method === 'GET' && storyMatch) {
@@ -91,6 +103,7 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     }
     const result = { ...nextSession, story, provider_id: story.recommended_provider_id, model_id: configuredModel }
     sessions.set(result.id, result)
+    saves = [{ id: result.id, story, state_version: result.state_version, current_scene: result.current_scene ?? 'Ночной перекрёсток', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), kind: body.kind ?? 'player' }, ...saves]
     return json(result, 201)
   }
 
@@ -118,12 +131,14 @@ export const apiServer = {
     storyDetails.set(id, value)
   },
   failStoryListOnce() { failNextStoryList = true },
+  failSaveListOnce() { failNextSaveList = true },
   startSession(value: Session) {
     nextSession = value
   },
   session(value: Session) {
     sessions.set(value.id, value)
   },
+  savedSessions(value: Save[]) { saves = value },
   providerSequence(value: Provider[]) {
     providerQueue = [...value]
     lastProvider = null
@@ -142,12 +157,14 @@ export const apiServer = {
     stories = []
     storyDetails = new Map()
     failNextStoryList = false
+    failNextSaveList = false
     nextSession = { id: 'session-1', state_version: 1 }
     sessions = new Map()
     providerQueue = []
     lastProvider = null
     turns = new Map()
     lastStartRequest = null
+    saves = []
     vi.mocked(fetch).mockReset()
     vi.mocked(fetch).mockImplementation(handler)
   },

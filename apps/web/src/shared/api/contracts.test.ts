@@ -9,6 +9,8 @@ const restoredSession = {
     slug: 'akane-neon-echo',
     title: 'Эхо неона',
     premise: 'Курьер находит чужое воспоминание в дождливом мегаполисе.',
+    description: 'Курьер находит чужое воспоминание в дождливом мегаполисе.',
+    cover_image_url: null,
     story_mode: 'hybrid',
     recommended_provider_id: 'ollama',
     recommended_model_id: 'qwen3:14b-q4_K_M',
