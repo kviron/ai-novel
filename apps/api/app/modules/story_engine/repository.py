@@ -54,7 +54,8 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
             "age": revision.age,
             "personality": revision.personality,
             "appearance": revision.appearance,
-        } for character, revision in characters],
+            "role": link.role,
+        } for character, revision, link in characters],
         recent_turns=[_turn_result(session, turn).model_dump(mode="json") for turn in reversed(turns)],
     )
 

@@ -17,14 +17,14 @@ export type Character = {
   age: number
   personality: string
   appearance: string
+  role?: string
   visual_profile_version: number
 }
 
-export type CharacterRevision = Omit<Character, 'visual_profile_version'> & {
+export type CharacterRevision = Omit<Character, 'visual_profile_version' | 'role'> & {
   revision_number: number
   biography: string
   speech: string
-  role: string
   created_at: string
 }
 
@@ -39,12 +39,12 @@ export type CharacterHistory = {
   current_revision_id: string
   source_type: string
   revisions: CharacterRevision[]
-  linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number }[]
+  linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number; role: string }[]
 }
 
-export type CharacterWrite = Pick<CharacterRevision, 'name' | 'gender' | 'age' | 'personality' | 'appearance' | 'biography' | 'speech' | 'role'>
+export type CharacterWrite = Pick<CharacterRevision, 'name' | 'gender' | 'age' | 'personality' | 'appearance' | 'biography' | 'speech'>
 
-export type CharacterTextField = 'personality' | 'appearance' | 'biography' | 'speech' | 'role'
+export type CharacterTextField = 'personality' | 'appearance' | 'biography' | 'speech'
 
 export type StoryCharacterLink = { story_id: string; character_id: string; revision_id: string; role: string }
 

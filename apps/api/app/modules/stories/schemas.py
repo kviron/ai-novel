@@ -30,6 +30,7 @@ class CharacterDetail(BaseModel):
     age: int
     personality: str
     appearance: str
+    role: str
     visual_profile_version: int
 
 

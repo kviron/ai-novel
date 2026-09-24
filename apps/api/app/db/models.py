@@ -80,6 +80,7 @@ class SessionCharacter(SQLModel, table=True):
     session_id: str = Field(foreign_key="story_sessions.id", primary_key=True)
     character_id: str = Field(foreign_key="characters.id", primary_key=True)
     revision_id: str = Field(foreign_key="character_revisions.id")
+    role: str = "cast"
 
 
 class StorySession(SQLModel, table=True):

@@ -13,7 +13,6 @@ def test_generate_field_uses_existing_draft_as_context_without_saving(client, fa
             "appearance": "Тёмные волосы",
             "biography": "",
             "speech": "",
-            "role": "Союзник",
         },
     }
 
@@ -41,5 +40,5 @@ def test_generate_field_reports_provider_failure(client, fake_provider):
 
 def test_generate_field_rejects_blank_model_output(client, fake_provider):
     fake_provider.text_responses = ["   "]
-    response = client.post("/api/characters/generate-field", json={"field": "role", "draft": {}})
+    response = client.post("/api/characters/generate-field", json={"field": "biography", "draft": {}})
     assert response.status_code == 503

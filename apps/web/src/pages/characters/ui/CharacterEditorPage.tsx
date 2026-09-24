@@ -37,7 +37,6 @@ const emptyProfile: CharacterWrite = {
   appearance: '',
   biography: '',
   speech: '',
-  role: '',
 }
 
 export function CharacterEditorPage() {
@@ -69,7 +68,6 @@ export function CharacterEditorPage() {
           appearance,
           biography,
           speech,
-          role,
         } = revision
         setProfile({
           name,
@@ -79,7 +77,6 @@ export function CharacterEditorPage() {
           appearance,
           biography,
           speech,
-          role,
         })
       })
       .catch(() => {
@@ -233,7 +230,7 @@ export function CharacterEditorPage() {
             <Card>
               <CardHeader>
                 <CardTitle role="heading" aria-level={2}>
-                  Характер и роль
+                  Характер и речь
                 </CardTitle>
                 <CardDescription>
                   Мотивы и поведение помогают агенту вести героя
@@ -252,16 +249,6 @@ export function CharacterEditorPage() {
                     busy={generating !== null || saving}
                     onChange={(value) => change('personality', value)}
                     onGenerate={() => void generate('personality')}
-                  />
-                  <CharacterTextField
-                    field="role"
-                    label="Роль"
-                    hint="Место в истории и отношения с другими героями."
-                    value={profile.role}
-                    generating={generating === 'role'}
-                    busy={generating !== null || saving}
-                    onChange={(value) => change('role', value)}
-                    onGenerate={() => void generate('role')}
                   />
                   <CharacterTextField
                     field="speech"

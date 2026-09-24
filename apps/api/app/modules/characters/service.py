@@ -64,6 +64,7 @@ def get_character(session: Session, character_id: str) -> CharacterHistory:
                 story_slug=story.slug,
                 revision_id=link.revision_id,
                 revision_number=revision.revision_number,
+                role=link.role,
             )
             for story, link, revision in repository.list_story_links(session, character_id)
         ],
@@ -118,7 +119,9 @@ def attach_character(session: Session, story_id: str, payload: AttachCharacterRe
     return StoryCharacterProfile.model_validate(link, from_attributes=True)
 
 
-def pin_revision(session: Session, story_id: str, character_id: str, revision_id: str) -> StoryCharacterProfile:
+def pin_revision(
+    session: Session, story_id: str, character_id: str, revision_id: str, role: str | None = None
+) -> StoryCharacterProfile:
     link = repository.get_story_link(session, story_id, character_id)
     if link is None:
         raise CharacterNotFoundError
@@ -126,5 +129,7 @@ def pin_revision(session: Session, story_id: str, character_id: str, revision_id
     if revision is None or revision.character_id != character_id:
         raise InvalidRevisionError
     link.revision_id = revision.id
+    if role is not None:
+        link.role = role
     session.commit()
     return StoryCharacterProfile.model_validate(link, from_attributes=True)

@@ -18,23 +18,45 @@ test('attaches a selected character revision to a story', async () => {
   render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
 
   await userEvent.click(await screen.findByRole('button', { name: /Марк.*Не добавлен/ }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Роль в новелле' }), 'Союзник героини')
   await userEvent.click(screen.getByRole('button', { name: 'Добавить в новеллу' }))
 
   expect(await screen.findByText('Сейчас закреплена ревизия v2.')).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters' && options?.method === 'POST')).toBe(true)
+  const attach = vi.mocked(fetch).mock.calls.find(([url, options]) => url === '/api/stories/story-1/characters' && options?.method === 'POST')
+  expect(JSON.parse(String(attach?.[1]?.body)).role).toBe('Союзник героини')
 })
 
 test('repins an attached character without starting a session', async () => {
   apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [{ ...revision, id: 'mark', visual_profile_version: 1 }] })
   apiServer.listCharacters([character])
-  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision, { ...revision, id: 'mark-v1', revision_number: 1 }], linked_stories: [{ story_id: 'story-1', story_title: story.title, story_slug: story.slug, revision_id: 'mark-v1', revision_number: 1 }] })
+  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision, { ...revision, id: 'mark-v1', revision_number: 1 }], linked_stories: [{ story_id: 'story-1', story_title: story.title, story_slug: story.slug, revision_id: 'mark-v1', revision_number: 1, role: 'Союзник героини' }] })
   render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
 
   await userEvent.click(await screen.findByRole('button', { name: /Марк.*В составе/ }))
   await userEvent.selectOptions(screen.getByLabelText('Ревизия'), 'mark-v2')
-  await userEvent.click(screen.getByRole('button', { name: 'Обновить ревизию' }))
+  await userEvent.clear(screen.getByRole('textbox', { name: 'Роль в новелле' }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Роль в новелле' }), 'Соперник героини')
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить роль и ревизию' }))
 
   expect(await screen.findByText('Сейчас закреплена ревизия v2.')).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters/mark' && options?.method === 'PUT')).toBe(true)
+  const update = vi.mocked(fetch).mock.calls.find(([url, options]) => url === '/api/stories/story-1/characters/mark' && options?.method === 'PUT')
+  expect(JSON.parse(String(update?.[1]?.body)).role).toBe('Соперник героини')
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/sessions'))).toBe(false)
+})
+
+test('generates a story-specific role as an unsaved draft', async () => {
+  apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [] })
+  apiServer.listCharacters([character])
+  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision], linked_stories: [] })
+  render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
+
+  await userEvent.click(await screen.findByRole('button', { name: /Марк.*Не добавлен/ }))
+  await userEvent.click(screen.getByRole('button', { name: 'Сгенерировать роль' }))
+
+  expect(await screen.findByDisplayValue('Союзник героини и хранитель секрета города.')).toBeInTheDocument()
+  const request = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/stories/story-1/characters/generate-role')
+  expect(JSON.parse(String(request?.[1]?.body))).toEqual({ character_id: 'mark', revision_id: 'mark-v2', existing_text: '' })
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/stories/story-1/characters')).toBe(false)
 })

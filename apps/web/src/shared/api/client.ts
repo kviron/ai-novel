@@ -104,14 +104,17 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     reviseCharacter(characterId: string, body: CharacterWrite) {
       return request<CatalogCharacter>(`/api/characters/${encodeURIComponent(characterId)}/revisions`, { baseUrl, method: 'POST', body })
     },
-    generateCharacterField(field: CharacterTextField, draft: CharacterWrite) {
-      return request<{ text: string }>('/api/characters/generate-field', { baseUrl, method: 'POST', body: { field, draft } })
+      generateCharacterField(field: CharacterTextField, draft: CharacterWrite) {
+        return request<{ text: string }>('/api/characters/generate-field', { baseUrl, method: 'POST', body: { field, draft } })
+      },
+      generateStoryRole(storyId: string, characterId: string, revisionId: string, existingText: string) {
+        return request<{ text: string }>(`/api/stories/${encodeURIComponent(storyId)}/characters/generate-role`, { baseUrl, method: 'POST', body: { character_id: characterId, revision_id: revisionId, existing_text: existingText } })
+      },
+    attachCharacter(storyId: string, characterId: string, revisionId: string, role: string) {
+      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters`, { baseUrl, method: 'POST', body: { character_id: characterId, revision_id: revisionId, role } })
     },
-    attachCharacter(storyId: string, characterId: string, revisionId: string) {
-      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters`, { baseUrl, method: 'POST', body: { character_id: characterId, revision_id: revisionId, role: 'cast' } })
-    },
-    pinCharacterRevision(storyId: string, characterId: string, revisionId: string) {
-      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'PUT', body: { revision_id: revisionId } })
+    pinCharacterRevision(storyId: string, characterId: string, revisionId: string, role: string) {
+      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'PUT', body: { revision_id: revisionId, role } })
     },
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })

@@ -24,10 +24,10 @@ def get_story_by_slug(session: Session, slug: str) -> Story | None:
     return session.exec(select(Story).where(Story.slug == slug)).first()
 
 
-def list_story_characters(session: Session, story_id: str) -> list[tuple[Character, CharacterRevision]]:
+def list_story_characters(session: Session, story_id: str) -> list[tuple[Character, CharacterRevision, StoryCharacter]]:
     return list(
         session.exec(
-            select(Character, CharacterRevision)
+            select(Character, CharacterRevision, StoryCharacter)
             .join(StoryCharacter, StoryCharacter.character_id == Character.id)
             .join(CharacterRevision, CharacterRevision.id == StoryCharacter.revision_id)
             .where(StoryCharacter.story_id == story_id)
@@ -36,10 +36,12 @@ def list_story_characters(session: Session, story_id: str) -> list[tuple[Charact
     )
 
 
-def list_session_characters(session: Session, session_id: str) -> list[tuple[Character, CharacterRevision]]:
+def list_session_characters(
+    session: Session, session_id: str
+) -> list[tuple[Character, CharacterRevision, SessionCharacter]]:
     return list(
         session.exec(
-            select(Character, CharacterRevision)
+            select(Character, CharacterRevision, SessionCharacter)
             .join(SessionCharacter, SessionCharacter.character_id == Character.id)
             .join(CharacterRevision, CharacterRevision.id == SessionCharacter.revision_id)
             .where(SessionCharacter.session_id == session_id)
@@ -56,6 +58,7 @@ def pin_story_characters(session: Session, story_id: str, session_id: str) -> No
                 session_id=session_id,
                 character_id=link.character_id,
                 revision_id=link.revision_id,
+                role=link.role,
             )
         )
 

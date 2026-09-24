@@ -122,7 +122,7 @@ def _story_summary(story: Story) -> StorySummary:
     )
 
 
-def _character_detail(character: Character, revision: CharacterRevision) -> CharacterDetail:
+def _character_detail(character: Character, revision: CharacterRevision, role: str) -> CharacterDetail:
     return CharacterDetail(
         id=character.id,
         name=revision.name,
@@ -130,6 +130,7 @@ def _character_detail(character: Character, revision: CharacterRevision) -> Char
         age=revision.age,
         personality=revision.personality,
         appearance=revision.appearance,
+        role=role,
         visual_profile_version=revision.revision_number,
     )
 
@@ -139,8 +140,8 @@ def _story_detail(session: Session, story: Story) -> StoryDetail:
         **_story_summary(story).model_dump(),
         current_scene=story.current_scene,
         characters=[
-            _character_detail(character, revision)
-            for character, revision in repository.list_story_characters(session, story.id)
+            _character_detail(character, revision, link.role)
+            for character, revision, link in repository.list_story_characters(session, story.id)
         ],
     )
 
@@ -172,8 +173,8 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
         id=story_session.id,
         story=_story_summary(story),
         characters=[
-            _character_detail(character, revision)
-            for character, revision in repository.list_session_characters(session, story_session.id)
+            _character_detail(character, revision, link.role)
+            for character, revision, link in repository.list_session_characters(session, story_session.id)
         ],
         state_version=story_session.state_version,
         can_rewind=story_session.active_turn_id is not None and story_session.rewind_count < 10,

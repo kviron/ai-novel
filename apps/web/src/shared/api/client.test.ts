@@ -88,23 +88,23 @@ test('writes character profiles and pins a selected revision using dedicated end
   const fetchMock = vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
   vi.stubGlobal('fetch', fetchMock)
   const client = createApiClient()
-  const profile = { name: 'Марк', gender: 'male' as const, age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '', role: '' }
+  const profile = { name: 'Марк', gender: 'male' as const, age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '' }
 
   await client.createCharacter(profile)
   await client.reviseCharacter('mark', profile)
-  await client.attachCharacter('story-1', 'mark', 'mark-v2')
-  await client.pinCharacterRevision('story-1', 'mark', 'mark-v1')
+  await client.attachCharacter('story-1', 'mark', 'mark-v2', 'Союзник')
+  await client.pinCharacterRevision('story-1', 'mark', 'mark-v1', 'Соперник')
 
   expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/characters', expect.objectContaining({ method: 'POST', body: JSON.stringify(profile) }))
   expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/characters/mark/revisions', expect.objectContaining({ method: 'POST', body: JSON.stringify(profile) }))
-  expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/stories/story-1/characters', expect.objectContaining({ method: 'POST', body: JSON.stringify({ character_id: 'mark', revision_id: 'mark-v2', role: 'cast' }) }))
-  expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/stories/story-1/characters/mark', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ revision_id: 'mark-v1' }) }))
+  expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/stories/story-1/characters', expect.objectContaining({ method: 'POST', body: JSON.stringify({ character_id: 'mark', revision_id: 'mark-v2', role: 'Союзник' }) }))
+  expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/stories/story-1/characters/mark', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ revision_id: 'mark-v1', role: 'Соперник' }) }))
 })
 
 test('sends the unsaved character draft to field generation', async () => {
   const fetchMock = vi.fn(async () => new Response('{"text":"Описание"}', { headers: { 'Content-Type': 'application/json' } }))
   vi.stubGlobal('fetch', fetchMock)
-  const draft = { name: 'Леон', gender: 'male' as const, age: 29, personality: 'Осторожный', appearance: 'Плащ', biography: '', speech: '', role: '' }
+  const draft = { name: 'Леон', gender: 'male' as const, age: 29, personality: 'Осторожный', appearance: 'Плащ', biography: '', speech: '' }
 
   await expect(createApiClient().generateCharacterField('personality', draft)).resolves.toEqual({ text: 'Описание' })
   expect(fetchMock).toHaveBeenCalledWith('/api/characters/generate-field', expect.objectContaining({

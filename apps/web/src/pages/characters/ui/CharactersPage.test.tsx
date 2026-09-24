@@ -83,6 +83,7 @@ test('opens a full-page character editor from the catalog', async () => {
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Внешность и образ' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Сгенерировать характер' })).toBeInTheDocument()
+  expect(screen.queryByRole('textbox', { name: 'Роль' })).not.toBeInTheDocument()
   await userEvent.type(screen.getByRole('textbox', { name: 'Имя' }), 'Леон')
   await userEvent.type(screen.getByRole('spinbutton', { name: 'Возраст' }), '2')
   await userEvent.type(screen.getByRole('textbox', { name: 'Характер' }), 'Решительный')

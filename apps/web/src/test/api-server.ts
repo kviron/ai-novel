@@ -86,6 +86,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (method === 'POST' && pathname === '/api/characters/generate-field') {
     return json({ text: 'Любит дождь и исследует ночной город.' })
   }
+  if (method === 'POST' && /^\/api\/stories\/[^/]+\/characters\/generate-role$/.test(pathname)) {
+    return json({ text: 'Союзник героини и хранитель секрета города.' })
+  }
   const revisionMatch = pathname.match(/^\/api\/characters\/([^/]+)\/revisions$/)
   if (method === 'POST' && revisionMatch) {
     const characterId = decodeURIComponent(revisionMatch[1])
@@ -137,14 +140,14 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     const storyId = decodeURIComponent(castMatch[1])
     const story = storyDetails.get(storyId)
     if (!story) return json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
-    const body = await requestBody(input, init) as { character_id?: string; revision_id: string; role?: string }
+    const body = await requestBody(input, init) as { character_id?: string; revision_id: string; role: string }
     const characterId = castMatch[2] ? decodeURIComponent(castMatch[2]) : body.character_id ?? ''
-    const history = characterDetails.get(characterId) as { revisions: { id: string; revision_number: number; name: string }[]; linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number }[] } | undefined
+    const history = characterDetails.get(characterId) as { revisions: { id: string; revision_number: number; name: string }[]; linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number; role: string }[] } | undefined
     const revision = history?.revisions.find((item) => item.id === body.revision_id)
     if (!history || !revision) return json({ code: 'validation_error', detail: 'Ревизия не найдена.', retryable: false }, 422)
-    history.linked_stories = [...history.linked_stories.filter((link) => link.story_id !== storyId), { story_id: storyId, story_title: story.title, story_slug: story.slug, revision_id: revision.id, revision_number: revision.revision_number }]
+    history.linked_stories = [...history.linked_stories.filter((link) => link.story_id !== storyId), { story_id: storyId, story_title: story.title, story_slug: story.slug, revision_id: revision.id, revision_number: revision.revision_number, role: body.role }]
     story.characters = [...story.characters.filter((item) => (item as { id: string }).id !== characterId), { ...revision, id: characterId, visual_profile_version: revision.revision_number }]
-    return json({ story_id: storyId, character_id: characterId, revision_id: revision.id, role: body.role ?? 'cast' }, method === 'POST' ? 201 : 200)
+    return json({ story_id: storyId, character_id: characterId, revision_id: revision.id, role: body.role }, method === 'POST' ? 201 : 200)
   }
   if (method === 'GET' && pathname === '/api/providers') {
     lastProvider = providerQueue.shift() ?? lastProvider

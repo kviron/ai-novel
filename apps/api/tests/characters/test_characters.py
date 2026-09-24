@@ -20,7 +20,6 @@ def test_create_and_revise_do_not_move_story_pin(client):
         "appearance": "Тёмные волосы",
         "biography": "Живёт в городе",
         "speech": "Короткие фразы",
-        "role": "Союзник",
     }
     created = client.post("/api/characters", json=payload)
     assert created.status_code == 201
@@ -62,6 +61,7 @@ def test_create_and_revise_do_not_move_story_pin(client):
             "story_slug": "akane-neon-echo",
             "revision_id": character["current_revision_id"],
             "revision_number": 1,
+            "role": "cast",
         }
     ]
     with Session(client.app.state.engine) as session:

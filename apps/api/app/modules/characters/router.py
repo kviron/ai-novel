@@ -9,7 +9,7 @@ from app.db.engine import get_session
 from app.modules.providers.model_selection import NoAvailableModelError
 from app.modules.providers.router import ProviderRegistryDep
 
-from .field_generation import generate_character_field
+from .field_generation import generate_character_field, generate_story_role
 from .schemas import (
     AttachCharacterRequest,
     CharacterHistory,
@@ -17,6 +17,7 @@ from .schemas import (
     CharacterWrite,
     GenerateCharacterFieldRequest,
     GeneratedCharacterField,
+    GenerateStoryRoleRequest,
     PinRevisionRequest,
     StoryCharacterProfile,
 )
@@ -93,12 +94,29 @@ def add_story_character(story_id: str, payload: AttachCharacterRequest, session:
         raise ApiError(409, "conflict", "Персонаж уже добавлен в историю.") from error
 
 
+@router.post("/stories/{story_id}/characters/generate-role", response_model=GeneratedCharacterField)
+def generate_role(
+    story_id: str, payload: GenerateStoryRoleRequest, session: SessionDep,
+    settings: RuntimeSettingsDep, registry: ProviderRegistryDep,
+) -> GeneratedCharacterField:
+    try:
+        return generate_story_role(session, story_id, payload, registry, settings.ollama_model)
+    except StoryNotFoundError as error:
+        raise ApiError(404, "not_found", "История не найдена.") from error
+    except InvalidRevisionError as error:
+        raise ApiError(422, "validation_error", "Ревизия не принадлежит персонажу.") from error
+    except (NoAvailableModelError, ProviderUnavailableError, ProviderResponseError) as error:
+        raise ApiError(
+            503, "provider_unavailable", "Нейросеть недоступна. Проверьте Ollama и повторите.", retryable=True
+        ) from error
+
+
 @router.put("/stories/{story_id}/characters/{character_id}", response_model=StoryCharacterProfile)
 def update_story_character(
     story_id: str, character_id: str, payload: PinRevisionRequest, session: SessionDep
 ) -> StoryCharacterProfile:
     try:
-        return pin_revision(session, story_id, character_id, payload.revision_id)
+        return pin_revision(session, story_id, character_id, payload.revision_id, payload.role)
     except CharacterNotFoundError as error:
         raise ApiError(404, "not_found", "Персонаж не привязан к истории.") from error
     except InvalidRevisionError as error:
