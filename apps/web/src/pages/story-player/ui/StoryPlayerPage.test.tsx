@@ -7,7 +7,7 @@ import { apiServer } from '@/test/api-server'
 import { StoryPlayerPage } from './StoryPlayerPage'
 
 const session: StorySession = {
-  id: 'session-1', state_version: 1, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
+  id: 'session-1', state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
   story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', description: 'Дождливый город', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'gemma4-local:32k' },
   characters: [{ id: 'akane', name: 'Аканэ', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
   latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress' },
@@ -128,6 +128,22 @@ test('двойной submit отправляет один запрос и мен
   await userEvent.click(screen.getByRole('button', { name: 'Варианты (1)' }))
   expect(screen.getByRole('button', { name: 'Уточнить' })).toBeEnabled()
   expect(input).toHaveValue('')
+})
+
+test('отмена хода восстанавливает предыдущий снимок без обращения к модели', async () => {
+  apiServer.rewind(session.id, { ...session, state_version: 3, can_rewind: false })
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const undo = await screen.findByRole('button', { name: 'Отменить ход' })
+  expect(undo).toBeDisabled()
+  await userEvent.type(screen.getByRole('textbox'), 'Спросить о веере')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(undo).toBeEnabled()
+  const callsBefore = vi.mocked(fetch).mock.calls.length
+  await userEvent.click(undo)
+  await waitFor(() => expect(undo).toBeDisabled())
+  expect(screen.getByRole('img')).toHaveAttribute('data-expression', 'neutral')
+  expect(screen.getByRole('textbox')).toHaveValue('')
+  expect(vi.mocked(fetch).mock.calls.slice(callsBefore).map(([url]) => url)).toEqual(['/api/sessions/session-1/rewind'])
 })
 
 test('ошибка сервера сохраняет текст, ход и request ID при повторе того же намерения', async () => {

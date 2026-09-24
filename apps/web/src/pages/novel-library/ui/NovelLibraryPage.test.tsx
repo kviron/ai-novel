@@ -41,7 +41,7 @@ test('показывает сохранённое прохождение и пр
   }
   apiServer.listStories([story])
   apiServer.savedSessions([{ id: 'save-1', story, state_version: 4, current_scene: 'На крыше', created_at: '2026-09-24T11:00:00', updated_at: '2026-09-24T12:00:00', kind: 'player' }])
-  apiServer.session({ id: 'save-1', story, state_version: 4, current_scene: 'На крыше', characters: [], provider_id: 'ollama', model_id: 'qwen3:14b-q4_K_M', latest_turn: null, visual_state: { emotion: 'neutral', pose: 'default', outfit: 'red_dress' } })
+  apiServer.session({ id: 'save-1', story, state_version: 4, can_rewind: false, current_scene: 'На крыше', characters: [], provider_id: 'ollama', model_id: 'qwen3:14b-q4_K_M', latest_turn: null, visual_state: { emotion: 'neutral', pose: 'default', outfit: 'red_dress' } })
   render(<TestRouter initialEntries={['/']} />)
 
   expect(await screen.findByText(story.description)).toBeInTheDocument()
@@ -53,6 +53,24 @@ test('показывает сохранённое прохождение и пр
   await userEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
   expect(await screen.findByTestId('story-player-route')).toHaveAttribute('data-session-id', 'save-1')
   expect(apiServer.lastStartSessionRequest()).toBeNull()
+})
+
+test('в начатых показывает одну карточку на новеллу и последнее автосохранение', async () => {
+  const story = {
+    id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город',
+    description: 'История', cover_image_url: null, story_mode: 'hybrid' as const,
+    recommended_provider_id: 'ollama', recommended_model_id: 'qwen3:14b-q4_K_M',
+  }
+  apiServer.listStories([story])
+  apiServer.savedSessions([
+    { id: 'old', story, state_version: 2, current_scene: 'Крыша', created_at: '2026-09-23T11:00:00', updated_at: '2026-09-23T12:00:00', kind: 'player' },
+    { id: 'active', story, state_version: 4, current_scene: 'Переулок', created_at: '2026-09-24T11:00:00', updated_at: '2026-09-24T12:00:00', kind: 'player' },
+  ])
+  render(<TestRouter initialEntries={['/']} />)
+  await userEvent.click(await screen.findByRole('tab', { name: /Начатые/ }))
+  expect(screen.getByRole('tab', { name: 'Начатые (1)' })).toBeInTheDocument()
+  expect(screen.getAllByRole('button', { name: 'Продолжить' })).toHaveLength(1)
+  expect(screen.getByText('Сцена: Переулок')).toBeInTheDocument()
 })
 
 test('позволяет повторить загрузку сохранений независимо от каталога', async () => {

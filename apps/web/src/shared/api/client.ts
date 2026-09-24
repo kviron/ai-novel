@@ -93,6 +93,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     listSessions(kind: 'player' | 'author' = 'player', signal?: AbortSignal) {
       return request<SessionSummary[]>(`/api/sessions?kind=${kind}`, { baseUrl, signal })
     },
+    listAutosaves(signal?: AbortSignal) {
+      return request<SessionSummary[]>('/api/autosaves', { baseUrl, signal })
+    },
     getStory(storyId: string, signal?: AbortSignal) {
       return request<StoryDetail>(`/api/stories/${encodeURIComponent(storyId)}`, { baseUrl, signal })
     },
@@ -115,6 +118,14 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
         baseUrl,
         method: 'POST',
         body,
+        signal,
+      })
+    },
+    rewind(sessionId: string, expectedStateVersion: number, signal?: AbortSignal) {
+      return request<StorySession>(`/api/sessions/${encodeURIComponent(sessionId)}/rewind`, {
+        baseUrl,
+        method: 'POST',
+        body: { expected_state_version: expectedStateVersion },
         signal,
       })
     },

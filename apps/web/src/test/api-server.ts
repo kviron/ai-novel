@@ -15,6 +15,7 @@ type Story = {
 type Session = {
   id: string
   state_version: number
+  can_rewind?: boolean
   story?: Story
   characters?: unknown[]
   current_scene?: string
@@ -39,6 +40,7 @@ let lastProvider: Provider | null = null
 let turns = new Map<string, unknown>()
 let lastStartRequest: StartSessionRequest | null = null
 let saves: Save[] = []
+let rewinds = new Map<string, Session>()
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -77,6 +79,17 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     }
     return json(saves.filter((save) => save.kind === (searchParams.get('kind') ?? 'player')))
   }
+  if (method === 'GET' && pathname === '/api/autosaves') {
+    if (failNextSaveList) {
+      failNextSaveList = false
+      return json({ code: 'temporarily_unavailable', detail: 'Недоступно', retryable: true }, 503)
+    }
+    const latest = new Map<string, Save>()
+    for (const save of saves.filter((item) => item.kind === 'player').sort((a, b) => b.updated_at.localeCompare(a.updated_at))) {
+      if (!latest.has(save.story.id)) latest.set(save.story.id, save)
+    }
+    return json([...latest.values()])
+  }
   const storyMatch = pathname.match(/^\/api\/stories\/([^/]+)$/)
   if (method === 'GET' && storyMatch) {
     const story = storyDetails.get(decodeURIComponent(storyMatch[1]))
@@ -101,7 +114,7 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     if (body.provider_id !== story.recommended_provider_id || (body.model_id && body.model_id !== configuredModel)) {
       return json({ code: 'validation_error', detail: 'Используйте настроенные провайдер и модель.', retryable: false }, 422)
     }
-    const result = { ...nextSession, story, provider_id: story.recommended_provider_id, model_id: configuredModel }
+    const result = { can_rewind: false, ...nextSession, story, provider_id: story.recommended_provider_id, model_id: configuredModel }
     sessions.set(result.id, result)
     saves = [{ id: result.id, story, state_version: result.state_version, current_scene: result.current_scene ?? 'Ночной перекрёсток', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), kind: body.kind ?? 'player' }, ...saves]
     return json(result, 201)
@@ -117,6 +130,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
 
   const turnMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/turns$/)
   if (method === 'POST' && turnMatch) return json(turns.get(turnMatch[1]) ?? {}, 201)
+
+  const rewindMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/rewind$/)
+  if (method === 'POST' && rewindMatch) return json(rewinds.get(rewindMatch[1]) ?? {}, 200)
 
   return json({ code: 'not_found', detail: 'Запрошенный ресурс не найден.', retryable: false }, 404)
 }
@@ -150,6 +166,7 @@ export const apiServer = {
   turn(sessionId: string, value: unknown) {
     turns.set(sessionId, value)
   },
+  rewind(sessionId: string, value: Session) { rewinds.set(sessionId, value) },
   lastStartSessionRequest() {
     return lastStartRequest
   },
@@ -165,6 +182,7 @@ export const apiServer = {
     turns = new Map()
     lastStartRequest = null
     saves = []
+    rewinds = new Map()
     vi.mocked(fetch).mockReset()
     vi.mocked(fetch).mockImplementation(handler)
   },

@@ -56,7 +56,7 @@ export function NovelLibraryPage() {
       .then(setStories)
       .catch(() => { if (!controller.signal.aborted) setStoriesError(true) })
       .finally(() => { if (!controller.signal.aborted) setStoriesLoading(false) })
-    void api.listSessions('player', controller.signal)
+    void api.listAutosaves(controller.signal)
       .then(setSaves)
       .catch(() => { if (!controller.signal.aborted) setSavesError(true) })
       .finally(() => { if (!controller.signal.aborted) setSavesLoading(false) })

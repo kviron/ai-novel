@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { List, LoaderCircle, Send } from 'lucide-react'
+import { CornerUpLeft, List, LoaderCircle, Send } from 'lucide-react'
 
 import { resolveStoryTheme } from '@/shared/config'
 import { Badge } from '@/shared/ui/badge'
@@ -27,7 +27,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const expression = expressions[emotion] ?? expressions.neutral
   const canRetry = player.phase === 'provider_unavailable' || player.reloadRequired || (!session && player.phase === 'error')
 
-  const working = player.phase === 'loading' || player.phase === 'submitting' || player.checking
+  const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.checking
   const choices = turn?.choices ?? (isAkaneStory ? ['Спросить о сигнале', 'Спросить о веере', 'Осмотреть комнату'] : [])
 
   return <section className="stage" aria-label="Игровая сцена" aria-busy={working}>
@@ -49,6 +49,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
+            <Button type="button" variant="outline" size="icon-lg" aria-label="Отменить ход" title="Отменить ход" disabled={!session.can_rewind || working || player.reloadRequired} onClick={() => void player.rewind()}><CornerUpLeft aria-hidden="true" /></Button>
             <FieldGroup><Field data-disabled={player.disabled}>
               <FieldLabel htmlFor="player-action" className="sr-only">Ваше действие</FieldLabel>
               <InputGroup>

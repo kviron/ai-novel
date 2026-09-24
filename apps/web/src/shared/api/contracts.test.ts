@@ -17,6 +17,7 @@ const restoredSession = {
   },
   characters: [],
   state_version: 2,
+  can_rewind: true,
   current_scene: 'Прибытие',
   provider_id: 'ollama',
   model_id: 'qwen3:14b-q4_K_M',

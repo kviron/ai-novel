@@ -5,4 +5,5 @@ export const storySessionApi = {
   load: api.getSession,
   providers: api.providers,
   submit: api.createTurn,
+  rewind: api.rewind,
 }

@@ -66,6 +66,7 @@ export type StorySession = {
   story: StorySummary
   characters: Character[]
   state_version: number
+  can_rewind: boolean
   current_scene: string
   provider_id: string
   model_id: string

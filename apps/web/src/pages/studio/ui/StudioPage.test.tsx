@@ -11,7 +11,7 @@ const story: StorySession['story'] = {
   recommended_provider_id: 'ollama', recommended_model_id: 'gemma4-local:32k',
 }
 const session: StorySession = {
-  id: 'session-1', story, state_version: 1, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
+  id: 'session-1', story, state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
   characters: [{ id: 'akane', name: 'Аканэ', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
   latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress' },
 }
