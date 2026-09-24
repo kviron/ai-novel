@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  CatalogCharacter,
+  CharacterHistory,
   CreateTurnRequest,
   ProviderStatus,
   SessionSummary,
@@ -87,6 +89,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
 export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   return {
+    listCharacters(signal?: AbortSignal) {
+      return request<CatalogCharacter[]>('/api/characters', { baseUrl, signal })
+    },
+    getCharacter(characterId: string, signal?: AbortSignal) {
+      return request<CharacterHistory>(`/api/characters/${encodeURIComponent(characterId)}`, { baseUrl, signal })
+    },
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })
     },

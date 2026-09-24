@@ -39,11 +39,11 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     if character is None:
         raise InvalidProposalError("unknown_character_id")
     directive = proposal.visual_directive
-    # Unknown legacy casts retain their prior allowed poses; only Mark has a portrait-only pose.
-    allowed_poses = frozenset({"default"}) if character["id"] == "mark" else AKANE_POSES
+    uses_legacy_visuals = character["id"] == "akane" or character.get("source_type") == "legacy"
+    allowed_poses = AKANE_POSES if uses_legacy_visuals else frozenset({"default"})
     if directive.pose not in allowed_poses:
         raise InvalidProposalError("unknown_pose_id")
-    allowed_outfit = MARK_OUTFIT if character["id"] == "mark" else AKANE_OUTFIT
+    allowed_outfit = AKANE_OUTFIT if uses_legacy_visuals else MARK_OUTFIT if character["id"] == "mark" else "none"
     if directive.outfit != allowed_outfit:
         raise InvalidProposalError("unknown_outfit_id")
     choices = [choice.strip() for choice in proposal.suggested_choices]
@@ -57,8 +57,7 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     if proposal.proposed_effects:
         raise InvalidProposalError("effects_not_allowed")
     previous_background = (
-        context.recent_turns[-1]["visual_directive"].get("background")
-        if context.recent_turns else None
+        context.recent_turns[-1]["visual_directive"].get("background") if context.recent_turns else None
     )
     # An unknown or omitted location never creates an asset URL; it keeps the last valid backdrop.
     background = directive.background if directive.background in AKANE_BACKGROUNDS else previous_background

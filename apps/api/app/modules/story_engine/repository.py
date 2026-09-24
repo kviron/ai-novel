@@ -48,6 +48,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
         characters=[{
             "id": character.id,
+            "source_type": character.source_type,
             "name": revision.name,
             "gender": revision.gender,
             "age": revision.age,

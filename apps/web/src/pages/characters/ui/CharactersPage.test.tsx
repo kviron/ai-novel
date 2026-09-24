@@ -1,90 +1,77 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { apiServer } from '@/test/api-server'
 import { TestRouter } from '@/test/TestRouter'
 
-const story = { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', story_mode: 'hybrid' as const, recommended_provider_id: 'ollama', recommended_model_id: 'local' }
-const character = { id: 'akane', name: 'Аканэ', gender: 'female' as const, age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }
-const mark = { id: 'mark', name: 'Марк Ветров', gender: 'male' as const, age: 29, personality: 'Архивист', appearance: 'Тёмное пальто', visual_profile_version: 1 }
+const character = {
+  id: 'akane', character_id: 'akane', current_revision_id: 'akane-v1', revision_number: 1,
+  name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная',
+  appearance: 'Красное платье', biography: '', speech: '', role: '', source_type: 'builtin', created_at: '2026-09-24',
+}
+const mark = { ...character, id: 'mark', character_id: 'mark', current_revision_id: 'mark-v1', name: 'Марк Ветров', gender: 'male', age: 29 }
 
 afterEach(() => { cleanup(); apiServer.reset() })
 
-test('shows characters from all stories with their story title', async () => {
-  apiServer.listStories([story])
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Крыша', characters: [character] })
+test('loads the global catalog once and links to a canonical profile', async () => {
+  apiServer.listCharacters([character, mark])
   render(<TestRouter initialEntries={['/characters']} />)
   expect(await screen.findByRole('heading', { name: 'Аканэ' })).toBeInTheDocument()
-  expect(screen.getByText('Эхо неона')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: /Аканэ/ })).toHaveAttribute('href', '/characters/story-1/akane')
-  expect(screen.getByRole('img', { name: 'Портрет Аканэ' })).toBeInTheDocument()
-  expect(screen.getByRole('img', { name: 'Портрет Аканэ' }).tagName).toBe('IMG')
+  expect(screen.getByRole('link', { name: /Аканэ/ })).toHaveAttribute('href', '/characters/akane')
   expect(screen.getByRole('img', { name: 'Портрет Аканэ' })).toHaveAttribute('src', expect.stringContaining('akane-avatar'))
-  expect(screen.queryByRole('button', { name: /редактировать|создать/i })).not.toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/characters'))).toHaveLength(1)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/stories'))).toHaveLength(0)
 })
 
-test('opens a character profile with the existing story details', async () => {
-  const detailed = {
-    ...character,
+test('opens the current revision and preserves old deep links', async () => {
+  const revision = {
+    ...character, id: 'akane-v1',
     personality: 'Уверенная и наблюдательная',
-    appearance: JSON.stringify({ hair: 'Длинные чёрные волосы', eyes: 'Красные', outfit: 'Красное платье', features: ['Кошачьи ушки', 'Веер'] }),
+    appearance: JSON.stringify({ hair: 'Длинные чёрные волосы', features: ['Кошачьи ушки'] }),
   }
-  apiServer.listStories([story])
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Крыша', characters: [detailed] })
-  render(<TestRouter initialEntries={['/characters']} />)
-  await userEvent.click(await screen.findByRole('link', { name: /Аканэ/ }))
+  apiServer.listCharacters([character])
+  apiServer.characterDetail('akane', { id: 'akane', current_revision_id: 'akane-v1', source_type: 'builtin', revisions: [revision], linked_stories: [{ story_id: 'story-1', story_title: 'Эхо неона', story_slug: 'akane-neon-echo', revision_id: 'akane-v1', revision_number: 1 }] })
+  render(<TestRouter initialEntries={['/characters/story-1/akane']} />)
   expect(await screen.findByRole('heading', { name: 'Аканэ' })).toBeInTheDocument()
-  expect(screen.getByRole('img', { name: 'Портрет Аканэ' })).toBeInTheDocument()
   expect(screen.getByText('Уверенная и наблюдательная')).toBeInTheDocument()
   expect(screen.getByText('Длинные чёрные волосы')).toBeInTheDocument()
   expect(screen.getByText('Кошачьи ушки')).toBeInTheDocument()
+  expect(screen.getByText(/Ревизия 1/)).toBeInTheDocument()
+  expect(screen.getByText('Эхо неона')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Все персонажи' })).toHaveAttribute('href', '/characters')
 })
 
-test('filters the catalog by gender and keeps portraits linked to each character', async () => {
-  apiServer.listStories([story])
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Крыша', characters: [character, mark] })
+test('does not hide unfamiliar JSON appearance fields', async () => {
+  const revision = { ...character, id: 'akane-v1', appearance: JSON.stringify({ markings: 'Серебряный узор' }) }
+  apiServer.characterDetail('akane', { id: 'akane', current_revision_id: 'akane-v1', source_type: 'builtin', revisions: [revision], linked_stories: [] })
+  render(<TestRouter initialEntries={['/characters/akane']} />)
+  expect(await screen.findByText('Серебряный узор')).toBeInTheDocument()
+})
+
+test('filters profiles by gender without duplicating a character across stories', async () => {
+  apiServer.listCharacters([character, mark])
   render(<TestRouter initialEntries={['/characters']} />)
   expect(await screen.findByRole('heading', { name: 'Марк Ветров' })).toBeInTheDocument()
   expect(screen.getByRole('img', { name: 'Портрет Марк Ветров' })).toHaveAttribute('src', expect.stringContaining('mark-avatar'))
-
   await userEvent.click(screen.getByRole('radio', { name: 'Мужчины' }))
-  expect(screen.getByRole('heading', { name: 'Марк Ветров' })).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Аканэ' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('radio', { name: 'Женщины' }))
-  expect(screen.getByRole('heading', { name: 'Аканэ' })).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Марк Ветров' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('radio', { name: 'Все' }))
   expect(screen.getByRole('heading', { name: 'Марк Ветров' })).toBeInTheDocument()
 })
 
-test('shows a useful message for a missing character', async () => {
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Крыша', characters: [character] })
-  render(<TestRouter initialEntries={['/characters/story-1/unknown']} />)
+test('shows a useful message for an unknown character', async () => {
+  render(<TestRouter initialEntries={['/characters/unknown']} />)
   expect(await screen.findByText('Персонаж не найден.')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Все персонажи' })).toBeInTheDocument()
 })
 
-test('shows a useful empty state when stories have no characters', async () => {
-  apiServer.listStories([])
-  render(<TestRouter initialEntries={['/characters']} />)
-  expect(await screen.findByText('Персонажей пока нет.')).toBeInTheDocument()
-})
-
-test('retains available characters when one story fails to load', async () => {
-  const other = { ...story, id: 'story-2', slug: 'second', title: 'Другая история' }
-  apiServer.listStories([story, other])
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Крыша', characters: [character] })
-  render(<TestRouter initialEntries={['/characters']} />)
-  expect(await screen.findByRole('heading', { name: 'Аканэ' })).toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('Не все истории удалось загрузить')
-  expect(screen.getByRole('button', { name: 'Повторить' })).toBeEnabled()
-})
-
-test('offers retry after the library request fails', async () => {
-  apiServer.failStoryListOnce()
+test('shows empty state and offers retry after a request failure', async () => {
+  apiServer.failCharacterListOnce()
   render(<TestRouter initialEntries={['/characters']} />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить персонажей')
-  expect(screen.getByRole('button', { name: 'Повторить' })).toBeEnabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+  expect(await screen.findByText('Персонажей пока нет.')).toBeInTheDocument()
 })

@@ -53,6 +53,15 @@ class CharacterHistory(BaseModel):
     current_revision_id: str
     source_type: str
     revisions: list[RevisionProfile]
+    linked_stories: list["LinkedStory"]
+
+
+class LinkedStory(BaseModel):
+    story_id: str
+    story_title: str
+    story_slug: str
+    revision_id: str
+    revision_number: int
 
 
 class StoryCharacterProfile(BaseModel):

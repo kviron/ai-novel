@@ -30,6 +30,9 @@ type StartSessionRequest = { provider_id: string; model_id?: string; kind?: 'pla
 type Save = { id: string; story: Story; state_version: number; current_scene: string; created_at: string; updated_at: string; kind: 'player' | 'author' }
 
 let stories: Story[] = []
+let characters: unknown[] = []
+let characterDetails = new Map<string, unknown>()
+let failNextCharacterList = false
 let storyDetails = new Map<string, Story & { current_scene: string; characters: unknown[] }>()
 let failNextStoryList = false
 let failNextSaveList = false
@@ -65,6 +68,19 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const url = input instanceof Request ? input.url : String(input)
   const method = input instanceof Request ? input.method : init?.method ?? 'GET'
   const { pathname, searchParams } = new URL(url, 'http://api.test')
+
+  if (method === 'GET' && pathname === '/api/characters') {
+    if (failNextCharacterList) {
+      failNextCharacterList = false
+      return json({ code: 'temporarily_unavailable', detail: 'Недоступно', retryable: true }, 503)
+    }
+    return json(characters)
+  }
+  const characterMatch = pathname.match(/^\/api\/characters\/([^/]+)$/)
+  if (method === 'GET' && characterMatch) {
+    const detail = characterDetails.get(decodeURIComponent(characterMatch[1]))
+    return detail ? json(detail) : json({ code: 'not_found', detail: 'Персонаж не найден.', retryable: false }, 404)
+  }
 
   if (method === 'GET' && pathname === '/api/stories') {
     if (failNextStoryList) {
@@ -144,6 +160,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
 vi.stubGlobal('fetch', vi.fn(handler))
 
 export const apiServer = {
+  listCharacters(value: unknown[]) { characters = value },
+  characterDetail(id: string, value: unknown) { characterDetails.set(id, value) },
+  failCharacterListOnce() { failNextCharacterList = true },
   listStories(value: Story[]) {
     stories = value
   },
@@ -177,6 +196,9 @@ export const apiServer = {
   },
   reset() {
     stories = []
+    characters = []
+    characterDetails = new Map()
+    failNextCharacterList = false
     storyDetails = new Map()
     failNextStoryList = false
     failNextSaveList = false

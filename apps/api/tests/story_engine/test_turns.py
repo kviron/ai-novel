@@ -89,10 +89,12 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
 
 
 def test_mark_can_speak_with_his_own_outfit(client, fake_provider, akane_session):
-    fake_provider.responses = [proposal(
-        dialogue={"character_id": "mark", "text": "В архиве есть ещё одна запись."},
-        visual_directive={"emotion": "neutral", "pose": "default", "outfit": "dark_coat"},
-    )]
+    fake_provider.responses = [
+        proposal(
+            dialogue={"character_id": "mark", "text": "В архиве есть ещё одна запись."},
+            visual_directive={"emotion": "neutral", "pose": "default", "outfit": "dark_coat"},
+        )
+    ]
 
     result = post_turn(client, akane_session)
 
@@ -102,10 +104,53 @@ def test_mark_can_speak_with_his_own_outfit(client, fake_provider, akane_session
     assert result.json()["visual_directive"]["outfit"] == "dark_coat"
 
 
+def test_newly_attached_character_can_speak_without_borrowing_demo_assets(client, fake_provider):
+    story_id = client.get("/api/stories").json()[0]["id"]
+    created = client.post(
+        "/api/characters",
+        json={
+            "name": "Мира",
+            "gender": "female",
+            "age": 27,
+            "personality": "Внимательная",
+            "appearance": "Синий плащ",
+        },
+    ).json()
+    assert (
+        client.post(
+            f"/api/stories/{story_id}/characters",
+            json={
+                "character_id": created["id"],
+                "revision_id": created["current_revision_id"],
+            },
+        ).status_code
+        == 201
+    )
+    game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
+    fake_provider.responses = [
+        proposal(
+            dialogue={"character_id": created["id"], "text": "Я видела сигнал."},
+            visual_directive={"emotion": "neutral", "pose": "default", "outfit": "none"},
+        )
+    ]
+
+    response = client.post(
+        f"/api/sessions/{game['id']}/turns",
+        json={
+            "request_id": "local-cast-1",
+            "expected_state_version": 1,
+            "action": "Спросить Миру",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["speaker"] == "Мира"
+    assert response.json()["visual_directive"]["outfit"] == "none"
+    assert fake_provider.call_count == 1
+
+
 def test_background_choice_survives_reload_and_rewind(client, fake_provider, akane_session):
-    fake_provider.responses = [proposal(visual_directive={
-        "emotion": "neutral", "background": "signal_archive"
-    })]
+    fake_provider.responses = [proposal(visual_directive={"emotion": "neutral", "background": "signal_archive"})]
     result = post_turn(client, akane_session)
     assert result.status_code == 201
     assert result.json()["visual_directive"]["background"] == "signal_archive"
@@ -175,7 +220,10 @@ def test_rewind_first_turn_restores_initial_scene_and_rejects_stale_revision(cli
     assert rewound.json()["latest_turn"] is None
     assert rewound.json()["current_scene"] == "Ночной перекрёсток"
     assert rewound.json()["visual_state"] == {
-        "emotion": "neutral", "pose": "default", "outfit": "red_dress", "background": "neon_crossroads"
+        "emotion": "neutral",
+        "pose": "default",
+        "outfit": "red_dress",
+        "background": "neon_crossroads",
     }
     assert rewound.json()["can_rewind"] is False
 
@@ -184,7 +232,10 @@ def test_rewind_stops_after_ten_steps_and_preserves_all_turns(client, fake_provi
     fake_provider.responses = [proposal() for _ in range(11)]
     for index in range(11):
         result = post_turn(
-            client, akane_session, request_id=f"advance-{index}", expected_state_version=index + 1,
+            client,
+            akane_session,
+            request_id=f"advance-{index}",
+            expected_state_version=index + 1,
         )
         assert result.status_code == 201
     for index in range(10):

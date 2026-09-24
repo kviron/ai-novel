@@ -109,7 +109,11 @@ test('игра сохраняется под настройками, а выбо
   const titleBox = await page.getByTestId('story-player-route').getByRole('heading', { name: 'Эхо неона' }).boundingBox()
   expect(triggerBox).not.toBeNull()
   expect(titleBox).not.toBeNull()
-  expect(titleBox!.x).toBeGreaterThanOrEqual(triggerBox!.x + triggerBox!.width + 8)
+  await expect.poll(async () => {
+    const trigger = await page.locator('[data-slot="sidebar-trigger"]').boundingBox()
+    const title = await page.getByTestId('story-player-route').getByRole('heading', { name: 'Эхо неона' }).boundingBox()
+    return title && trigger ? title.x - trigger.x - trigger.width : -1
+  }).toBeGreaterThanOrEqual(8)
 
   await page.getByRole('button', { name: 'Открыть навигацию' }).click()
   await page.getByRole('button', { name: 'Настройки', exact: true }).click()

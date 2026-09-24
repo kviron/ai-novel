@@ -1,5 +1,5 @@
 import type { RouteObject } from 'react-router-dom'
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useParams } from 'react-router-dom'
 
 import { SidebarPreferenceProvider } from '@/shared/config'
 import { AppShell } from './layout/AppShell'
@@ -20,10 +20,16 @@ export const routeObjects: RouteObject[] = [
       { path: 'studio', element: <StudioRoute /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
       { path: 'characters', element: <CharactersPage /> },
-      { path: 'characters/:storyId/:characterId', element: <CharacterDetailPage /> },
+      { path: 'characters/:characterId', element: <CharacterDetailPage /> },
+      { path: 'characters/:storyId/:characterId', element: <LegacyCharacterRedirect /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
 ]
 
 export const router = createBrowserRouter(routeObjects)
+
+function LegacyCharacterRedirect() {
+  const { characterId } = useParams()
+  return <Navigate to={characterId ? routes.characterDetail(characterId) : routes.characters} replace />
+}

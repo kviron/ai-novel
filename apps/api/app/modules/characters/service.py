@@ -8,6 +8,7 @@ from .schemas import (
     CharacterHistory,
     CharacterProfile,
     CharacterWrite,
+    LinkedStory,
     RevisionProfile,
     StoryCharacterProfile,
 )
@@ -56,6 +57,16 @@ def get_character(session: Session, character_id: str) -> CharacterHistory:
         current_revision_id=character.current_revision_id,
         source_type=character.source_type,
         revisions=[_revision_profile(revision) for revision in repository.list_revisions(session, character_id)],
+        linked_stories=[
+            LinkedStory(
+                story_id=story.id,
+                story_title=story.title,
+                story_slug=story.slug,
+                revision_id=link.revision_id,
+                revision_number=revision.revision_number,
+            )
+            for story, link, revision in repository.list_story_links(session, character_id)
+        ],
     )
 
 

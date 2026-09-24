@@ -20,3 +20,17 @@ test('shows Mark rather than Akane when Mark speaks', () => {
   expect(screen.getByRole('img', { name: /Марк Ветров/ })).toHaveAttribute('src', expect.stringContaining('mark-avatar'))
   expect(screen.queryByRole('img', { name: /Аканэ/ })).not.toBeInTheDocument()
 })
+
+test('shows a named placeholder for a playable character without visual assets', () => {
+  const session: StorySession = {
+    id: 'session-2', state_version: 2, can_rewind: true, current_scene: 'Архив', provider_id: 'ollama', model_id: 'local',
+    story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: '', description: '', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'local' },
+    characters: [{ id: 'mira', name: 'Мира', gender: 'female', age: 27, personality: '', appearance: '', visual_profile_version: 1 }],
+    latest_turn: { id: 'turn-2', state_version: 2, action: 'Спросить Миру', prompt_version: 'v1', speaker: 'Мира', narration: '', dialogue: 'Я видела сигнал.', choices: [], visual_directive: { character_id: 'mira', emotion: 'neutral', pose: 'default', outfit: 'none', background: 'signal_archive' } },
+    visual_state: { emotion: 'neutral', pose: 'default', outfit: 'none', background: 'signal_archive' },
+  }
+
+  render(<CharacterSprite session={session} />)
+  expect(screen.getByRole('img', { name: 'Мира: иллюстрация пока недоступна' })).toBeInTheDocument()
+  expect(screen.queryByRole('img', { name: /Аканэ/ })).not.toBeInTheDocument()
+})

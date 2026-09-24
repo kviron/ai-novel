@@ -69,7 +69,7 @@ def test_upgrade_pins_each_legacy_character_revision_to_story_and_session(tmp_pa
             "SELECT session_id, character_id, revision_id FROM session_characters"
         ).fetchall()
         active_revision = database.execute(
-            "SELECT current_revision_id FROM characters WHERE id = 'legacy-hero'"
+            "SELECT current_revision_id, source_type FROM characters WHERE id = 'legacy-hero'"
         ).fetchone()
 
     assert len(revision) == 1
@@ -78,7 +78,7 @@ def test_upgrade_pins_each_legacy_character_revision_to_story_and_session(tmp_pa
     assert story_link == [("legacy-story", "legacy-hero", revision_id)]
     assert len(session_link) == 1
     assert session_link[0][1:] == ("legacy-hero", revision_id)
-    assert active_revision == (revision_id,)
+    assert active_revision == (revision_id, "legacy")
 
 
 def test_upgrade_keeps_existing_save_and_backfills_library_metadata(tmp_path):

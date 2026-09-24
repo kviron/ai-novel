@@ -12,14 +12,19 @@ const expressions: Record<string, { label: string; position: string }> = {
 }
 
 export function CharacterSprite({ session }: { session: StorySession }) {
-  // Demo assets are scoped to this story; never show Akane for another speaker.
-  if (session.story.slug !== 'akane-neon-echo') return null
+  const characterId = session.latest_turn?.visual_directive.character_id ?? session.characters[0]?.id
+  const character = session.characters.find((item) => item.id === characterId)
+  if (!character) return null
 
-  const characterId = session.latest_turn?.visual_directive.character_id ?? 'akane'
-  if (characterId === 'mark') {
-    return <img className="character-portrait" src={markAvatar} alt={session.characters.find((item) => item.id === 'mark')?.name ?? 'Марк Ветров'} />
+  // Demo assets are scoped to this story; all other cast members get a neutral placeholder.
+  if (session.story.slug === 'akane-neon-echo' && characterId === 'mark') {
+    return <img className="character-portrait" src={markAvatar} alt={character.name} />
   }
-  if (characterId !== 'akane') return null
+  if (session.story.slug !== 'akane-neon-echo' || characterId !== 'akane') {
+    return <div className="character-portrait grid place-items-center rounded-full bg-card/70 text-8xl font-semibold text-muted-foreground" role="img" aria-label={`${character.name}: иллюстрация пока недоступна`}>
+      <span aria-hidden="true">{character.name.slice(0, 1)}</span>
+    </div>
+  }
 
   const emotion = session.latest_turn?.visual_directive.emotion ?? session.visual_state?.emotion ?? 'neutral'
   const expression = expressions[emotion] ?? expressions.neutral
@@ -28,7 +33,7 @@ export function CharacterSprite({ session }: { session: StorySession }) {
     className="character-sprite"
     data-expression={expressions[emotion] ? emotion : 'neutral'}
     role="img"
-    aria-label={`${session.characters.find((item) => item.id === 'akane')?.name ?? 'Аканэ'}: ${expression.label}`}
+    aria-label={`${character.name}: ${expression.label}`}
     style={{ aspectRatio: '1 / 3', backgroundImage: `url(${akaneSpriteSheet})`, backgroundSize: '600% 100%', backgroundPosition: expression.position }}
   />
 }

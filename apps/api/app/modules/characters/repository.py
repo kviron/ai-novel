@@ -1,6 +1,6 @@
 from sqlmodel import Session, select
 
-from app.db.models import Character, CharacterRevision, StoryCharacter
+from app.db.models import Character, CharacterRevision, Story, StoryCharacter
 
 
 def list_current(session: Session) -> list[tuple[Character, CharacterRevision]]:
@@ -25,3 +25,15 @@ def list_revisions(session: Session, character_id: str) -> list[CharacterRevisio
 
 def get_story_link(session: Session, story_id: str, character_id: str) -> StoryCharacter | None:
     return session.get(StoryCharacter, (story_id, character_id))
+
+
+def list_story_links(session: Session, character_id: str) -> list[tuple[Story, StoryCharacter, CharacterRevision]]:
+    return list(
+        session.exec(
+            select(Story, StoryCharacter, CharacterRevision)
+            .join(StoryCharacter, StoryCharacter.story_id == Story.id)
+            .join(CharacterRevision, CharacterRevision.id == StoryCharacter.revision_id)
+            .where(StoryCharacter.character_id == character_id)
+            .order_by(Story.title, Story.id)
+        )
+    )

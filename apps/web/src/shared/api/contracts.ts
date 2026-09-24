@@ -20,6 +20,28 @@ export type Character = {
   visual_profile_version: number
 }
 
+export type CharacterRevision = Omit<Character, 'visual_profile_version'> & {
+  revision_number: number
+  biography: string
+  speech: string
+  role: string
+  created_at: string
+}
+
+export type CatalogCharacter = CharacterRevision & {
+  character_id: string
+  current_revision_id: string
+  source_type: string
+}
+
+export type CharacterHistory = {
+  id: string
+  current_revision_id: string
+  source_type: string
+  revisions: CharacterRevision[]
+  linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number }[]
+}
+
 export type StoryDetail = StorySummary & {
   current_scene: string
   characters: Character[]

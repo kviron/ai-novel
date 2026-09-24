@@ -1,7 +1,7 @@
 export const routes = {
   novelLibrary: '/',
   characters: '/characters',
-  characterDetail: (storyId: string, characterId: string) => `/characters/${encodeURIComponent(storyId)}/${encodeURIComponent(characterId)}`,
+  characterDetail: (characterId: string) => `/characters/${encodeURIComponent(characterId)}`,
   settings: '/settings',
   storyPlayer: (sessionId: string) => `/play/${encodeURIComponent(sessionId)}`,
   studio: '/studio',

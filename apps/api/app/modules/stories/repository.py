@@ -24,10 +24,6 @@ def get_story_by_slug(session: Session, slug: str) -> Story | None:
     return session.exec(select(Story).where(Story.slug == slug)).first()
 
 
-def list_characters(session: Session, story_id: str) -> list[Character]:
-    return list(session.exec(select(Character).where(Character.story_id == story_id).order_by(Character.id)))
-
-
 def list_story_characters(session: Session, story_id: str) -> list[tuple[Character, CharacterRevision]]:
     return list(
         session.exec(
