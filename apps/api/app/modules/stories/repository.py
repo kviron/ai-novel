@@ -1,6 +1,6 @@
 from sqlmodel import Session, select
 
-from app.db.models import Character, Story, StorySession, Turn
+from app.db.models import Autosave, Character, Story, StorySession, Turn
 
 
 def list_stories(session: Session) -> list[Story]:
@@ -28,6 +28,15 @@ def list_story_sessions(session: Session, kind: str) -> list[tuple[StorySession,
         select(StorySession, Story)
         .join(Story, Story.id == StorySession.story_id)
         .where(StorySession.kind == kind)
+        .order_by(StorySession.updated_at.desc(), StorySession.id.desc())
+    ))
+
+
+def list_autosaves(session: Session) -> list[tuple[StorySession, Story]]:
+    return list(session.exec(
+        select(StorySession, Story)
+        .join(Autosave, Autosave.session_id == StorySession.id)
+        .join(Story, Story.id == Autosave.story_id)
         .order_by(StorySession.updated_at.desc(), StorySession.id.desc())
     ))
 

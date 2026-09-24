@@ -100,6 +100,25 @@ def test_session_library_lists_only_requested_kind_with_lightweight_data(client)
     assert [save["id"] for save in refreshed.json()] == [first["id"], second["id"]]
 
 
+def test_autosave_points_to_one_player_session_per_story(client):
+    akane = akane_story(client)
+    assert client.get("/api/autosaves").json() == []
+
+    first = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    second = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    client.post(f'/api/stories/{akane["id"]}/sessions', json={"kind": "author"})
+
+    with Session(client.app.state.engine) as session:
+        old_game = session.get(StorySession, first["id"])
+        old_game.updated_at = "2099-01-01T00:00:00+00:00"
+        session.commit()
+
+    response = client.get("/api/autosaves")
+    assert response.status_code == 200
+    assert [save["id"] for save in response.json()] == [second["id"]]
+    assert response.json()[0]["story"]["id"] == akane["id"]
+
+
 def test_seed_is_idempotent_across_lifespan_startups(client):
     akane = akane_story(client)
 

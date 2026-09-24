@@ -2,7 +2,7 @@ import json
 
 from sqlmodel import Session
 
-from app.db.models import Character, Story, StorySession, Turn
+from app.db.models import Autosave, Character, Story, StorySession, Turn
 from app.modules.stories.schemas import (
     CharacterDetail,
     SessionDetail,
@@ -57,6 +57,13 @@ def start_story_session(
         kind=request.kind,
     )
     session.add(story_session)
+    session.flush()
+    if request.kind == "player":
+        autosave = session.get(Autosave, story.id)
+        if autosave is None:
+            session.add(Autosave(story_id=story.id, session_id=story_session.id))
+        else:
+            autosave.session_id = story_session.id
     session.commit()
     session.refresh(story_session)
     return _session_detail(session, story_session, story)
@@ -70,17 +77,22 @@ def get_session_detail(session: Session, session_id: str) -> SessionDetail:
 
 
 def list_session_summaries(session: Session, kind: str) -> list[SessionSummary]:
-    return [
-        SessionSummary(
-            id=story_session.id,
-            story=_story_summary(story),
-            state_version=story_session.state_version,
-            current_scene=story_session.current_scene,
-            created_at=story_session.created_at,
-            updated_at=story_session.updated_at,
-        )
-        for story_session, story in repository.list_story_sessions(session, kind)
-    ]
+    return [_session_summary(game, story) for game, story in repository.list_story_sessions(session, kind)]
+
+
+def list_autosaves(session: Session) -> list[SessionSummary]:
+    return [_session_summary(game, story) for game, story in repository.list_autosaves(session)]
+
+
+def _session_summary(story_session: StorySession, story: Story) -> SessionSummary:
+    return SessionSummary(
+        id=story_session.id,
+        story=_story_summary(story),
+        state_version=story_session.state_version,
+        current_scene=story_session.current_scene,
+        created_at=story_session.created_at,
+        updated_at=story_session.updated_at,
+    )
 
 
 def _require_story(session: Session, story_id: str) -> Story:

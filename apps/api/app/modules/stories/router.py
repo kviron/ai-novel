@@ -14,6 +14,7 @@ from .service import (
     UnsupportedModelError,
     get_session_detail,
     get_story,
+    list_autosaves,
     list_session_summaries,
     list_stories,
     start_story_session,
@@ -63,6 +64,11 @@ def create_story_session(
 @router.get("/sessions", response_model=list[SessionSummary])
 def read_sessions(session: SessionDep, kind: Literal["player", "author"] = "player") -> list[SessionSummary]:
     return list_session_summaries(session, kind)
+
+
+@router.get("/autosaves", response_model=list[SessionSummary])
+def read_autosaves(session: SessionDep) -> list[SessionSummary]:
+    return list_autosaves(session)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail, responses={404: {"model": ErrorResponse}})
