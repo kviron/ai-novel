@@ -63,6 +63,26 @@ def test_upgrade_keeps_existing_save_and_backfills_library_metadata(tmp_path):
     assert turn == ("saved-turn", saved[0])
 
 
+def test_autosave_rewind_migration_preserves_and_links_existing_turns(tmp_path):
+    database_path = tmp_path / "existing-history.db"
+    create_v01_database_with_duplicate_turn_versions(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        game = db.execute(
+            "SELECT id, active_turn_id, rewind_count FROM story_sessions WHERE story_id='legacy-story'"
+        ).fetchone()
+        turns = db.execute(
+            "SELECT id, parent_turn_id, scene_after FROM turns WHERE session_id=? ORDER BY state_version",
+            (game[0],),
+        ).fetchall()
+        autosaves = db.execute("SELECT story_id, session_id FROM autosaves").fetchall()
+
+    assert game == (game[0], "legacy-turn-2", 0)
+    assert turns == [("legacy-turn", None, "Arrival"), ("legacy-turn-2", "legacy-turn", "Arrival")]
+    assert autosaves == [("legacy-story", game[0])]
+
+
 def test_upgrade_resequences_duplicate_legacy_turn_versions_without_data_loss(tmp_path):
     database_path = tmp_path / "duplicate-versions.db"
     create_v01_database_with_duplicate_turn_versions(database_path)

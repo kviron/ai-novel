@@ -50,6 +50,8 @@ class StorySession(SQLModel, table=True):
     id: str = Field(default_factory=new_public_id, primary_key=True)
     story_id: str = Field(foreign_key="stories.id", index=True)
     kind: str = "player"
+    active_turn_id: str | None = None
+    rewind_count: int = 0
     state_version: int = 1
     current_scene: str
     provider_id: str
@@ -67,6 +69,8 @@ class Turn(SQLModel, table=True):
 
     id: str = Field(default_factory=new_public_id, primary_key=True)
     session_id: str = Field(foreign_key="story_sessions.id", index=True)
+    parent_turn_id: str | None = None
+    scene_after: str = ""
     request_id: str
     state_version: int
     legacy_state_version: int | None = None
@@ -81,3 +85,10 @@ class Turn(SQLModel, table=True):
     model_id: str
     prompt_version: str
     created_at: str = Field(default_factory=utc_timestamp)
+
+
+class Autosave(SQLModel, table=True):
+    __tablename__ = "autosaves"
+
+    story_id: str = Field(foreign_key="stories.id", primary_key=True)
+    session_id: str = Field(foreign_key="story_sessions.id")
