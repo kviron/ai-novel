@@ -229,10 +229,12 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     with Session(client.app.state.engine) as session:
         story_session = session.get(StorySession, game["id"])
         story_session.state_version = 2
+        story_session.active_turn_id = "fan-turn"
         session.add(
             Turn(
                 id="fan-turn",
                 session_id=game["id"],
+                scene_after=story_session.current_scene,
                 request_id="fan-request",
                 state_version=2,
                 action="Открыть веер",

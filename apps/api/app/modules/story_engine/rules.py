@@ -11,6 +11,7 @@ class GenerationContext:
     """Detached snapshot: generation holds neither a DB transaction nor ORM objects."""
 
     session_id: str
+    active_turn_id: str | None
     state_version: int
     current_scene: str
     provider_id: str

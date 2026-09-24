@@ -11,6 +11,12 @@ class TurnCreate(BaseModel):
     action: str = Field(min_length=1, max_length=4000)
 
 
+class RewindRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_state_version: int = Field(ge=1)
+
+
 class DialogueProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

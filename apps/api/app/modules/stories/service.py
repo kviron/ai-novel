@@ -156,13 +156,14 @@ def _turn_detail(turn: Turn | None, visual_directive: dict[str, str] | None) -> 
 
 
 def _session_detail(session: Session, story_session: StorySession, story: Story) -> SessionDetail:
-    latest_turn = repository.get_latest_turn(session, story_session.id)
+    latest_turn = repository.get_active_turn(session, story_session)
     visual_directive = _visual_directive(latest_turn) if latest_turn else None
     return SessionDetail(
         id=story_session.id,
         story=_story_summary(story),
         characters=[_character_detail(character) for character in repository.list_characters(session, story.id)],
         state_version=story_session.state_version,
+        can_rewind=story_session.active_turn_id is not None and story_session.rewind_count < 10,
         current_scene=story_session.current_scene,
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,

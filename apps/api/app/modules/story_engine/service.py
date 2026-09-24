@@ -2,6 +2,8 @@ from sqlmodel import Session
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.modules.providers.service import ProviderRegistry
+from app.modules.stories.schemas import SessionDetail
+from app.modules.stories.service import get_session_detail
 
 from . import repository
 from .contracts import AcceptedTurn, TurnCreate, TurnResult
@@ -58,6 +60,11 @@ def create_turn(
             return existing, False
         raise
     return repository.commit_turn(session, context, request, accepted, raw_response)
+
+
+def rewind_session(session: Session, session_id: str, expected_state_version: int) -> SessionDetail:
+    repository.rewind_turn(session, session_id, expected_state_version)
+    return get_session_detail(session, session_id)
 
 
 def _generate_turn(

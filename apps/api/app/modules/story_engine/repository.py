@@ -30,11 +30,17 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         raise StateConflictError
     story = stories.get_story_by_id(session, story_session.story_id)
     characters = stories.list_characters(session, story_session.story_id)
-    turns = list(
-        session.exec(select(Turn).where(Turn.session_id == session_id).order_by(Turn.state_version.desc()).limit(8))
-    )
+    turns: list[Turn] = []
+    turn_id = story_session.active_turn_id
+    while turn_id is not None and len(turns) < 8:
+        turn = session.get(Turn, turn_id)
+        if turn is None or turn.session_id != session_id:
+            raise StateConflictError
+        turns.append(turn)
+        turn_id = turn.parent_turn_id
     return GenerationContext(
         session_id=session_id,
+        active_turn_id=story_session.active_turn_id,
         state_version=story_session.state_version,
         current_scene=story_session.current_scene,
         provider_id=story_session.provider_id,
@@ -70,6 +76,8 @@ def commit_turn(
                 raise StateConflictError
             turn = Turn(
                 session_id=context.session_id,
+                parent_turn_id=context.active_turn_id,
+                scene_after=context.current_scene,
                 request_id=request.request_id,
                 state_version=context.state_version + 1,
                 action=request.action,
@@ -90,6 +98,8 @@ def commit_turn(
                 .where(StorySession.id == context.session_id, StorySession.state_version == context.state_version)
                 .values(
                     state_version=context.state_version + 1,
+                    active_turn_id=turn.id,
+                    rewind_count=0,
                     current_scene=context.current_scene,
                     updated_at=utc_timestamp(),
                 )
@@ -111,6 +121,33 @@ def commit_turn(
         # SQL parameters include diagnostic model output; keep them out of tracebacks.
         error.hide_parameters = True
         raise error from None
+
+
+class RewindUnavailableError(Exception):
+    pass
+
+
+def rewind_turn(session: Session, session_id: str, expected_state_version: int) -> None:
+    """Move the active pointer one parent back without mutating either branch."""
+    with session.begin():
+        session.execute(text("BEGIN IMMEDIATE"))
+        game = session.get(StorySession, session_id, populate_existing=True)
+        if game is None:
+            raise SessionNotFoundError
+        if game.state_version != expected_state_version:
+            raise StateConflictError
+        if game.active_turn_id is None or game.rewind_count >= 10:
+            raise RewindUnavailableError
+        active = session.get(Turn, game.active_turn_id)
+        if active is None or active.session_id != game.id:
+            raise StateConflictError
+        parent = session.get(Turn, active.parent_turn_id) if active.parent_turn_id else None
+        story = stories.get_story_by_id(session, game.story_id)
+        game.active_turn_id = active.parent_turn_id
+        game.current_scene = parent.scene_after if parent else story.current_scene
+        game.state_version += 1
+        game.rewind_count += 1
+        game.updated_at = utc_timestamp()
 
 
 def _turn_result(session: Session, turn: Turn) -> TurnResult:

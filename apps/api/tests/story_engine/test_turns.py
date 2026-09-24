@@ -87,6 +87,94 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
         assert json.loads(turns[0].raw_response)["visual_directive"]["emotion"] == "fan"
 
 
+def test_rewind_then_new_action_keeps_both_branches(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(dialogue={"character_id": "akane", "text": "Первая реплика"}),
+        proposal(dialogue={"character_id": "akane", "text": "Старый путь"}),
+        proposal(dialogue={"character_id": "akane", "text": "Новый путь"}),
+    ]
+    initial = client.get(f"/api/sessions/{akane_session.id}").json()
+    assert initial["can_rewind"] is False
+    first = post_turn(client, akane_session).json()
+    old_branch = post_turn(client, akane_session, request_id="old-branch", expected_state_version=2).json()
+
+    rewind = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 3})
+    assert rewind.status_code == 200
+    assert rewind.json()["state_version"] == 4
+    assert rewind.json()["latest_turn"]["id"] == first["id"]
+    assert rewind.json()["can_rewind"] is True
+
+    new_branch = post_turn(client, akane_session, request_id="new-branch", expected_state_version=4).json()
+    replay = post_turn(client, akane_session, request_id="old-branch", expected_state_version=3)
+    assert replay.status_code == 200
+    assert replay.json()["id"] == old_branch["id"]
+    restored = client.get(f"/api/sessions/{akane_session.id}").json()
+    assert restored["latest_turn"]["id"] == new_branch["id"]
+    assert restored["latest_turn"]["dialogue"] == "Новый путь"
+    with Session(client.app.state.engine) as db:
+        old = db.get(Turn, old_branch["id"])
+        new = db.get(Turn, new_branch["id"])
+        assert old.parent_turn_id == first["id"]
+        assert new.parent_turn_id == first["id"]
+        assert db.get(StorySession, akane_session.id).active_turn_id == new.id
+
+
+def test_rewind_first_turn_restores_initial_scene_and_rejects_stale_revision(client, fake_provider, akane_session):
+    start = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 1})
+    assert start.status_code == 422
+    fake_provider.responses = [proposal()]
+    assert post_turn(client, akane_session).status_code == 201
+
+    stale = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 1})
+    assert stale.status_code == 409
+    assert client.get(f"/api/sessions/{akane_session.id}").json()["latest_turn"] is not None
+
+    rewound = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 2})
+    assert rewound.status_code == 200
+    assert rewound.json()["latest_turn"] is None
+    assert rewound.json()["current_scene"] == "Ночной перекрёсток"
+    assert rewound.json()["visual_state"] == {"emotion": "neutral", "pose": "default", "outfit": "red_dress"}
+    assert rewound.json()["can_rewind"] is False
+
+
+def test_rewind_stops_after_ten_steps_and_preserves_all_turns(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal() for _ in range(11)]
+    for index in range(11):
+        result = post_turn(
+            client, akane_session, request_id=f"advance-{index}", expected_state_version=index + 1,
+        )
+        assert result.status_code == 201
+    for index in range(10):
+        result = client.post(
+            f"/api/sessions/{akane_session.id}/rewind",
+            json={"expected_state_version": 12 + index},
+        )
+        assert result.status_code == 200
+    assert result.json()["can_rewind"] is False
+    denied = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 22})
+    assert denied.status_code == 422
+    with Session(client.app.state.engine) as db:
+        assert len(list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))) == 11
+
+
+def test_new_branch_prompt_excludes_abandoned_future(client, fake_provider, akane_session, monkeypatch):
+    fake_provider.responses = [proposal(), proposal(), proposal()]
+    assert post_turn(client, akane_session).status_code == 201
+    assert post_turn(client, akane_session, request_id="discarded", expected_state_version=2).status_code == 201
+    rewound = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 3})
+    assert rewound.status_code == 200
+    prompts = []
+    generate = fake_provider.generate_turn
+
+    def record(request):
+        prompts.append(json.loads(request.user_prompt))
+        return generate(request)
+
+    monkeypatch.setattr(fake_provider, "generate_turn", record)
+    assert post_turn(client, akane_session, request_id="alternative", expected_state_version=4).status_code == 201
+    assert [turn["request_id"] for turn in prompts[0]["recent_turns"]] == ["turn-1"]
+
+
 @pytest.mark.parametrize(
     "error,code",
     [

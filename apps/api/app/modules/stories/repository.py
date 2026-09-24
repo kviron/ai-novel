@@ -41,7 +41,5 @@ def list_autosaves(session: Session) -> list[tuple[StorySession, Story]]:
     ))
 
 
-def get_latest_turn(session: Session, session_id: str) -> Turn | None:
-    return session.exec(
-        select(Turn).where(Turn.session_id == session_id).order_by(Turn.state_version.desc()).limit(1)
-    ).first()
+def get_active_turn(session: Session, story_session: StorySession) -> Turn | None:
+    return session.get(Turn, story_session.active_turn_id) if story_session.active_turn_id else None

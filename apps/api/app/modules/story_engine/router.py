@@ -7,14 +7,31 @@ from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
 from app.modules.providers.router import ProviderRegistryDep
+from app.modules.stories.schemas import SessionDetail
 from app.modules.stories.service import SessionNotFoundError
 
-from .contracts import TurnCreate, TurnResult
-from .repository import StateConflictError
-from .service import TurnGenerationFailedError, create_turn
+from .contracts import RewindRequest, TurnCreate, TurnResult
+from .repository import RewindUnavailableError, StateConflictError
+from .service import TurnGenerationFailedError, create_turn, rewind_session
 
 router = APIRouter(prefix="/api/sessions", tags=["Story turns"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.post(
+    "/{session_id}/rewind",
+    response_model=SessionDetail,
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+)
+def post_rewind(session_id: str, payload: RewindRequest, session: SessionDep) -> SessionDetail:
+    try:
+        return rewind_session(session, session_id, payload.expected_state_version)
+    except SessionNotFoundError:
+        raise ApiError(404, "not_found", "Игровая сессия не найдена.") from None
+    except StateConflictError:
+        raise ApiError(409, "state_conflict", "Состояние игры изменилось. Обновите сессию.", retryable=True) from None
+    except RewindUnavailableError:
+        raise ApiError(422, "rewind_unavailable", "Дальше вернуться нельзя.") from None
 
 
 @router.post(

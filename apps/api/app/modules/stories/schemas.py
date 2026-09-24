@@ -60,6 +60,7 @@ class SessionDetail(BaseModel):
     story: StorySummary
     characters: list[CharacterDetail]
     state_version: int
+    can_rewind: bool
     current_scene: str
     provider_id: str
     model_id: str
