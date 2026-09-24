@@ -45,6 +45,7 @@ test('показывает подтверждённое состояние и о
   expect(screen.getByText('v1')).toBeInTheDocument()
   expect(screen.getByText(/gemma4-local:32k/)).toBeInTheDocument()
   expect(screen.getByText('Ходов пока нет')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Варианты (3)' }))
   await userEvent.click(screen.getByRole('button', { name: 'Спросить о веере' }))
   await waitFor(() => expect(screen.getByText('v2')).toBeInTheDocument())
   expect(screen.getByText('v1', { selector: '[data-field="prompt-version"]' })).toBeInTheDocument()

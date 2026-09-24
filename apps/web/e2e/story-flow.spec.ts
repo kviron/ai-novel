@@ -5,6 +5,7 @@ test('игрок проходит один ход и восстанавлива�
   await page.getByRole('button', { name: 'Начать историю' }).click()
   await expect(page.getByRole('heading', { name: 'Эхо неона' })).toBeVisible()
 
+  await page.getByRole('button', { name: 'Варианты (3)' }).click()
   await page.getByRole('button', { name: 'Спросить о веере' }).click()
   await expect(page.getByRole('img', { name: /Аканэ.*С веером/ })).toBeVisible()
   await page.getByRole('button', { name: 'Показать полностью' }).click()

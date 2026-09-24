@@ -6,6 +6,9 @@ class ResizeObserverStub {
   disconnect() {}
 }
 Object.defineProperty(window, 'ResizeObserver', { writable: true, value: ResizeObserverStub })
+Element.prototype.setPointerCapture = () => undefined
+Element.prototype.releasePointerCapture = () => undefined
+Element.prototype.hasPointerCapture = () => false
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
