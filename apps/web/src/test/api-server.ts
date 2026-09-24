@@ -41,6 +41,7 @@ let sessions = new Map<string, Session>()
 let providerQueue: Provider[] = []
 let lastProvider: Provider | null = null
 let turns = new Map<string, unknown>()
+let dialogueHistories = new Map<string, unknown[]>()
 let lastStartRequest: StartSessionRequest | null = null
 let saves: Save[] = []
 let rewinds = new Map<string, Session>()
@@ -185,6 +186,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const turnMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/turns$/)
   if (method === 'POST' && turnMatch) return json(turns.get(turnMatch[1]) ?? {}, 201)
 
+  const historyMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/dialogue-history$/)
+  if (method === 'GET' && historyMatch) return json(dialogueHistories.get(historyMatch[1]) ?? [])
+
   const rewindMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/rewind$/)
   if (method === 'POST' && rewindMatch) return json(rewinds.get(rewindMatch[1]) ?? {}, 200)
 
@@ -223,9 +227,10 @@ export const apiServer = {
     providerQueue = [{ provider_id: 'ollama', available: value, detail: value ? 'Готово' : 'Недоступно', models: value ? [...models] : [] }]
     lastProvider = null
   },
-  turn(sessionId: string, value: unknown) {
-    turns.set(sessionId, value)
-  },
+    turn(sessionId: string, value: unknown) {
+      turns.set(sessionId, value)
+    },
+    dialogueHistory(sessionId: string, value: unknown[]) { dialogueHistories.set(sessionId, value) },
   rewind(sessionId: string, value: Session) { rewinds.set(sessionId, value) },
   modelSwitch(sessionId: string, value: Session) { modelChanges.set(sessionId, value) },
   lastStartSessionRequest() {
@@ -243,7 +248,8 @@ export const apiServer = {
     sessions = new Map()
     providerQueue = []
     lastProvider = null
-    turns = new Map()
+      turns = new Map()
+      dialogueHistories = new Map()
     lastStartRequest = null
     saves = []
     rewinds = new Map()

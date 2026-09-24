@@ -12,11 +12,21 @@ from app.modules.stories.schemas import SessionDetail
 from app.modules.stories.service import SessionNotFoundError
 
 from .contracts import ModelChangeRequest, RewindRequest, TurnCreate, TurnResult
-from .repository import RewindUnavailableError, StateConflictError
+from .repository import RewindUnavailableError, StateConflictError, list_active_dialogue
 from .service import TurnGenerationFailedError, change_session_model, create_turn, rewind_session
 
 router = APIRouter(prefix="/api/sessions", tags=["Story turns"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/{session_id}/dialogue-history", response_model=list[TurnResult])
+def read_dialogue_history(session_id: str, session: SessionDep) -> list[TurnResult]:
+    try:
+        return list_active_dialogue(session, session_id)
+    except SessionNotFoundError as error:
+        raise ApiError(404, "not_found", "Игровая сессия не найдена.") from error
+    except StateConflictError as error:
+        raise ApiError(409, "state_conflict", "Историю диалогов не удалось восстановить.") from error
 
 
 @router.post(

@@ -1,4 +1,4 @@
-import { StoryScene, useStoryPlayer } from '@/features/play-story'
+import { DialogueHistory, StoryScene, useStoryPlayer } from '@/features/play-story'
 import { resolveStoryTheme, routes } from '@/shared/config'
 
 export function StoryPlayerPage({ sessionId }: { sessionId: string }) {
@@ -7,7 +7,7 @@ export function StoryPlayerPage({ sessionId }: { sessionId: string }) {
 
   return <div className="game-shell" data-testid="story-player-route" data-session-id={sessionId} data-story-theme={theme.id} style={theme.variables}>
     <header className="game-header">
-      <h1>{player.session?.story.title ?? 'Ваше прохождение'}</h1>
+      <div className="game-header-title"><h1>{player.session?.story.title ?? 'Ваше прохождение'}</h1><DialogueHistory sessionId={sessionId} storySlug={player.session?.story.slug} /></div>
       <a className="mode-link" href={routes.studioSession(sessionId)}>Студия</a>
     </header>
     <StoryScene player={player} />

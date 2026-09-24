@@ -48,11 +48,13 @@ button, input, textarea { font: inherit; }
 .game-shell, .studio-shell { position: relative; min-height: 100dvh; background: var(--background); }
 .game-header { position: absolute; z-index: 3; inset: 0 0 auto; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 56px 8px 72px; background: transparent; border: 0; pointer-events: none; }
 .game-header > * { pointer-events: auto; }
-.game-header h1, .game-header .mode-link, .studio-header-title { background: #0009; color: white; border-radius: var(--radius); }
+.game-header h1, .game-header .mode-link, .game-header-title, .studio-header-title { background: #0009; color: white; border-radius: var(--radius); }
+.game-header-title { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding-right: 2px; }
+.game-header-title h1 { background: none; }
 .game-header h1 { display: flex; align-items: center; height: 24px; font-size: .75rem; font-weight: 500; margin: 0; padding: 0 10px; }
 .game-header .mode-link { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; }
 .game-header .mode-link:hover { color: white; background: #000b; }
-.studio-header-title { height: 24px; padding: 0 8px; }
+.studio-header-title { min-height: 28px; padding: 0 4px 0 8px; }
 .studio-header-title h1 { padding: 0; background: none; }
 .studio-entry-header { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 28px 12px 72px; background: var(--card); border-bottom: 1px solid var(--border); }
 .mode-link { color: var(--muted-foreground); font-size: .75rem; text-decoration: none; }

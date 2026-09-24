@@ -22,6 +22,26 @@ def find_turn(session: Session, session_id: str, request_id: str) -> TurnResult 
     return _turn_result(session, turn) if turn else None
 
 
+def list_active_dialogue(session: Session, session_id: str) -> list[TurnResult]:
+    story_session = stories.get_story_session(session, session_id)
+    if story_session is None:
+        raise SessionNotFoundError
+    turns: list[TurnResult] = []
+    seen: set[str] = set()
+    turn_id = story_session.active_turn_id
+    while turn_id is not None:
+        if turn_id in seen:
+            raise StateConflictError
+        seen.add(turn_id)
+        turn = session.get(Turn, turn_id)
+        if turn is None or turn.session_id != session_id:
+            raise StateConflictError
+        turns.append(_turn_result(session, turn))
+        turn_id = turn.parent_turn_id
+    turns.reverse()
+    return turns
+
+
 def load_context(session: Session, session_id: str, expected_version: int) -> GenerationContext:
     story_session = stories.get_story_session(session, session_id)
     if story_session is None:

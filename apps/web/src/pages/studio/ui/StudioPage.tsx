@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { PanelRight } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { StoryScene, useStoryPlayer } from '@/features/play-story'
+import { DialogueHistory, StoryScene, useStoryPlayer } from '@/features/play-story'
 import { api, type StorySession, type StorySummary } from '@/shared/api'
 import { resolveStoryTheme, routes } from '@/shared/config'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
@@ -83,7 +83,7 @@ function StudioSession({ sessionId }: { sessionId: string }) {
   const [inspectorOpen, setInspectorOpen] = useState(false)
   return <div className="studio-shell" data-story-theme={theme.id} style={theme.variables}>
     <header className="game-header">
-      <div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1></div>
+      <div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1><DialogueHistory sessionId={sessionId} storySlug={player.session?.story.slug} /></div>
       <div className="studio-header-actions">
         <Button className="studio-inspector-trigger" type="button" size="icon-sm" variant="ghost" aria-label="Открыть инспектор" title="Открыть инспектор" onClick={() => setInspectorOpen(true)}><PanelRight aria-hidden="true" /></Button>
         <Link className="mode-link" to={routes.studio}>Все тесты</Link>

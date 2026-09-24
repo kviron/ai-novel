@@ -35,6 +35,30 @@ test('даёт перейти в Студию без технических де
   expect(screen.getByTestId('story-player-route')).toHaveAttribute('data-story-theme', 'akane-neon-echo')
 })
 
+test('открывает переписку из кнопки после названия с разными цветами игрока и персонажа', async () => {
+  apiServer.dialogueHistory(session.id, [turn, { ...turn, id: 'turn-2', action: 'Идти дальше', speaker: 'Марк', narration: 'В архиве темно.', dialogue: 'Я нашёл запись.' }])
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const title = await screen.findByRole('heading', { name: 'Эхо неона' })
+  const historyButton = screen.getByRole('button', { name: 'История диалогов' })
+  expect(title.parentElement).toContainElement(historyButton)
+
+  await userEvent.click(historyButton)
+  const dialog = await screen.findByRole('dialog', { name: 'История диалогов' })
+  expect(dialog).toHaveTextContent('Спросить о веере')
+  expect(dialog).toHaveTextContent('Веер хранит больше тайн, чем кажется.')
+  expect(dialog).toHaveTextContent('Аканэ')
+  expect(dialog).toHaveTextContent('Марк')
+  expect(dialog.textContent?.indexOf('Спросить о веере')).toBeLessThan(dialog.textContent?.indexOf('Идти дальше') ?? 0)
+  expect(dialog.querySelector('[data-speaker="player"]')).toHaveClass('bg-primary')
+  expect(dialog.querySelector('[data-speaker="character"]')).toHaveClass('bg-muted')
+})
+
+test('показывает пустое состояние переписки до первого хода', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  await userEvent.click(await screen.findByRole('button', { name: 'История диалогов' }))
+  expect(await screen.findByText('Диалогов пока нет.')).toBeInTheDocument()
+})
+
 test('не приписывает новой истории Аканэ и готовые варианты Эха неона', async () => {
   apiServer.session({ ...session, story: { ...session.story, slug: 'another-story', title: 'Другая история', premise: 'Новая завязка' }, characters: [] })
   render(<StoryPlayerPage sessionId="session-1" />)

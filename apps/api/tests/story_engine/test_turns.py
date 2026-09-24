@@ -88,6 +88,34 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
     assert json.loads(turns[0].raw_response)["visual_directive"]["emotion"] == "fan"
 
 
+def test_dialogue_history_follows_only_the_active_branch(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal(), proposal()]
+    first = post_turn(client, akane_session).json()
+    second = client.post(
+        f"/api/sessions/{akane_session.id}/turns",
+        json={"request_id": "turn-2", "expected_state_version": 2, "action": "Осмотреть след"},
+    ).json()
+
+    response = client.get(f"/api/sessions/{akane_session.id}/dialogue-history")
+    assert response.status_code == 200
+    assert [(turn["action"], turn["speaker"]) for turn in response.json()] == [
+        ("Спросить о веере", "Аканэ Куроха"),
+        ("Осмотреть след", "Аканэ Куроха"),
+    ]
+
+    rewind = client.post(
+        f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": second["state_version"]}
+    )
+    assert rewind.status_code == 200
+    active_history = client.get(f"/api/sessions/{akane_session.id}/dialogue-history").json()
+    assert [turn["id"] for turn in active_history] == [first["id"]]
+
+
+def test_dialogue_history_is_empty_for_new_session_and_missing_session_returns_404(client, akane_session):
+    assert client.get(f"/api/sessions/{akane_session.id}/dialogue-history").json() == []
+    assert client.get("/api/sessions/missing/dialogue-history").status_code == 404
+
+
 def test_mark_can_speak_with_his_own_outfit(client, fake_provider, akane_session):
     fake_provider.responses = [
         proposal(

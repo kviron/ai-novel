@@ -136,9 +136,12 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
         signal,
       })
     },
-    getSession(sessionId: string, signal?: AbortSignal) {
-      return request<StorySession>(`/api/sessions/${encodeURIComponent(sessionId)}`, { baseUrl, signal })
-    },
+      getSession(sessionId: string, signal?: AbortSignal) {
+        return request<StorySession>(`/api/sessions/${encodeURIComponent(sessionId)}`, { baseUrl, signal })
+      },
+      getDialogueHistory(sessionId: string, signal?: AbortSignal) {
+        return request<TurnResult[]>(`/api/sessions/${encodeURIComponent(sessionId)}/dialogue-history`, { baseUrl, signal })
+      },
     providers(signal?: AbortSignal) {
       return request<ProviderStatus[]>('/api/providers', { baseUrl, signal })
     },
