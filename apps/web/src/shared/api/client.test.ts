@@ -14,6 +14,15 @@ test('uses the configured base URL and forwards an abort signal', async () => {
   expect(fetchMock).toHaveBeenCalledWith('https://api.example.test/api/stories', expect.objectContaining({ signal }))
 })
 
+test('loads story detail using an encoded story id', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ characters: [] }), { headers: { 'Content-Type': 'application/json' } }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await createApiClient().getStory('a/b')
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/stories/a%2Fb', expect.any(Object))
+})
+
 test('converts typed API errors into structured request errors', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
     code: 'provider_unavailable',

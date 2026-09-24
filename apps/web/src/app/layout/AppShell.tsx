@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Clapperboard } from 'lucide-react'
+import { BookOpen, Clapperboard, Users } from 'lucide-react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 import { useSidebarPreference } from '@/app/model/sidebar-preference'
@@ -34,6 +34,11 @@ export function AppShell() {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith('/studio')} tooltip="Студия">
               <Link to={routes.studio}><Clapperboard /><span>Студия</span></Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === routes.characters} tooltip="Персонажи">
+              <Link to={routes.characters}><Users /><span>Персонажи</span></Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

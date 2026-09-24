@@ -4,6 +4,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { SidebarPreferenceProvider } from './model/sidebar-preference'
 import { AppShell } from './layout/AppShell'
 import { NovelLibraryPage } from '@/pages/novel-library'
+import { CharactersPage } from '@/pages/characters'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
 import { routes } from '@/shared/config'
@@ -17,6 +18,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'play/:sessionId', element: <StoryPlayerRoute /> },
       { path: 'studio', element: <StudioRoute /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
+      { path: 'characters', element: <CharactersPage /> },
     ],
   },
 ]

@@ -4,6 +4,7 @@ import type {
   ProviderStatus,
   StartSessionRequest,
   StorySession,
+  StoryDetail,
   StorySummary,
   TurnResult,
 } from './contracts'
@@ -87,6 +88,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   return {
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })
+    },
+    getStory(storyId: string, signal?: AbortSignal) {
+      return request<StoryDetail>(`/api/stories/${encodeURIComponent(storyId)}`, { baseUrl, signal })
     },
     startSession(storyId: string, body: StartSessionRequest, signal?: AbortSignal) {
       return request<StorySession>(`/api/stories/${encodeURIComponent(storyId)}/sessions`, {

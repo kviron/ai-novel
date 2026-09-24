@@ -26,6 +26,8 @@ type Provider = { provider_id: string; available: boolean; detail: string; model
 type StartSessionRequest = { provider_id: string; model_id?: string }
 
 let stories: Story[] = []
+let storyDetails = new Map<string, Story & { current_scene: string; characters: unknown[] }>()
+let failNextStoryList = false
 let nextSession: Session = { id: 'session-1', state_version: 1 }
 let sessions = new Map<string, Session>()
 let providerQueue: Provider[] = []
@@ -56,7 +58,18 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const method = input instanceof Request ? input.method : init?.method ?? 'GET'
   const { pathname } = new URL(url, 'http://api.test')
 
-  if (method === 'GET' && pathname === '/api/stories') return json(stories)
+  if (method === 'GET' && pathname === '/api/stories') {
+    if (failNextStoryList) {
+      failNextStoryList = false
+      return json({ code: 'temporarily_unavailable', detail: 'Недоступно', retryable: true }, 503)
+    }
+    return json(stories)
+  }
+  const storyMatch = pathname.match(/^\/api\/stories\/([^/]+)$/)
+  if (method === 'GET' && storyMatch) {
+    const story = storyDetails.get(decodeURIComponent(storyMatch[1]))
+    return story ? json(story) : json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
+  }
   if (method === 'GET' && pathname === '/api/providers') {
     lastProvider = providerQueue.shift() ?? lastProvider
     return json(lastProvider ? [lastProvider] : [])
@@ -101,6 +114,10 @@ export const apiServer = {
   listStories(value: Story[]) {
     stories = value
   },
+  storyDetail(id: string, value: Story & { current_scene: string; characters: unknown[] }) {
+    storyDetails.set(id, value)
+  },
+  failStoryListOnce() { failNextStoryList = true },
   startSession(value: Session) {
     nextSession = value
   },
@@ -123,6 +140,8 @@ export const apiServer = {
   },
   reset() {
     stories = []
+    storyDetails = new Map()
+    failNextStoryList = false
     nextSession = { id: 'session-1', state_version: 1 }
     sessions = new Map()
     providerQueue = []

@@ -7,6 +7,7 @@ export type {
   SessionTurn,
   StartSessionRequest,
   StorySession,
+  StoryDetail,
   StorySummary,
   TurnResult,
   VisualDirective,

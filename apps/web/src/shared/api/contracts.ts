@@ -17,6 +17,11 @@ export type Character = {
   visual_profile_version: number
 }
 
+export type StoryDetail = StorySummary & {
+  current_scene: string
+  characters: Character[]
+}
+
 export type VisualDirective = {
   mode: 'sprite_scene'
   character_id: string
