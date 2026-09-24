@@ -8,7 +8,7 @@ import { routes } from '@/shared/config'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/ui/dialog'
 import {
   Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu,
-  SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar,
 } from '@/shared/ui/sidebar'
 import { TooltipProvider } from '@/shared/ui/tooltip'
 
@@ -18,17 +18,27 @@ function isSessionPath(pathname: string): boolean {
 
 export function AppShell() {
   const { pathname } = useLocation()
-  const { showIconsWhenCollapsed } = useSidebarPreference()
   const [open, setOpen] = useState(() => !isSessionPath(pathname))
+
+  useEffect(() => { setOpen(!isSessionPath(pathname)) }, [pathname])
+
+  return <TooltipProvider><SidebarProvider open={open} onOpenChange={setOpen}>
+    <AppShellContent pathname={pathname} open={open} />
+  </SidebarProvider></TooltipProvider>
+}
+
+function AppShellContent({ pathname, open }: { pathname: string; open: boolean }) {
+  const { showIconsWhenCollapsed } = useSidebarPreference()
+  const { setOpenMobile } = useSidebar()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsTrigger = useRef<HTMLButtonElement>(null)
   const sessionView = isSessionPath(pathname)
 
-  useEffect(() => { setOpen(!isSessionPath(pathname)); setSettingsOpen(false) }, [pathname])
+  useEffect(() => { setOpenMobile(false); setSettingsOpen(false) }, [pathname, setOpenMobile])
 
-  return <TooltipProvider><SidebarProvider open={open} onOpenChange={setOpen}>
+  return <>
     <Sidebar collapsible={showIconsWhenCollapsed ? 'icon' : 'offcanvas'}>
-      <SidebarHeader className="p-4 text-sm font-semibold">МНЕМОЗИНА α</SidebarHeader>
+      <SidebarHeader className="p-4 text-sm font-semibold group-data-[collapsible=icon]:hidden">МНЕМОЗИНА α</SidebarHeader>
       <SidebarContent className="p-2">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -66,5 +76,5 @@ export function AppShell() {
         <SettingsContent />
       </DialogContent>
     </Dialog>
-  </SidebarProvider></TooltipProvider>
+  </>
 }

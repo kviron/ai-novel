@@ -14,7 +14,7 @@ test('игрок проходит один ход и восстанавлива�
   await expect(page.getByRole('img', { name: /Аканэ.*С веером/ })).toBeVisible()
   await page.getByRole('button', { name: 'Показать полностью' }).click()
   await expect(page.getByText(/Я ждала этого вопроса/)).toBeVisible()
-  await page.getByRole('link', { name: 'Студия' }).click()
+  await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   await expect(page.getByRole('complementary', { name: 'Инспектор сессии' }).getByText('v2')).toBeVisible()
   await expect(page.locator('[data-field="prompt-version"]')).toHaveText('first-playable-v1')
   await expect(page.locator('[data-field="last-action"]')).toHaveText('Спросить о веере')
