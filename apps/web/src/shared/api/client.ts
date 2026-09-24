@@ -2,12 +2,14 @@ import type {
   ApiError,
   CatalogCharacter,
   CharacterHistory,
+  CharacterWrite,
   CreateTurnRequest,
   ProviderStatus,
   SessionSummary,
   StartSessionRequest,
   StorySession,
   StoryDetail,
+  StoryCharacterLink,
   StorySummary,
   TurnResult,
 } from './contracts'
@@ -94,6 +96,18 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     getCharacter(characterId: string, signal?: AbortSignal) {
       return request<CharacterHistory>(`/api/characters/${encodeURIComponent(characterId)}`, { baseUrl, signal })
+    },
+    createCharacter(body: CharacterWrite) {
+      return request<CatalogCharacter>('/api/characters', { baseUrl, method: 'POST', body })
+    },
+    reviseCharacter(characterId: string, body: CharacterWrite) {
+      return request<CatalogCharacter>(`/api/characters/${encodeURIComponent(characterId)}/revisions`, { baseUrl, method: 'POST', body })
+    },
+    attachCharacter(storyId: string, characterId: string, revisionId: string) {
+      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters`, { baseUrl, method: 'POST', body: { character_id: characterId, revision_id: revisionId, role: 'cast' } })
+    },
+    pinCharacterRevision(storyId: string, characterId: string, revisionId: string) {
+      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'PUT', body: { revision_id: revisionId } })
     },
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })

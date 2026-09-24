@@ -76,6 +76,23 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     }
     return json(characters)
   }
+  if (method === 'POST' && pathname === '/api/characters') {
+    const body = await requestBody(input, init) as Record<string, unknown>
+    const created = { ...body, id: 'new-v1', character_id: 'new-character', current_revision_id: 'new-v1', revision_number: 1, source_type: 'local', created_at: new Date().toISOString() }
+    characters = [...characters, created]
+    characterDetails.set('new-character', { id: 'new-character', current_revision_id: 'new-v1', source_type: 'local', revisions: [{ ...body, id: 'new-v1', revision_number: 1, created_at: created.created_at }], linked_stories: [] })
+    return json(created, 201)
+  }
+  const revisionMatch = pathname.match(/^\/api\/characters\/([^/]+)\/revisions$/)
+  if (method === 'POST' && revisionMatch) {
+    const characterId = decodeURIComponent(revisionMatch[1])
+    const history = characterDetails.get(characterId) as { revisions: unknown[]; linked_stories: unknown[]; source_type: string } | undefined
+    if (!history) return json({ code: 'not_found', detail: 'Персонаж не найден.', retryable: false }, 404)
+    const body = await requestBody(input, init) as Record<string, unknown>
+    const revision = { ...body, id: `${characterId}-v${history.revisions.length + 1}`, revision_number: history.revisions.length + 1, created_at: new Date().toISOString() }
+    characterDetails.set(characterId, { ...history, id: characterId, current_revision_id: revision.id, revisions: [revision, ...history.revisions] })
+    return json({ ...revision, character_id: characterId, current_revision_id: revision.id, source_type: history.source_type }, 201)
+  }
   const characterMatch = pathname.match(/^\/api\/characters\/([^/]+)$/)
   if (method === 'GET' && characterMatch) {
     const detail = characterDetails.get(decodeURIComponent(characterMatch[1]))
@@ -111,6 +128,20 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (method === 'GET' && storyMatch) {
     const story = storyDetails.get(decodeURIComponent(storyMatch[1]))
     return story ? json(story) : json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
+  }
+  const castMatch = pathname.match(/^\/api\/stories\/([^/]+)\/characters(?:\/([^/]+))?$/)
+  if (castMatch && (method === 'POST' || method === 'PUT')) {
+    const storyId = decodeURIComponent(castMatch[1])
+    const story = storyDetails.get(storyId)
+    if (!story) return json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
+    const body = await requestBody(input, init) as { character_id?: string; revision_id: string; role?: string }
+    const characterId = castMatch[2] ? decodeURIComponent(castMatch[2]) : body.character_id ?? ''
+    const history = characterDetails.get(characterId) as { revisions: { id: string; revision_number: number; name: string }[]; linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number }[] } | undefined
+    const revision = history?.revisions.find((item) => item.id === body.revision_id)
+    if (!history || !revision) return json({ code: 'validation_error', detail: 'Ревизия не найдена.', retryable: false }, 422)
+    history.linked_stories = [...history.linked_stories.filter((link) => link.story_id !== storyId), { story_id: storyId, story_title: story.title, story_slug: story.slug, revision_id: revision.id, revision_number: revision.revision_number }]
+    story.characters = [...story.characters.filter((item) => (item as { id: string }).id !== characterId), { ...revision, id: characterId, visual_profile_version: revision.revision_number }]
+    return json({ story_id: storyId, character_id: characterId, revision_id: revision.id, role: body.role ?? 'cast' }, method === 'POST' ? 201 : 200)
   }
   if (method === 'GET' && pathname === '/api/providers') {
     lastProvider = providerQueue.shift() ?? lastProvider

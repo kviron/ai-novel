@@ -5,6 +5,8 @@ export type {
   CatalogCharacter,
   CharacterHistory,
   CharacterRevision,
+  CharacterWrite,
+  StoryCharacterLink,
   CreateTurnRequest,
   ProviderStatus,
   SessionTurn,

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -74,4 +74,16 @@ test('shows empty state and offers retry after a request failure', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить персонажей')
   await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
   expect(await screen.findByText('Персонажей пока нет.')).toBeInTheDocument()
+})
+
+test('creates a character from the catalog and opens its profile', async () => {
+  render(<TestRouter initialEntries={['/characters']} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Создать персонажа' }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Имя' }), 'Леон')
+  await userEvent.type(screen.getByRole('spinbutton', { name: 'Возраст' }), '2')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Характер' }), 'Решительный')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Внешность' }), 'Тёмные волосы')
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Создать персонажа' }))
+  expect(await screen.findByRole('heading', { name: 'Леон' })).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/characters' && options?.method === 'POST')).toBe(true)
 })

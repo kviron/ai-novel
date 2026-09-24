@@ -42,6 +42,10 @@ export type CharacterHistory = {
   linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number }[]
 }
 
+export type CharacterWrite = Pick<CharacterRevision, 'name' | 'gender' | 'age' | 'personality' | 'appearance' | 'biography' | 'speech' | 'role'>
+
+export type StoryCharacterLink = { story_id: string; character_id: string; revision_id: string; role: string }
+
 export type StoryDetail = StorySummary & {
   current_scene: string
   characters: Character[]

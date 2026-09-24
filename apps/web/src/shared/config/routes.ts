@@ -5,5 +5,6 @@ export const routes = {
   settings: '/settings',
   storyPlayer: (sessionId: string) => `/play/${encodeURIComponent(sessionId)}`,
   studio: '/studio',
+  studioStoryCharacters: (storyId: string) => `/studio/stories/${encodeURIComponent(storyId)}/characters`,
   studioSession: (sessionId: string) => `/studio/${encodeURIComponent(sessionId)}`,
 } as const

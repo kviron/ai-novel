@@ -83,3 +83,20 @@ test('preserves an AbortError so callers can suppress cancellation', async () =>
 
   await expect(createApiClient().listStories()).rejects.toBe(aborted)
 })
+
+test('writes character profiles and pins a selected revision using dedicated endpoints', async () => {
+  const fetchMock = vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
+  vi.stubGlobal('fetch', fetchMock)
+  const client = createApiClient()
+  const profile = { name: 'Марк', gender: 'male' as const, age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '', role: '' }
+
+  await client.createCharacter(profile)
+  await client.reviseCharacter('mark', profile)
+  await client.attachCharacter('story-1', 'mark', 'mark-v2')
+  await client.pinCharacterRevision('story-1', 'mark', 'mark-v1')
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/characters', expect.objectContaining({ method: 'POST', body: JSON.stringify(profile) }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/characters/mark/revisions', expect.objectContaining({ method: 'POST', body: JSON.stringify(profile) }))
+  expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/stories/story-1/characters', expect.objectContaining({ method: 'POST', body: JSON.stringify({ character_id: 'mark', revision_id: 'mark-v2', role: 'cast' }) }))
+  expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/stories/story-1/characters/mark', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ revision_id: 'mark-v1' }) }))
+})

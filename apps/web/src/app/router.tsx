@@ -8,6 +8,7 @@ import { CharacterDetailPage, CharactersPage } from '@/pages/characters'
 import { SettingsPage } from '@/pages/settings'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
+import { StoryCastPage } from '@/pages/story-cast'
 import { routes } from '@/shared/config'
 
 export const routeObjects: RouteObject[] = [
@@ -18,6 +19,7 @@ export const routeObjects: RouteObject[] = [
       { index: true, element: <NovelLibraryPage /> },
       { path: 'play/:sessionId', element: <StoryPlayerRoute /> },
       { path: 'studio', element: <StudioRoute /> },
+      { path: 'studio/stories/:storyId/characters', element: <StoryCastPage /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
       { path: 'characters', element: <CharactersPage /> },
       { path: 'characters/:characterId', element: <CharacterDetailPage /> },
