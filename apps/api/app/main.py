@@ -8,6 +8,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import install_exception_handlers
 from app.core.lifespan import create_lifespan, create_provider_registry
 from app.core.lifespan import router as health_router
+from app.modules.characters.router import router as characters_router
 from app.modules.providers.router import router as providers_router
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.router import router as stories_router
@@ -43,13 +44,14 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT"],
         allow_headers=["Content-Type"],
     )
     install_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(providers_router)
     app.include_router(stories_router)
+    app.include_router(characters_router)
     app.include_router(story_engine_router)
     return app
 

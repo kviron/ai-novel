@@ -29,7 +29,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
     if story_session.state_version != expected_version:
         raise StateConflictError
     story = stories.get_story_by_id(session, story_session.story_id)
-    characters = stories.list_characters(session, story_session.story_id)
+    characters = stories.list_session_characters(session, session_id)
     turns: list[Turn] = []
     turn_id = story_session.active_turn_id
     while turn_id is not None and len(turns) < 8:
@@ -46,7 +46,14 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,
         story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
-        characters=[character.model_dump() for character in characters],
+        characters=[{
+            "id": character.id,
+            "name": revision.name,
+            "gender": revision.gender,
+            "age": revision.age,
+            "personality": revision.personality,
+            "appearance": revision.appearance,
+        } for character, revision in characters],
         recent_turns=[_turn_result(session, turn).model_dump(mode="json") for turn in reversed(turns)],
     )
 
@@ -169,12 +176,12 @@ def _turn_result(session: Session, turn: Turn) -> TurnResult:
     directive = json.loads(turn.visual_directive)
     if turn.prompt_version == "legacy-v01" and "character_id" not in directive:
         story_session = session.get(StorySession, turn.session_id)
-        characters = stories.list_characters(session, story_session.story_id)
+        characters = stories.list_session_characters(session, story_session.id)
         if characters:
             # Historical visuals had no character identity. Choose the story's
             # first stable ID, never guess from mutable/nonunique speaker names.
             # This is a read-only compatibility view; leave saved history intact.
-            directive["character_id"] = characters[0].id
+            directive["character_id"] = characters[0][0].id
         else:
             # Very early databases permitted stories without character rows.
             # Keep those saved turns replayable with an explicit legacy sentinel.

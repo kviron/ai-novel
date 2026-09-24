@@ -26,7 +26,7 @@ class StorySummary(BaseModel):
 class CharacterDetail(BaseModel):
     id: str
     name: str
-    gender: Literal["female", "male", "unspecified"]
+    gender: str
     age: int
     personality: str
     appearance: str

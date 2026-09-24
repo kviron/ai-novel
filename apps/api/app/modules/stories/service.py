@@ -2,7 +2,7 @@ import json
 
 from sqlmodel import Session
 
-from app.db.models import Autosave, Character, Story, StorySession, Turn
+from app.db.models import Autosave, Character, CharacterRevision, Story, StorySession, Turn
 from app.modules.providers.model_selection import (
     UnsupportedModelError,
     available_models,
@@ -63,6 +63,7 @@ def start_story_session(
     )
     session.add(story_session)
     session.flush()
+    repository.pin_story_characters(session, story.id, story_session.id)
     if request.kind == "player":
         autosave = session.get(Autosave, story.id)
         if autosave is None:
@@ -121,15 +122,15 @@ def _story_summary(story: Story) -> StorySummary:
     )
 
 
-def _character_detail(character: Character) -> CharacterDetail:
+def _character_detail(character: Character, revision: CharacterRevision) -> CharacterDetail:
     return CharacterDetail(
         id=character.id,
-        name=character.name,
-        gender=character.gender,
-        age=character.age,
-        personality=character.personality,
-        appearance=character.appearance,
-        visual_profile_version=character.visual_profile_version,
+        name=revision.name,
+        gender=revision.gender,
+        age=revision.age,
+        personality=revision.personality,
+        appearance=revision.appearance,
+        visual_profile_version=revision.revision_number,
     )
 
 
@@ -137,7 +138,10 @@ def _story_detail(session: Session, story: Story) -> StoryDetail:
     return StoryDetail(
         **_story_summary(story).model_dump(),
         current_scene=story.current_scene,
-        characters=[_character_detail(character) for character in repository.list_characters(session, story.id)],
+        characters=[
+            _character_detail(character, revision)
+            for character, revision in repository.list_story_characters(session, story.id)
+        ],
     )
 
 
@@ -167,7 +171,10 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
     return SessionDetail(
         id=story_session.id,
         story=_story_summary(story),
-        characters=[_character_detail(character) for character in repository.list_characters(session, story.id)],
+        characters=[
+            _character_detail(character, revision)
+            for character, revision in repository.list_session_characters(session, story_session.id)
+        ],
         state_version=story_session.state_version,
         can_rewind=story_session.active_turn_id is not None and story_session.rewind_count < 10,
         current_scene=story_session.current_scene,
