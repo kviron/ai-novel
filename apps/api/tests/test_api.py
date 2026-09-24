@@ -31,7 +31,7 @@ def test_real_composition_root_exposes_health_providers_and_seeded_story(client,
             "provider_id": "ollama",
             "available": True,
             "detail": "available",
-            "models": [],
+            "models": ["qwen3:14b-q4_K_M"],
         }
     ]
     assert akane["recommended_model_id"] == "qwen3:14b-q4_K_M"
@@ -41,7 +41,7 @@ def test_real_composition_root_exposes_health_providers_and_seeded_story(client,
 
 def test_session_restores_through_a_fresh_application(tmp_path):
     database_path = tmp_path / "restart.db"
-    provider = FakeLLMProvider()
+    provider = FakeLLMProvider(models=["qwen3:14b-q4_K_M"])
     settings = Settings(database_path=database_path, provider_timeout_seconds=1)
 
     with TestClient(create_app(settings, ProviderRegistry([provider]))) as first_client:

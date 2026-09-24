@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { CornerUpLeft, List, LoaderCircle, Send } from 'lucide-react'
+import { CornerUpLeft, List, LoaderCircle, Send, Settings2 } from 'lucide-react'
 
 import { resolveStoryTheme } from '@/shared/config'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/shared/ui/drawer'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/shared/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/shared/ui/input-group'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select'
+import { Separator } from '@/shared/ui/separator'
 
 import { useStoryPlayer } from '../model/useStoryPlayer'
 import spriteSheet from './akane-sprite-sheet-v1.png'
@@ -20,6 +23,8 @@ const expressions: Record<string, { label: string; position: string }> = {
 
 export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlayer> }) {
   const [choicesOpen, setChoicesOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('')
   const session = player.session
   const turn = session?.latest_turn
   const isAkaneStory = session?.story.slug === 'akane-neon-echo'
@@ -27,7 +32,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const expression = expressions[emotion] ?? expressions.neutral
   const canRetry = player.phase === 'provider_unavailable' || player.reloadRequired || (!session && player.phase === 'error')
 
-  const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.checking
+  const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.phase === 'switching_model' || player.checking
   const choices = turn?.choices ?? (isAkaneStory ? ['Спросить о сигнале', 'Спросить о веере', 'Осмотреть комнату'] : [])
 
   return <section className="stage" aria-label="Игровая сцена" aria-busy={working}>
@@ -49,6 +54,26 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
+            <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) setSelectedModel(player.models.includes(session.model_id) ? session.model_id : '') }}>
+              <DialogTrigger asChild><Button type="button" variant="outline" size="icon-lg" aria-label="Настройки прохождения" title="Настройки прохождения" disabled={working}><Settings2 aria-hidden="true" /></Button></DialogTrigger>
+              <DialogContent style={resolveStoryTheme(session.story.slug).variables}>
+                <DialogHeader><DialogTitle>Настройки прохождения</DialogTitle><DialogDescription>Модель можно сменить между ходами без потери истории.</DialogDescription></DialogHeader>
+                <div className="flex flex-col gap-3">
+                  <FieldGroup><Field>
+                    <FieldLabel htmlFor="story-model">Модель Ollama</FieldLabel>
+                    <Select value={selectedModel} onValueChange={setSelectedModel} disabled={working || player.models.length === 0}>
+                      <SelectTrigger id="story-model" className="w-full"><SelectValue placeholder="Выберите установленную модель" /></SelectTrigger>
+                      <SelectContent><SelectGroup>{player.models.map((model) => <SelectItem key={model} value={model}>{model}</SelectItem>)}</SelectGroup></SelectContent>
+                    </Select>
+                    <FieldDescription>Сейчас: {session.model_id}{player.models.includes(session.model_id) ? '' : ' — не установлена'}</FieldDescription>
+                  </Field></FieldGroup>
+                  {player.models.length === 0 && <p className="text-muted-foreground">Ollama не сообщает об установленных моделях. Проверьте подключение.</p>}
+                  <Separator />
+                  <div className="flex flex-col gap-1"><p className="font-medium">Автосохранение</p><p className="text-muted-foreground">Прогресс сохраняется после каждого хода. Для возврата используйте стрелку рядом с полем действия.</p></div>
+                </div>
+                <DialogFooter><Button type="button" disabled={!selectedModel || selectedModel === session.model_id || working} onClick={() => void player.changeModel(selectedModel)}>Применить модель</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Button type="button" variant="outline" size="icon-lg" aria-label="Отменить ход" title="Отменить ход" disabled={!session.can_rewind || working || player.reloadRequired} onClick={() => void player.rewind()}><CornerUpLeft aria-hidden="true" /></Button>
             <FieldGroup><Field data-disabled={player.disabled}>
               <FieldLabel htmlFor="player-action" className="sr-only">Ваше действие</FieldLabel>

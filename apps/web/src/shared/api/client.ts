@@ -129,6 +129,14 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
         signal,
       })
     },
+    changeModel(sessionId: string, modelId: string, expectedStateVersion: number, signal?: AbortSignal) {
+      return request<StorySession>(`/api/sessions/${encodeURIComponent(sessionId)}/model`, {
+        baseUrl,
+        method: 'POST',
+        body: { model_id: modelId, expected_state_version: expectedStateVersion },
+        signal,
+      })
+    },
   }
 }
 

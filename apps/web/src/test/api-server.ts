@@ -41,6 +41,7 @@ let turns = new Map<string, unknown>()
 let lastStartRequest: StartSessionRequest | null = null
 let saves: Save[] = []
 let rewinds = new Map<string, Session>()
+let modelChanges = new Map<string, Session>()
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -134,6 +135,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const rewindMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/rewind$/)
   if (method === 'POST' && rewindMatch) return json(rewinds.get(rewindMatch[1]) ?? {}, 200)
 
+  const modelMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/model$/)
+  if (method === 'POST' && modelMatch) return json(modelChanges.get(modelMatch[1]) ?? {}, 200)
+
   return json({ code: 'not_found', detail: 'Запрошенный ресурс не найден.', retryable: false }, 404)
 }
 
@@ -167,6 +171,7 @@ export const apiServer = {
     turns.set(sessionId, value)
   },
   rewind(sessionId: string, value: Session) { rewinds.set(sessionId, value) },
+  modelSwitch(sessionId: string, value: Session) { modelChanges.set(sessionId, value) },
   lastStartSessionRequest() {
     return lastStartRequest
   },
@@ -183,6 +188,7 @@ export const apiServer = {
     lastStartRequest = null
     saves = []
     rewinds = new Map()
+    modelChanges = new Map()
     vi.mocked(fetch).mockReset()
     vi.mocked(fetch).mockImplementation(handler)
   },

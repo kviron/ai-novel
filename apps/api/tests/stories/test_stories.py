@@ -149,6 +149,65 @@ def test_each_story_start_creates_an_independent_initial_session(client):
     assert second.json()["state_version"] == 1
 
 
+def test_new_session_falls_back_to_an_installed_ollama_model(client, fake_provider):
+    fake_provider.models = ["gemma4-local:32k", "qwen38-local:32k"]
+    akane = akane_story(client)
+
+    response = client.post(f'/api/stories/{akane["id"]}/sessions', json={})
+
+    assert response.status_code == 201
+    assert response.json()["model_id"] == "gemma4-local:32k"
+
+
+def test_new_session_accepts_explicit_installed_model(client, fake_provider):
+    fake_provider.models = ["gemma4-local:32k", "qwen38-local:32k"]
+    akane = akane_story(client)
+
+    response = client.post(
+        f'/api/stories/{akane["id"]}/sessions', json={"model_id": "qwen38-local:32k"}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["model_id"] == "qwen38-local:32k"
+
+
+def test_switch_model_in_same_session_preserves_progress_and_rejects_stale_revision(client, fake_provider):
+    fake_provider.models = ["qwen3:14b-q4_K_M", "gemma4-local:32k"]
+    akane = akane_story(client)
+    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+
+    changed = client.post(
+        f'/api/sessions/{game["id"]}/model',
+        json={"model_id": "gemma4-local:32k", "expected_state_version": 1},
+    )
+    stale = client.post(
+        f'/api/sessions/{game["id"]}/model',
+        json={"model_id": "qwen3:14b-q4_K_M", "expected_state_version": 1},
+    )
+    restored = client.get(f'/api/sessions/{game["id"]}')
+
+    assert changed.status_code == 200
+    assert changed.json()["id"] == game["id"]
+    assert changed.json()["model_id"] == "gemma4-local:32k"
+    assert changed.json()["state_version"] == 2
+    assert stale.status_code == 409
+    assert restored.json()["model_id"] == "gemma4-local:32k"
+
+
+def test_switch_rejects_uninstalled_model_without_mutation(client, fake_provider):
+    fake_provider.models = ["qwen3:14b-q4_K_M"]
+    akane = akane_story(client)
+    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+
+    response = client.post(
+        f'/api/sessions/{game["id"]}/model',
+        json={"model_id": "missing:model", "expected_state_version": 1},
+    )
+
+    assert response.status_code == 422
+    assert client.get(f'/api/sessions/{game["id"]}').json()["state_version"] == 1
+
+
 def test_start_rejects_unknown_story_without_creating_a_session(client):
     before = session_count(client)
 

@@ -150,6 +150,21 @@ def rewind_turn(session: Session, session_id: str, expected_state_version: int) 
         game.updated_at = utc_timestamp()
 
 
+def change_model(session: Session, session_id: str, expected_state_version: int, model_id: str) -> None:
+    """Change the next-turn model atomically; older turns retain their recorded model."""
+    with session.begin():
+        session.execute(text("BEGIN IMMEDIATE"))
+        game = session.get(StorySession, session_id, populate_existing=True)
+        if game is None:
+            raise SessionNotFoundError
+        if game.state_version != expected_state_version:
+            raise StateConflictError
+        if game.model_id != model_id:
+            game.model_id = model_id
+            game.state_version += 1
+            game.updated_at = utc_timestamp()
+
+
 def _turn_result(session: Session, turn: Turn) -> TurnResult:
     directive = json.loads(turn.visual_directive)
     if turn.prompt_version == "legacy-v01" and "character_id" not in directive:

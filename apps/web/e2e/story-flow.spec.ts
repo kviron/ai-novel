@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test'
 
+test('смена модели в настройках сохраняет ту же сессию и используется следующим ходом', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await expect(page).toHaveURL(/\/play\/[^/]+$/)
+  const sessionId = page.url().split('/').at(-1)
+  await page.getByRole('button', { name: 'Настройки прохождения' }).click()
+  await page.getByRole('combobox', { name: 'Модель Ollama' }).click()
+  await page.getByRole('option', { name: 'gemma4-local:32k' }).click()
+  await page.getByRole('button', { name: 'Применить модель' }).click()
+  await expect(page.getByRole('dialog')).toContainText('Сейчас: gemma4-local:32k')
+  await page.keyboard.press('Escape')
+  await page.getByRole('textbox', { name: 'Ваше действие' }).fill('Осмотреть комнату')
+  const turnResponse = page.waitForResponse((response) => response.url().endsWith(`/api/sessions/${sessionId}/turns`))
+  await page.getByRole('button', { name: 'Отправить' }).click()
+  expect((await (await turnResponse).json()).model_id).toBe('gemma4-local:32k')
+  await expect(page.getByRole('button', { name: 'Отменить ход' })).toBeEnabled()
+  const response = await page.request.get(`/api/sessions/${sessionId}`)
+  expect(response.ok()).toBeTruthy()
+  expect((await response.json()).model_id).toBe('gemma4-local:32k')
+  await page.reload()
+  await page.getByRole('button', { name: 'Настройки прохождения' }).click()
+  await expect(page.getByRole('dialog')).toContainText('Сейчас: gemma4-local:32k')
+})
+
 test('игрок отменяет ход, выбирает другую ветку и восстанавливает её после перезагрузки', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Начать новую игру' }).click()

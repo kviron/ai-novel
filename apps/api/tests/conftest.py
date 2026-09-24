@@ -78,7 +78,7 @@ def create_v01_database_with_duplicate_turn_versions(database_path: Path) -> Non
 
 @pytest.fixture()
 def fake_provider():
-    return FakeLLMProvider()
+    return FakeLLMProvider(models=["qwen3:14b-q4_K_M"])
 
 
 @pytest.fixture()

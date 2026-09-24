@@ -173,6 +173,26 @@ test('provider_unavailable сохраняет действие до успешн
   await waitFor(() => expect(screen.getByRole('button', { name: 'Отправить' })).toBeEnabled())
 })
 
+test('позволяет сменить отсутствующую модель в той же сессии через настройки слева от поля', async () => {
+  apiServer.session({ ...session, model_id: 'missing:model' })
+  apiServer.providersAvailable(true, ['gemma4-local:32k'])
+  apiServer.modelSwitch('session-1', { ...session, model_id: 'gemma4-local:32k', state_version: 2 })
+  render(<StoryPlayerPage sessionId="session-1" />)
+
+  expect(await screen.findByText('Нейросеть недоступна')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Настройки прохождения' }))
+  expect(screen.getByRole('dialog', { name: 'Настройки прохождения' })).toBeInTheDocument()
+  expect(screen.getByText('Автосохранение')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('combobox', { name: 'Модель Ollama' }))
+  await userEvent.click(screen.getByRole('option', { name: 'gemma4-local:32k' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Применить модель' }))
+
+  await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Сейчас: gemma4-local:32k'))
+  await userEvent.keyboard('{Escape}')
+  expect(screen.getByRole('textbox')).toBeEnabled()
+  expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe('/api/sessions/session-1/model')
+})
+
 test.each([{ models: [] }, { models: ['other-model:latest'] }])('отсутствующая модель сессии блокирует управление: $models', async ({ models }) => {
   apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Подключено', models }])
   render(<StoryPlayerPage sessionId="session-1" />)

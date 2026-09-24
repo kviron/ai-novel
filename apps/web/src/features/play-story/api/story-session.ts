@@ -6,4 +6,5 @@ export const storySessionApi = {
   providers: api.providers,
   submit: api.createTurn,
   rewind: api.rewind,
+  changeModel: api.changeModel,
 }

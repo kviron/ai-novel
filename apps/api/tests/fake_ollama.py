@@ -15,7 +15,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/tags")
 def tags() -> dict:
-    return {"models": [{"name": "qwen3:14b-q4_K_M"}]}
+    return {"models": [{"name": "qwen3:14b-q4_K_M"}, {"name": "gemma4-local:32k"}]}
 
 
 @app.post("/api/chat")

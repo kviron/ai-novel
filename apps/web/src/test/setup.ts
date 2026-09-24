@@ -9,6 +9,7 @@ Object.defineProperty(window, 'ResizeObserver', { writable: true, value: ResizeO
 Element.prototype.setPointerCapture = () => undefined
 Element.prototype.releasePointerCapture = () => undefined
 Element.prototype.hasPointerCapture = () => false
+Element.prototype.scrollIntoView = () => undefined
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

@@ -2,7 +2,9 @@ import json
 
 from sqlmodel import Session
 
+from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.db.models import Autosave, Character, Story, StorySession, Turn
+from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.schemas import (
     CharacterDetail,
     SessionDetail,
@@ -29,6 +31,22 @@ class UnsupportedModelError(Exception):
     pass
 
 
+class NoAvailableModelError(Exception):
+    pass
+
+
+def available_models(registry: ProviderRegistry, provider_id: str) -> list[str]:
+    try:
+        models = registry.get(provider_id).list_models()
+    except KeyError as error:
+        raise UnsupportedModelError from error
+    except (ProviderUnavailableError, ProviderResponseError) as error:
+        raise NoAvailableModelError from error
+    if not models:
+        raise NoAvailableModelError
+    return models
+
+
 def list_stories(session: Session) -> list[StorySummary]:
     return [_story_summary(story) for story in repository.list_stories(session)]
 
@@ -43,10 +61,14 @@ def start_story_session(
     story_id: str,
     request: StartSessionRequest,
     configured_model_id: str,
+    registry: ProviderRegistry,
 ) -> SessionDetail:
     story = _require_story(session, story_id)
-    model_id = request.model_id or configured_model_id
-    if request.provider_id != story.recommended_provider_id or model_id != configured_model_id:
+    if request.provider_id != story.recommended_provider_id:
+        raise UnsupportedModelError
+    models = available_models(registry, request.provider_id)
+    model_id = request.model_id or (configured_model_id if configured_model_id in models else models[0])
+    if model_id not in models:
         raise UnsupportedModelError
 
     story_session = StorySession(

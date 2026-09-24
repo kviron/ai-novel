@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiRequestError, type CreateTurnRequest, type StorySession } from '@/shared/api'
 import { storySessionApi } from '../api/story-session'
 
-type Phase = 'loading' | 'ready' | 'submitting' | 'rewinding' | 'provider_unavailable' | 'error'
+type Phase = 'loading' | 'ready' | 'submitting' | 'rewinding' | 'switching_model' | 'provider_unavailable' | 'error'
 type PlayerState = {
   session: StorySession | null
   phase: Phase
@@ -10,8 +10,9 @@ type PlayerState = {
   error: string | null
   checking: boolean
   reloadRequired: boolean
+  models: string[]
 }
-const initial: PlayerState = { session: null, phase: 'loading', message: 'Восстанавливаем прохождение…', error: null, checking: false, reloadRequired: false }
+const initial: PlayerState = { session: null, phase: 'loading', message: 'Восстанавливаем прохождение…', error: null, checking: false, reloadRequired: false, models: [] }
 const isAbort = (cause: unknown) => typeof cause === 'object' && cause !== null && (cause as { name?: unknown }).name === 'AbortError'
 const errorText = (cause: unknown) => cause instanceof ApiRequestError ? cause.message : 'Не удалось продолжить историю. Повторите попытку.'
 
@@ -37,7 +38,7 @@ export function useStoryPlayer(sessionId: string) {
         const providers = await storySessionApi.providers(controller.signal)
         if (controller.signal.aborted) return
         const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available && provider.models.includes(session.model_id))
-        setState({ ...initial, session, phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
+        setState({ ...initial, session, models: providers.find((provider) => provider.provider_id === session.provider_id)?.models ?? [], phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
       } catch (cause) {
         if (!controller.signal.aborted && !isAbort(cause)) {
           setState((previous) => ({ ...previous, phase: previous.session ? 'provider_unavailable' : 'error', error: errorText(cause), message: previous.session ? 'Нейросеть недоступна' : 'Не удалось восстановить прохождение.' }))
@@ -61,7 +62,7 @@ export function useStoryPlayer(sessionId: string) {
       const providers = await storySessionApi.providers(controller.signal)
       if (controller.signal.aborted) return
       const available = providers.some((provider) => provider.provider_id === session.provider_id && provider.available && provider.models.includes(session.model_id))
-      setState({ session, checking: false, reloadRequired: false, error: null, phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
+      setState({ session, models: providers.find((provider) => provider.provider_id === session.provider_id)?.models ?? [], checking: false, reloadRequired: false, error: null, phase: available ? 'ready' : 'provider_unavailable', message: available ? 'Готово к следующему ходу.' : 'Нейросеть недоступна' })
     } catch (cause) {
       if (!controller.signal.aborted && !isAbort(cause)) setState((previous) => ({ ...previous, error: errorText(cause), message: 'Проверка не завершена. Повторите попытку.' }))
     } finally {
@@ -84,7 +85,7 @@ export function useStoryPlayer(sessionId: string) {
       if (controller.signal.aborted) return
       attempt.current = null
       setAction('')
-      setState({ session: { ...session, state_version: turn.state_version, can_rewind: true, latest_turn: turn, visual_state: turn.visual_directive }, phase: 'ready', message: 'Ход сохранён.', error: null, checking: false, reloadRequired: false })
+      setState({ session: { ...session, state_version: turn.state_version, can_rewind: true, latest_turn: turn, visual_state: turn.visual_directive }, models: state.models, phase: 'ready', message: 'Ход сохранён.', error: null, checking: false, reloadRequired: false })
     } catch (cause) {
       if (controller.signal.aborted) return
       if (isAbort(cause)) {
@@ -94,7 +95,7 @@ export function useStoryPlayer(sessionId: string) {
         setState((previous) => ({ ...previous, reloadRequired: true, message: 'Обновляем состояние прохождения…' }))
         try {
           const updated = await storySessionApi.load(sessionId, controller.signal)
-          if (!controller.signal.aborted) setState({ session: updated, phase: 'ready', message: 'Состояние обновлено. Повторите действие.', error: null, checking: false, reloadRequired: false })
+          if (!controller.signal.aborted) setState({ session: updated, models: state.models, phase: 'ready', message: 'Состояние обновлено. Повторите действие.', error: null, checking: false, reloadRequired: false })
         } catch (reloadError) {
           if (!controller.signal.aborted) setState((previous) => ({ ...previous, phase: 'error', error: isAbort(reloadError) ? null : errorText(reloadError), message: 'Перед следующим ходом нужно обновить прохождение.' }))
         }
@@ -118,7 +119,7 @@ export function useStoryPlayer(sessionId: string) {
       if (controller.signal.aborted) return
       attempt.current = null
       setAction('')
-      setState({ session: updated, phase: 'ready', message: 'Ход отменён. Можно выбрать другое действие.', error: null, checking: false, reloadRequired: false })
+      setState({ session: updated, models: state.models, phase: 'ready', message: 'Ход отменён. Можно выбрать другое действие.', error: null, checking: false, reloadRequired: false })
     } catch (cause) {
       if (controller.signal.aborted) return
       if (cause instanceof ApiRequestError && cause.status === 409) {
@@ -126,7 +127,7 @@ export function useStoryPlayer(sessionId: string) {
         setState((previous) => ({ ...previous, reloadRequired: true, message: 'Обновляем состояние прохождения…' }))
         try {
           const updated = await storySessionApi.load(sessionId, controller.signal)
-          if (!controller.signal.aborted) setState({ session: updated, phase: 'ready', message: 'Состояние обновлено.', error: null, checking: false, reloadRequired: false })
+          if (!controller.signal.aborted) setState({ session: updated, models: state.models, phase: 'ready', message: 'Состояние обновлено.', error: null, checking: false, reloadRequired: false })
         } catch (reloadError) {
           if (!controller.signal.aborted) setState((previous) => ({ ...previous, phase: 'error', error: isAbort(reloadError) ? null : errorText(reloadError), message: 'Перед следующим ходом нужно обновить прохождение.' }))
         }
@@ -140,5 +141,37 @@ export function useStoryPlayer(sessionId: string) {
     }
   }
 
-  return { ...state, action, setAction, submit, rewind, retry, rewinding: state.phase === 'rewinding', disabled: state.phase === 'loading' || state.phase === 'submitting' || state.phase === 'rewinding' || state.phase === 'provider_unavailable' || state.checking || state.reloadRequired || !state.session }
+  async function changeModel(modelId: string) {
+    const controller = lifetime.current
+    const session = state.session
+    if (!controller || controller.signal.aborted || !session || !state.models.includes(modelId) || busy.current || state.reloadRequired || modelId === session.model_id) return
+    busy.current = true
+    const previousPhase = state.phase
+    setState((previous) => ({ ...previous, phase: 'switching_model', error: null, message: 'Переключаем модель…' }))
+    try {
+      const updated = await storySessionApi.changeModel(sessionId, modelId, session.state_version, controller.signal)
+      if (controller.signal.aborted) return
+      attempt.current = null
+      setState((previous) => ({ ...previous, session: updated, phase: 'ready', message: `Модель ${updated.model_id} выбрана.`, error: null, reloadRequired: false }))
+    } catch (cause) {
+      if (controller.signal.aborted) return
+      if (cause instanceof ApiRequestError && cause.status === 409) {
+        attempt.current = null
+        try {
+          const updated = await storySessionApi.load(sessionId, controller.signal)
+          if (!controller.signal.aborted) setState((previous) => ({ ...previous, session: updated, phase: previous.models.includes(updated.model_id) ? 'ready' : 'provider_unavailable', error: null, message: 'Состояние обновлено. Выберите модель ещё раз.' }))
+        } catch (reloadError) {
+          if (!controller.signal.aborted) setState((previous) => ({ ...previous, phase: 'error', error: errorText(reloadError), reloadRequired: true, message: 'Обновите прохождение.' }))
+        }
+      } else if (!isAbort(cause)) {
+        setState((previous) => ({ ...previous, phase: previousPhase, error: errorText(cause), message: 'Модель не изменена.' }))
+      } else {
+        setState((previous) => ({ ...previous, phase: previousPhase }))
+      }
+    } finally {
+      if (!controller.signal.aborted) busy.current = false
+    }
+  }
+
+  return { ...state, action, setAction, submit, rewind, changeModel, retry, rewinding: state.phase === 'rewinding', disabled: state.phase === 'loading' || state.phase === 'submitting' || state.phase === 'rewinding' || state.phase === 'switching_model' || state.phase === 'provider_unavailable' || state.checking || state.reloadRequired || !state.session }
 }

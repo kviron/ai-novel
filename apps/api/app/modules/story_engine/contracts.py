@@ -17,6 +17,13 @@ class RewindRequest(BaseModel):
     expected_state_version: int = Field(ge=1)
 
 
+class ModelChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_state_version: int = Field(ge=1)
+    model_id: str = Field(min_length=1, max_length=160)
+
+
 class DialogueProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

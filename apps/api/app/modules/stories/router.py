@@ -6,9 +6,11 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
+from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail, SessionSummary, StartSessionRequest, StoryDetail, StorySummary
 
 from .service import (
+    NoAvailableModelError,
     SessionNotFoundError,
     StoryNotFoundError,
     UnsupportedModelError,
@@ -48,9 +50,10 @@ def create_story_session(
     payload: StartSessionRequest,
     session: SessionDep,
     settings: RuntimeSettingsDep,
+    registry: ProviderRegistryDep,
 ) -> SessionDetail:
     try:
-        return start_story_session(session, story_id, payload, settings.ollama_model)
+        return start_story_session(session, story_id, payload, settings.ollama_model, registry)
     except StoryNotFoundError as error:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
     except UnsupportedModelError as error:
@@ -58,6 +61,13 @@ def create_story_session(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
             "Выбранные провайдер или модель не поддерживаются.",
+        ) from error
+    except NoAvailableModelError as error:
+        raise ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "model_unavailable",
+            "Нет доступных моделей Ollama. Запустите Ollama или установите модель.",
+            retryable=True,
         ) from error
 
 

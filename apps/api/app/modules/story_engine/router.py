@@ -8,14 +8,41 @@ from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, Prov
 from app.db.engine import get_session
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail
-from app.modules.stories.service import SessionNotFoundError
+from app.modules.stories.service import NoAvailableModelError, SessionNotFoundError, UnsupportedModelError
 
-from .contracts import RewindRequest, TurnCreate, TurnResult
+from .contracts import ModelChangeRequest, RewindRequest, TurnCreate, TurnResult
 from .repository import RewindUnavailableError, StateConflictError
-from .service import TurnGenerationFailedError, create_turn, rewind_session
+from .service import TurnGenerationFailedError, change_session_model, create_turn, rewind_session
 
 router = APIRouter(prefix="/api/sessions", tags=["Story turns"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.post(
+    "/{session_id}/model",
+    response_model=SessionDetail,
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+def post_model_change(
+    session_id: str, payload: ModelChangeRequest, session: SessionDep, registry: ProviderRegistryDep
+) -> SessionDetail:
+    try:
+        return change_session_model(session, registry, session_id, payload.model_id, payload.expected_state_version)
+    except SessionNotFoundError:
+        raise ApiError(404, "not_found", "Игровая сессия не найдена.") from None
+    except StateConflictError:
+        raise ApiError(409, "state_conflict", "Состояние игры изменилось. Обновите сессию.", retryable=True) from None
+    except UnsupportedModelError:
+        raise ApiError(422, "validation_error", "Выберите установленную модель Ollama.") from None
+    except NoAvailableModelError:
+        raise ApiError(
+            503, "model_unavailable", "Модели Ollama недоступны. Повторите проверку.", retryable=True
+        ) from None
 
 
 @router.post(
