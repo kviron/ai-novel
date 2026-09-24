@@ -83,6 +83,9 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     characterDetails.set('new-character', { id: 'new-character', current_revision_id: 'new-v1', source_type: 'local', revisions: [{ ...body, id: 'new-v1', revision_number: 1, created_at: created.created_at }], linked_stories: [] })
     return json(created, 201)
   }
+  if (method === 'POST' && pathname === '/api/characters/generate-field') {
+    return json({ text: 'Любит дождь и исследует ночной город.' })
+  }
   const revisionMatch = pathname.match(/^\/api\/characters\/([^/]+)\/revisions$/)
   if (method === 'POST' && revisionMatch) {
     const characterId = decodeURIComponent(revisionMatch[1])

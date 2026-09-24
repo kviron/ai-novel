@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 
-from .contracts import ProviderStatus, TurnGenerationRequest, TurnProposal
+from .contracts import ProviderStatus, TextGenerationRequest, TextProposal, TurnGenerationRequest, TurnProposal
 
 
 class OllamaProvider:
@@ -85,6 +85,26 @@ class OllamaProvider:
         except (ValidationError, ValueError):
             invalid_response = ProviderResponseError(raw_response=response.text)
         raise invalid_response
+
+    def generate_text(self, request: TextGenerationRequest) -> TextProposal:
+        response = self._request(
+            "POST",
+            "/api/chat",
+            model_id=request.model_id,
+            json={
+                "model": request.model_id,
+                "messages": [
+                    {"role": "system", "content": request.system_prompt},
+                    {"role": "user", "content": request.user_prompt},
+                ],
+                "stream": False,
+                "format": TextProposal.model_json_schema(),
+            },
+        )
+        try:
+            return TextProposal.model_validate_json(response.json()["message"]["content"])
+        except (KeyError, TypeError, ValueError, ValidationError) as error:
+            raise ProviderResponseError(raw_response=response.text) from error
 
     def _request(
         self,

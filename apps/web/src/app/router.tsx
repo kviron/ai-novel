@@ -4,7 +4,7 @@ import { createBrowserRouter, Navigate, useParams } from 'react-router-dom'
 import { SidebarPreferenceProvider } from '@/shared/config'
 import { AppShell } from './layout/AppShell'
 import { NovelLibraryPage } from '@/pages/novel-library'
-import { CharacterDetailPage, CharactersPage } from '@/pages/characters'
+import { CharacterDetailPage, CharacterEditorPage, CharactersPage } from '@/pages/characters'
 import { SettingsPage } from '@/pages/settings'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
@@ -22,6 +22,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'studio/stories/:storyId/characters', element: <StoryCastPage /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
       { path: 'characters', element: <CharactersPage /> },
+      { path: 'characters/new', element: <CharacterEditorPage /> },
+      { path: 'characters/:characterId/edit', element: <CharacterEditorPage /> },
       { path: 'characters/:characterId', element: <CharacterDetailPage /> },
       { path: 'characters/:storyId/:characterId', element: <LegacyCharacterRedirect /> },
       { path: 'settings', element: <SettingsPage /> },

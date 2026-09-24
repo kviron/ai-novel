@@ -8,7 +8,6 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card'
 import { CharacterArtwork } from './CharacterArtwork'
-import { CharacterEditor } from './CharacterEditor'
 
 function appearanceDetails(value: string): { label: string; value: string }[] {
   try {
@@ -33,7 +32,6 @@ export function CharacterDetailPage() {
   const { characterId } = useParams()
   const [history, setHistory] = useState<CharacterHistory | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading')
-  const [editorOpen, setEditorOpen] = useState(false)
 
   useEffect(() => {
     if (!characterId) { setStatus('missing'); return }
@@ -58,8 +56,7 @@ export function CharacterDetailPage() {
     {status === 'ready' && history && current && <div className="grid gap-6 md:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.2fr)]">
       <CharacterArtwork characterId={history.id} name={current.name} className="h-[360px] rounded-xl ring-1 ring-border sm:h-[480px] md:h-[min(70vh,650px)]" />
       <div className="flex flex-col gap-5">
-        <header className="flex flex-col gap-2"><p className="text-sm text-muted-foreground">Ревизия {current.revision_number} · {history.source_type === 'builtin' ? 'Встроенный персонаж' : 'Локальный персонаж'}</p><h1 className="text-3xl font-semibold tracking-tight">{current.name}</h1><Badge variant="secondary" className="w-fit">{current.age} лет</Badge><Button className="w-fit" variant="outline" onClick={() => setEditorOpen(true)}>Создать новую ревизию</Button></header>
-        {editorOpen && characterId && <CharacterEditor key={current.id} open={editorOpen} onOpenChange={setEditorOpen} initial={current} onSave={async (profile) => { await api.reviseCharacter(characterId, profile); setHistory(await api.getCharacter(characterId)) }} />}
+        <header className="flex flex-col gap-2"><p className="text-sm text-muted-foreground">Ревизия {current.revision_number} · {history.source_type === 'builtin' ? 'Встроенный персонаж' : 'Локальный персонаж'}</p><h1 className="text-3xl font-semibold tracking-tight">{current.name}</h1><Badge variant="secondary" className="w-fit">{current.age} лет</Badge><Button asChild className="w-fit" variant="outline"><Link to={routes.characterEdit(history.id)}>Создать новую ревизию</Link></Button></header>
         <Card><CardHeader><CardTitle>Характер</CardTitle></CardHeader><CardContent className="text-sm leading-relaxed">{current.personality}</CardContent></Card>
         {appearanceDetails(current.appearance).length > 0 && <Card><CardHeader><CardTitle>Внешность</CardTitle></CardHeader><CardContent><dl className="grid gap-4 text-sm">{appearanceDetails(current.appearance).map(({ label, value }, index) => <div key={`${label}:${index}`}><dt className="mb-1 text-muted-foreground">{label}</dt><dd>{value}</dd></div>)}</dl></CardContent></Card>}
         {current.biography && <Card><CardHeader><CardTitle>История</CardTitle></CardHeader><CardContent className="text-sm leading-relaxed">{current.biography}</CardContent></Card>}

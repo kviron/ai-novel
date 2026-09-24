@@ -44,6 +44,8 @@ export type CharacterHistory = {
 
 export type CharacterWrite = Pick<CharacterRevision, 'name' | 'gender' | 'age' | 'personality' | 'appearance' | 'biography' | 'speech' | 'role'>
 
+export type CharacterTextField = 'personality' | 'appearance' | 'biography' | 'speech' | 'role'
+
 export type StoryCharacterLink = { story_id: string; character_id: string; revision_id: string; role: string }
 
 export type StoryDetail = StorySummary & {

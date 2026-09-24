@@ -20,7 +20,15 @@ def tags() -> dict:
 
 @app.post("/api/chat")
 def chat(request: ChatRequest) -> dict:
-    action = json.loads(request.messages[-1]["content"])["action"]
+    draft = json.loads(request.messages[-1]["content"])
+    if "field" in draft:
+        previous = draft["existing_text_to_preserve_and_expand"]
+        text = f"{previous} — подробная черта героя для сцен." if previous else "Подробная черта героя для сцен."
+        return {
+            "message": {"role": "assistant", "content": json.dumps({"text": text}, ensure_ascii=False)},
+            "done": True,
+        }
+    action = draft["action"]
     proposal = {
         "narration": "Аканэ раскрыла веер и взглянула на неон за окном.",
         "dialogue": {"character_id": "akane", "text": f"Я ждала этого вопроса. {action}"},

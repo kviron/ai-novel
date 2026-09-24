@@ -3,6 +3,7 @@ import type {
   CatalogCharacter,
   CharacterHistory,
   CharacterWrite,
+  CharacterTextField,
   CreateTurnRequest,
   ProviderStatus,
   SessionSummary,
@@ -102,6 +103,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     reviseCharacter(characterId: string, body: CharacterWrite) {
       return request<CatalogCharacter>(`/api/characters/${encodeURIComponent(characterId)}/revisions`, { baseUrl, method: 'POST', body })
+    },
+    generateCharacterField(field: CharacterTextField, draft: CharacterWrite) {
+      return request<{ text: string }>('/api/characters/generate-field', { baseUrl, method: 'POST', body: { field, draft } })
     },
     attachCharacter(storyId: string, characterId: string, revisionId: string) {
       return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters`, { baseUrl, method: 'POST', body: { character_id: characterId, revision_id: revisionId, role: 'cast' } })

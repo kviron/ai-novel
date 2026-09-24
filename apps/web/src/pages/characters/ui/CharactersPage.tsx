@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { api, type CatalogCharacter } from '@/shared/api'
 import { routes } from '@/shared/config'
@@ -8,14 +8,11 @@ import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
 import { ToggleGroup, ToggleGroupItem } from '@/shared/ui/toggle-group'
 import { CharacterArtwork } from './CharacterArtwork'
-import { CharacterEditor } from './CharacterEditor'
 
 type LoadState = { characters: CatalogCharacter[]; loading: boolean; error: string | null }
 type GenderFilter = 'all' | 'female' | 'male'
 
 export function CharactersPage() {
-  const navigate = useNavigate()
-  const [editorOpen, setEditorOpen] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [genderFilter, setGenderFilter] = useState<GenderFilter>('all')
   const [state, setState] = useState<LoadState>({ characters: [], loading: true, error: null })
@@ -38,8 +35,7 @@ export function CharactersPage() {
   const visibleCharacters = state.characters.filter((character) => genderFilter === 'all' || character.gender === genderFilter)
 
   return <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 pb-6 pt-16">
-    <header className="flex items-end justify-between gap-3"><div><p className="text-sm text-muted-foreground">Глобальный каталог</p><h1 className="text-2xl font-semibold tracking-tight">Персонажи</h1></div><Button onClick={() => setEditorOpen(true)}>Создать персонажа</Button></header>
-    {editorOpen && <CharacterEditor open={editorOpen} onOpenChange={setEditorOpen} onSave={async (profile) => { const created = await api.createCharacter(profile); navigate(routes.characterDetail(created.character_id)) }} />}
+    <header className="flex items-end justify-between gap-3"><div><p className="text-sm text-muted-foreground">Глобальный каталог</p><h1 className="text-2xl font-semibold tracking-tight">Персонажи</h1></div><Button asChild><Link to={routes.characterNew}>Создать персонажа</Link></Button></header>
     <ToggleGroup type="single" variant="outline" size="sm" value={genderFilter} onValueChange={(value) => { if (value) setGenderFilter(value as GenderFilter) }} aria-label="Фильтр по полу">
       <ToggleGroupItem value="all">Все</ToggleGroupItem>
       <ToggleGroupItem value="female">Женщины</ToggleGroupItem>

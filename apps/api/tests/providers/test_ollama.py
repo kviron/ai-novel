@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
-from app.modules.providers.contracts import TurnGenerationRequest
+from app.modules.providers.contracts import TextGenerationRequest, TurnGenerationRequest
 from app.modules.providers.ollama import OllamaProvider
 from app.modules.providers.router import get_provider_registry, router
 from app.modules.providers.service import ProviderRegistry
@@ -70,6 +70,20 @@ def test_ollama_sends_schema_and_parses_turn():
     proposal = provider.generate_turn(turn_request())
 
     assert proposal.dialogue.character_id == "akane"
+
+
+def test_ollama_generates_structured_character_text():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["format"]["properties"]["text"]["type"] == "string"
+        assert body["messages"][1]["content"] == "Описание героя"
+        return httpx.Response(200, json={"message": {"content": '{"text":"Герой наблюдателен."}'}})
+
+    provider = OllamaProvider("http://ollama.test", 5, httpx.Client(transport=httpx.MockTransport(handler)))
+    result = provider.generate_text(
+        TextGenerationRequest(model_id="qwen3:14b-q4_K_M", system_prompt="Редактируй", user_prompt="Описание героя")
+    )
+    assert result.text == "Герой наблюдателен."
 
 
 def test_generation_uses_the_configured_120_second_timeout(monkeypatch):

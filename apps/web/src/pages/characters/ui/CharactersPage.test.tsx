@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -76,14 +76,28 @@ test('shows empty state and offers retry after a request failure', async () => {
   expect(await screen.findByText('Персонажей пока нет.')).toBeInTheDocument()
 })
 
-test('creates a character from the catalog and opens its profile', async () => {
+test('opens a full-page character editor from the catalog', async () => {
   render(<TestRouter initialEntries={['/characters']} />)
-  await userEvent.click(await screen.findByRole('button', { name: 'Создать персонажа' }))
+  await userEvent.click(await screen.findByRole('link', { name: 'Создать персонажа' }))
+  expect(await screen.findByRole('heading', { name: 'Новый персонаж' })).toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Внешность и образ' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Сгенерировать характер' })).toBeInTheDocument()
   await userEvent.type(screen.getByRole('textbox', { name: 'Имя' }), 'Леон')
   await userEvent.type(screen.getByRole('spinbutton', { name: 'Возраст' }), '2')
   await userEvent.type(screen.getByRole('textbox', { name: 'Характер' }), 'Решительный')
   await userEvent.type(screen.getByRole('textbox', { name: 'Внешность' }), 'Тёмные волосы')
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Создать персонажа' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Создать персонажа' }))
   expect(await screen.findByRole('heading', { name: 'Леон' })).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/characters' && options?.method === 'POST')).toBe(true)
+})
+
+test('generates one field using the unsaved draft and leaves it editable', async () => {
+  render(<TestRouter initialEntries={['/characters/new']} />)
+  await userEvent.type(await screen.findByRole('textbox', { name: 'Имя' }), 'Леон')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Характер' }), 'Любит дождь')
+  await userEvent.click(screen.getByRole('button', { name: 'Сгенерировать характер' }))
+  expect(await screen.findByRole('textbox', { name: 'Характер' })).toHaveValue('Любит дождь и исследует ночной город.')
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/characters/generate-field')
+  expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ field: 'personality', draft: { name: 'Леон', personality: 'Любит дождь' } })
 })

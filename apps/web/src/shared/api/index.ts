@@ -6,6 +6,7 @@ export type {
   CharacterHistory,
   CharacterRevision,
   CharacterWrite,
+  CharacterTextField,
   StoryCharacterLink,
   CreateTurnRequest,
   ProviderStatus,

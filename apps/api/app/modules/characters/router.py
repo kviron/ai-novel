@@ -3,14 +3,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
-from app.core.errors import ApiError, ErrorResponse
+from app.core.config import RuntimeSettingsDep
+from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
+from app.modules.providers.model_selection import NoAvailableModelError
+from app.modules.providers.router import ProviderRegistryDep
 
+from .field_generation import generate_character_field
 from .schemas import (
     AttachCharacterRequest,
     CharacterHistory,
     CharacterProfile,
     CharacterWrite,
+    GenerateCharacterFieldRequest,
+    GeneratedCharacterField,
     PinRevisionRequest,
     StoryCharacterProfile,
 )
@@ -34,6 +40,18 @@ SessionDep = Annotated[Session, Depends(get_session)]
 @router.get("/characters", response_model=list[CharacterProfile])
 def read_characters(session: SessionDep) -> list[CharacterProfile]:
     return list_characters(session)
+
+
+@router.post("/characters/generate-field", response_model=GeneratedCharacterField)
+def generate_field(
+    payload: GenerateCharacterFieldRequest, settings: RuntimeSettingsDep, registry: ProviderRegistryDep
+) -> GeneratedCharacterField:
+    try:
+        return generate_character_field(payload, registry, settings.ollama_model)
+    except (NoAvailableModelError, ProviderUnavailableError, ProviderResponseError) as error:
+        raise ApiError(
+            503, "provider_unavailable", "Нейросеть недоступна. Проверьте Ollama и повторите.", retryable=True
+        ) from error
 
 
 @router.get("/characters/{character_id}", response_model=CharacterHistory, responses={404: {"model": ErrorResponse}})

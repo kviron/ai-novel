@@ -74,6 +74,20 @@ class TurnGenerationRequest(BaseModel):
         return _mutable_json_copy(value)
 
 
+class TextGenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_id: str
+    system_prompt: str
+    user_prompt: str
+
+
+class TextProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=6000)
+
+
 class LLMProvider(Protocol):
     provider_id: str
 
@@ -82,6 +96,8 @@ class LLMProvider(Protocol):
     def list_models(self) -> list[str]: ...
 
     def generate_turn(self, request: TurnGenerationRequest) -> TurnProposal: ...
+
+    def generate_text(self, request: TextGenerationRequest) -> TextProposal: ...
 
 
 def _freeze_json(value: Any) -> Any:
