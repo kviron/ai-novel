@@ -1,7 +1,7 @@
 import json
 
 from app.modules.providers.contracts import TurnGenerationRequest
-from app.modules.stories.seed import AKANE_EMOTIONS
+from app.modules.stories.content import AKANE_EMOTIONS
 
 from .contracts import TurnCreate, TurnProposal
 from .rules import GenerationContext
@@ -20,7 +20,11 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "Запрещено придумывать неизвестные IDs персонажей, поз и костюмов. "
             "Используй character_id только из фактов выше. "
             f"Допустимые эмоции: {', '.join(AKANE_EMOTIONS)}. "
-            "Допустимые pose: default, fan_open; outfit: red_dress; mode: sprite_scene. "
+            "Для Аканэ используй pose: default или fan_open, outfit: red_dress. "
+            "Для Марка используй pose: default, outfit: dark_coat; emotion: neutral, happy, sad, angry или surprised. "
+            "mode: sprite_scene. "
+            "Для visual_directive.background выбирай neon_crossroads для улицы или signal_archive для архива сигнала. "
+            "Меняй фон только когда повествование действительно перемещается в эту локацию. "
             "Предложи 2–4 содержательных, непустых и разных выбора. "
             "proposed_effects должен быть пустым: изменения канона в этой истории не разрешены. "
             "Верни только JSON по переданной схеме."

@@ -26,6 +26,7 @@ class StorySummary(BaseModel):
 class CharacterDetail(BaseModel):
     id: str
     name: str
+    gender: Literal["female", "male", "unspecified"]
     age: int
     personality: str
     appearance: str
@@ -41,6 +42,7 @@ class VisualState(BaseModel):
     emotion: str = "neutral"
     pose: str = "default"
     outfit: str = "red_dress"
+    background: str = "neon_crossroads"
 
 
 class TurnDetail(BaseModel):

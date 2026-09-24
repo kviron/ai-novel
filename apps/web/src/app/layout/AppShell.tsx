@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Clapperboard, Settings, Users } from 'lucide-react'
+import { BookOpen, Clapperboard, EyeOff, Settings, Users } from 'lucide-react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 import { useSidebarPreference } from '@/shared/config'
 import { SettingsContent } from '@/pages/settings'
 import { routes } from '@/shared/config'
+import { Button } from '@/shared/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/ui/dialog'
 import {
   Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu,
@@ -19,15 +20,22 @@ function isSessionPath(pathname: string): boolean {
 export function AppShell() {
   const { pathname } = useLocation()
   const [open, setOpen] = useState(() => !isSessionPath(pathname))
+  const [cinematic, setCinematic] = useState(false)
 
   useEffect(() => { setOpen(!isSessionPath(pathname)) }, [pathname])
+  useEffect(() => { setCinematic(false) }, [pathname])
 
-  return <TooltipProvider><SidebarProvider open={open} onOpenChange={setOpen}>
-    <AppShellContent pathname={pathname} open={open} />
+  return <TooltipProvider><SidebarProvider open={open} onOpenChange={setOpen} data-cinematic={cinematic ? 'true' : undefined}>
+    <AppShellContent pathname={pathname} open={open} cinematic={cinematic} setCinematic={setCinematic} />
   </SidebarProvider></TooltipProvider>
 }
 
-function AppShellContent({ pathname, open }: { pathname: string; open: boolean }) {
+function AppShellContent({ pathname, open, cinematic, setCinematic }: {
+  pathname: string
+  open: boolean
+  cinematic: boolean
+  setCinematic: (value: boolean) => void
+}) {
   const { showIconsWhenCollapsed } = useSidebarPreference()
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -35,6 +43,20 @@ function AppShellContent({ pathname, open }: { pathname: string; open: boolean }
   const sessionView = isSessionPath(pathname)
 
   useEffect(() => { setOpenMobile(false); setSettingsOpen(false) }, [pathname, setOpenMobile])
+  useEffect(() => {
+    if (!cinematic) return
+    const revealOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCinematic(false)
+    }
+    window.addEventListener('keydown', revealOnEscape)
+    return () => window.removeEventListener('keydown', revealOnEscape)
+  }, [cinematic, setCinematic])
+
+  function hideInterface() {
+    setOpenMobile(false)
+    setSettingsOpen(false)
+    setCinematic(true)
+  }
 
   return <>
     <Sidebar collapsible={showIconsWhenCollapsed ? 'icon' : 'offcanvas'}>
@@ -68,7 +90,9 @@ function AppShellContent({ pathname, open }: { pathname: string; open: boolean }
     </Sidebar>
     <SidebarInset className="min-w-0">
       <div className="app-shell-trigger"><SidebarTrigger aria-label={(isMobile ? openMobile : open) ? 'Свернуть навигацию' : 'Открыть навигацию'} /></div>
+      {sessionView && <div className="cinematic-control"><Button variant="ghost" size="icon-sm" aria-label="Скрыть интерфейс" title="Скрыть интерфейс" onClick={hideInterface}><EyeOff aria-hidden="true" /></Button></div>}
       <Outlet />
+      {sessionView && cinematic && <button type="button" className="cinematic-reveal" aria-label="Показать интерфейс" onClick={() => setCinematic(false)} />}
     </SidebarInset>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" onCloseAutoFocus={(event) => { event.preventDefault(); settingsTrigger.current?.focus() }}>

@@ -6,14 +6,13 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
+from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail, SessionSummary, StartSessionRequest, StoryDetail, StorySummary
 
 from .service import (
-    NoAvailableModelError,
     SessionNotFoundError,
     StoryNotFoundError,
-    UnsupportedModelError,
     get_session_detail,
     get_story,
     list_autosaves,

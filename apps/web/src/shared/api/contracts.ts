@@ -13,6 +13,7 @@ export type StorySummary = {
 export type Character = {
   id: string
   name: string
+  gender: 'female' | 'male' | 'unspecified'
   age: number
   personality: string
   appearance: string
@@ -30,6 +31,7 @@ export type VisualDirective = {
   emotion: string
   pose: string
   outfit: string
+  background: string
 }
 
 export type TurnResult = {
@@ -71,7 +73,7 @@ export type StorySession = {
   provider_id: string
   model_id: string
   latest_turn: SessionTurn | null
-  visual_state: { emotion: string; pose: string; outfit: string }
+  visual_state: { emotion: string; pose: string; outfit: string; background: string }
 }
 
 export type SessionSummary = {

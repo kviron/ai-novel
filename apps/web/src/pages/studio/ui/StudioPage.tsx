@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { PanelRight } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { StoryScene, useStoryPlayer } from '@/features/play-story'
@@ -10,6 +11,7 @@ import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card'
 import { Field, FieldLabel } from '@/shared/ui/field'
 import { Input } from '@/shared/ui/input'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/shared/ui/sheet'
 
 function StudioEntry() {
   const navigate = useNavigate()
@@ -58,7 +60,7 @@ function StudioEntry() {
   </div>
 }
 
-function Inspector({ session, phase }: { session: StorySession | null; phase: ReturnType<typeof useStoryPlayer>['phase'] }) {
+function Inspector({ session, phase, inSheet = false }: { session: StorySession | null; phase: ReturnType<typeof useStoryPlayer>['phase']; inSheet?: boolean }) {
   const [copied, setCopied] = useState(false)
   async function copyId() {
     if (!session) return
@@ -69,16 +71,32 @@ function Inspector({ session, phase }: { session: StorySession | null; phase: Re
       setCopied(false)
     }
   }
-  return <aside className="studio-inspector" aria-label="Инспектор сессии"><Card><CardHeader><CardTitle>Состояние сессии</CardTitle><CardDescription>Только подтверждённые сервером данные</CardDescription></CardHeader><CardContent className="inspector-fields">
+  return <aside className={inSheet ? 'studio-inspector studio-inspector-sheet' : 'studio-inspector'} aria-label="Инспектор сессии"><Card><CardHeader><CardTitle>Состояние сессии</CardTitle><CardDescription>Только подтверждённые сервером данные</CardDescription></CardHeader><CardContent className="inspector-fields">
     <div><span>Статус</span><Badge variant={phase === 'error' || phase === 'provider_unavailable' ? 'destructive' : phase === 'submitting' || phase === 'loading' ? 'secondary' : 'outline'}>{phase === 'submitting' ? 'Генерация' : phase === 'loading' ? 'Загрузка' : phase === 'provider_unavailable' ? 'Провайдер недоступен' : phase === 'error' ? 'Ошибка' : 'Готово'}</Badge></div>
-    {session ? <><div><span>История</span><strong>{session.story.title}</strong></div><div><span>Сцена</span><strong>{session.current_scene}</strong></div><div><span>Версия состояния</span><strong>v{session.state_version}</strong></div><div><span>Провайдер</span><strong>{session.provider_id}</strong></div><div><span>Модель</span><strong>{session.model_id}</strong></div><div><span>Промпт</span><strong data-field="prompt-version">{session.latest_turn?.prompt_version ?? '—'}</strong></div><div><span>Визуальное состояние</span><strong>{session.visual_state.emotion} · {session.visual_state.pose} · {session.visual_state.outfit}</strong></div><div><span>Последнее действие</span><strong data-field="last-action">{session.latest_turn?.action ?? 'Ходов пока нет'}</strong></div><div><span>ID сессии</span><code>{session.id}</code><Button size="sm" variant="ghost" onClick={() => void copyId()}>{copied ? 'Скопировано' : 'Копировать ID'}</Button></div></> : <p className="muted-copy">Загружаем состояние…</p>}
+    {session ? <><div><span>История</span><strong>{session.story.title}</strong></div><div><span>Сцена</span><strong>{session.current_scene}</strong></div><div><span>Версия состояния</span><strong>v{session.state_version}</strong></div><div><span>Провайдер</span><strong>{session.provider_id}</strong></div><div><span>Модель</span><strong>{session.model_id}</strong></div><div><span>Промпт</span><strong data-field="prompt-version">{session.latest_turn?.prompt_version ?? '—'}</strong></div><div><span>Визуальное состояние</span><strong>{session.visual_state.emotion} · {session.visual_state.pose} · {session.visual_state.outfit}</strong></div><div><span>Фон</span><strong>{session.visual_state.background}</strong></div><div><span>Последнее действие</span><strong data-field="last-action">{session.latest_turn?.action ?? 'Ходов пока нет'}</strong></div><div><span>ID сессии</span><code>{session.id}</code><Button size="sm" variant="ghost" onClick={() => void copyId()}>{copied ? 'Скопировано' : 'Копировать ID'}</Button></div></> : <p className="muted-copy">Загружаем состояние…</p>}
   </CardContent></Card>{session && <Button asChild variant="outline" className="w-full"><Link to={routes.storyPlayer(session.id)}>Открыть как игрок</Link></Button>}</aside>
 }
 
 function StudioSession({ sessionId }: { sessionId: string }) {
   const player = useStoryPlayer(sessionId)
   const theme = resolveStoryTheme(player.session?.story.slug)
-  return <div className="studio-shell" data-story-theme={theme.id} style={theme.variables}><header className="game-header"><div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1></div><Link className="mode-link" to={routes.studio}>Все тесты</Link></header><div className="studio-workspace"><StoryScene player={player} /><Inspector session={player.session} phase={player.phase} /></div></div>
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  return <div className="studio-shell" data-story-theme={theme.id} style={theme.variables}>
+    <header className="game-header">
+      <div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1></div>
+      <div className="studio-header-actions">
+        <Button className="studio-inspector-trigger" type="button" size="icon-sm" variant="ghost" aria-label="Открыть инспектор" title="Открыть инспектор" onClick={() => setInspectorOpen(true)}><PanelRight aria-hidden="true" /></Button>
+        <Link className="mode-link" to={routes.studio}>Все тесты</Link>
+      </div>
+    </header>
+    <div className="studio-workspace"><StoryScene player={player} /><Inspector session={player.session} phase={player.phase} /></div>
+    <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}>
+      <SheetContent style={theme.variables} aria-label="Инспектор автора">
+        <SheetHeader><SheetTitle>Инспектор сессии</SheetTitle><SheetDescription>Только подтверждённые сервером данные</SheetDescription></SheetHeader>
+        <Inspector session={player.session} phase={player.phase} inSheet />
+      </SheetContent>
+    </Sheet>
+  </div>
 }
 
 export function StudioPage({ sessionId }: { sessionId?: string }) {

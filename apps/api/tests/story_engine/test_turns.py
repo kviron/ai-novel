@@ -69,6 +69,7 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
         "emotion": "fan",
         "pose": "fan_open",
         "outfit": "red_dress",
+        "background": "neon_crossroads",
     }
     assert result["speaker"] == "Аканэ Куроха"
     assert result["choices"] == ["Осмотреть след", "Спросить о веере"]
@@ -84,7 +85,47 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
     with Session(client.app.state.engine) as db:
         turns = list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))
         assert len(turns) == 1
-        assert json.loads(turns[0].raw_response)["visual_directive"]["emotion"] == "fan"
+    assert json.loads(turns[0].raw_response)["visual_directive"]["emotion"] == "fan"
+
+
+def test_mark_can_speak_with_his_own_outfit(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal(
+        dialogue={"character_id": "mark", "text": "В архиве есть ещё одна запись."},
+        visual_directive={"emotion": "neutral", "pose": "default", "outfit": "dark_coat"},
+    )]
+
+    result = post_turn(client, akane_session)
+
+    assert result.status_code == 201
+    assert result.json()["speaker"] == "Марк Ветров"
+    assert result.json()["visual_directive"]["character_id"] == "mark"
+    assert result.json()["visual_directive"]["outfit"] == "dark_coat"
+
+
+def test_background_choice_survives_reload_and_rewind(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal(visual_directive={
+        "emotion": "neutral", "background": "signal_archive"
+    })]
+    result = post_turn(client, akane_session)
+    assert result.status_code == 201
+    assert result.json()["visual_directive"]["background"] == "signal_archive"
+    restored = client.get(f"/api/sessions/{akane_session.id}").json()
+    assert restored["visual_state"]["background"] == "signal_archive"
+
+    rewound = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 2})
+    assert rewound.status_code == 200
+    assert rewound.json()["visual_state"]["background"] == "neon_crossroads"
+
+
+def test_unknown_background_falls_back_to_last_known_location(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(visual_directive={"emotion": "neutral", "background": "signal_archive"}),
+        proposal(visual_directive={"emotion": "neutral", "background": "../../escape"}),
+    ]
+    assert post_turn(client, akane_session).status_code == 201
+    second = post_turn(client, akane_session, request_id="turn-2", expected_state_version=2)
+    assert second.status_code == 201
+    assert second.json()["visual_directive"]["background"] == "signal_archive"
 
 
 def test_rewind_then_new_action_keeps_both_branches(client, fake_provider, akane_session):
@@ -133,7 +174,9 @@ def test_rewind_first_turn_restores_initial_scene_and_rejects_stale_revision(cli
     assert rewound.status_code == 200
     assert rewound.json()["latest_turn"] is None
     assert rewound.json()["current_scene"] == "Ночной перекрёсток"
-    assert rewound.json()["visual_state"] == {"emotion": "neutral", "pose": "default", "outfit": "red_dress"}
+    assert rewound.json()["visual_state"] == {
+        "emotion": "neutral", "pose": "default", "outfit": "red_dress", "background": "neon_crossroads"
+    }
     assert rewound.json()["can_rewind"] is False
 
 

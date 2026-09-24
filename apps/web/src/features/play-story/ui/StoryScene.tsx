@@ -12,14 +12,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from '@/shared/ui/separator'
 
 import { useStoryPlayer } from '../model/useStoryPlayer'
-import spriteSheet from './akane-sprite-sheet-v1.png'
+import { CharacterSprite } from './CharacterSprite'
+import { SceneBackground } from './SceneBackground'
 import { TypewriterText } from './TypewriterText'
-
-const expressions: Record<string, { label: string; position: string }> = {
-  neutral: { label: 'Нейтральная', position: '0% center' }, happy: { label: 'Радость', position: '20% center' },
-  sad: { label: 'Грусть', position: '40% center' }, angry: { label: 'Злость', position: '60% center' },
-  surprised: { label: 'Удивление', position: '80% center' }, fan: { label: 'С веером', position: '100% center' },
-}
 
 export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlayer> }) {
   const [choicesOpen, setChoicesOpen] = useState(false)
@@ -28,17 +23,16 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const session = player.session
   const turn = session?.latest_turn
   const isAkaneStory = session?.story.slug === 'akane-neon-echo'
-  const emotion = turn?.visual_directive.emotion ?? session?.visual_state?.emotion ?? 'neutral'
-  const expression = expressions[emotion] ?? expressions.neutral
   const canRetry = player.phase === 'provider_unavailable' || player.reloadRequired || (!session && player.phase === 'error')
 
   const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.phase === 'switching_model' || player.checking
   const choices = turn?.choices ?? (isAkaneStory ? ['Спросить о сигнале', 'Спросить о веере', 'Осмотреть комнату'] : [])
 
   return <section className="stage" aria-label="Игровая сцена" aria-busy={working}>
-    <div className="rain" aria-hidden="true" /><div className="moon" aria-hidden="true" /><div className="city" aria-hidden="true" />
-    {session && isAkaneStory && <div className="character-sprite" data-expression={expressions[emotion] ? emotion : 'neutral'} role="img" aria-label={`${session.characters[0]?.name ?? 'Аканэ'}: ${expression.label}`}
-      style={{ aspectRatio: '1 / 3', backgroundImage: `url(${spriteSheet})`, backgroundSize: '600% 100%', backgroundPosition: expression.position }} />}
+    {isAkaneStory && session
+      ? <SceneBackground storySlug={session.story.slug} background={turn?.visual_directive.background ?? session.visual_state.background} />
+      : <><div className="rain" aria-hidden="true" /><div className="moon" aria-hidden="true" /><div className="city" aria-hidden="true" /></>}
+    {session && <CharacterSprite session={session} />}
     <div className="dialogue">
       <div className="player-status">
         {(player.error || player.phase === 'provider_unavailable') && <Badge variant="destructive">{player.phase === 'provider_unavailable' ? 'Недоступно' : 'Ошибка'}</Badge>}

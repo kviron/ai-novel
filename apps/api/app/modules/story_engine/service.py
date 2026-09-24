@@ -1,9 +1,10 @@
 from sqlmodel import Session
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
+from app.modules.providers.model_selection import UnsupportedModelError, available_models
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.schemas import SessionDetail
-from app.modules.stories.service import UnsupportedModelError, available_models, get_session_detail
+from app.modules.stories.service import get_session_detail
 
 from . import repository
 from .contracts import AcceptedTurn, TurnCreate, TurnResult

@@ -1,5 +1,102 @@
 import { expect, test } from '@playwright/test'
 
+test('режим сцены скрывает интерфейс и возвращает его кликом без потери набранного действия', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await expect(page).toHaveURL(/\/play\/[^/]+$/)
+  const sessionUrl = page.url()
+  await page.getByRole('textbox', { name: 'Ваше действие' }).fill('Осмотреть улицу')
+  await page.getByRole('button', { name: 'Скрыть интерфейс' }).click()
+
+  await expect(page.locator('[data-slot="sidebar-wrapper"]')).toHaveAttribute('data-cinematic', 'true')
+  await expect(page.getByRole('region', { name: 'Игровая сцена' }).locator('.scene-background')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Игровая сцена' }).locator('.character-sprite')).toBeVisible()
+  await expect(page.locator('.game-header')).toBeHidden()
+  await expect(page.locator('.dialogue')).toBeHidden()
+  await expect(page.locator('[data-slot="sidebar-trigger"]')).toBeHidden()
+  await expect(page.locator('[data-slot="sidebar"]')).toBeHidden()
+
+  await page.mouse.click(250, 250)
+  await expect(page.locator('[data-slot="sidebar-wrapper"]')).not.toHaveAttribute('data-cinematic', 'true')
+  await expect(page.getByRole('textbox', { name: 'Ваше действие' })).toHaveValue('Осмотреть улицу')
+  expect(page.url()).toBe(sessionUrl)
+})
+
+test('режим сцены прячет и возвращает инспектор автора', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
+  const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
+  await expect(inspector).toBeVisible()
+  await page.getByRole('button', { name: 'Скрыть интерфейс' }).click()
+  await expect(inspector).toBeHidden()
+  await page.mouse.click(250, 250)
+  await expect(inspector).toBeVisible()
+})
+
+test('длинный инспектор прокручивается внутри экрана, не прокручивая всю студию', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 600 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
+  const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
+  await expect(inspector).toBeVisible()
+  const measurements = await page.evaluate(() => {
+    const panel = document.querySelector('.studio-inspector')!
+    return {
+      documentHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      panelScrollHeight: panel.scrollHeight,
+      panelHeight: panel.clientHeight,
+      panelOverflow: getComputedStyle(panel).overflowY,
+    }
+  })
+  expect(measurements.documentHeight).toBeLessThanOrEqual(measurements.viewportHeight + 1)
+  expect(measurements.panelScrollHeight).toBeGreaterThan(measurements.panelHeight)
+  expect(measurements.panelOverflow).toBe('auto')
+  await inspector.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  await expect(inspector.getByRole('button', { name: 'Копировать ID' })).toBeInViewport()
+})
+
+test('на телефоне инспектор автора открывается поверх сцены и прокручивается внутри', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
+  await page.getByRole('button', { name: 'Открыть инспектор' }).click()
+  const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
+  await expect(inspector).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(845)
+  await inspector.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  await expect(inspector.getByRole('button', { name: 'Копировать ID' })).toBeInViewport()
+})
+
+test('шапка новеллы компактна и лежит поверх фона без нижней границы', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  const header = page.locator('.game-shell .game-header')
+  const stage = page.getByRole('region', { name: 'Игровая сцена' })
+  await expect(header).toBeVisible()
+  const headerBox = await header.boundingBox()
+  const stageBox = await stage.boundingBox()
+  expect(headerBox).not.toBeNull()
+  expect(stageBox).not.toBeNull()
+  expect(headerBox!.height).toBeLessThanOrEqual(52)
+  expect(stageBox!.y).toBe(headerBox!.y)
+  expect(await header.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe('0px')
+  expect(await header.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+  const triggerBox = await page.locator('[data-slot="sidebar-trigger"]').boundingBox()
+  const titleBox = await header.getByRole('heading', { name: 'Эхо неона' }).boundingBox()
+  const linkBox = await header.getByRole('link', { name: 'Студия' }).boundingBox()
+  expect(triggerBox).not.toBeNull()
+  expect(titleBox).not.toBeNull()
+  expect(linkBox).not.toBeNull()
+  expect(Math.abs(titleBox!.y - triggerBox!.y)).toBeLessThanOrEqual(1)
+  expect(Math.abs(linkBox!.y - triggerBox!.y)).toBeLessThanOrEqual(1)
+  expect(titleBox!.height).toBe(triggerBox!.height)
+  expect(linkBox!.height).toBe(triggerBox!.height)
+})
+
 test('игра сохраняется под настройками, а выбор способа сворачивания переживает перезагрузку', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Начать новую игру' }).click()

@@ -4,7 +4,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { SidebarPreferenceProvider } from '@/shared/config'
 import { AppShell } from './layout/AppShell'
 import { NovelLibraryPage } from '@/pages/novel-library'
-import { CharactersPage } from '@/pages/characters'
+import { CharacterDetailPage, CharactersPage } from '@/pages/characters'
 import { SettingsPage } from '@/pages/settings'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
@@ -20,6 +20,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'studio', element: <StudioRoute /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
       { path: 'characters', element: <CharactersPage /> },
+      { path: 'characters/:storyId/:characterId', element: <CharacterDetailPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

@@ -34,11 +34,13 @@ def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
 
     with sqlite3.connect(database_path) as db:
         story = db.execute("SELECT id FROM stories WHERE id='legacy-story'").fetchone()
+        gender_column = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
         turn = db.execute("SELECT id, session_id FROM turns WHERE id='legacy-turn'").fetchone()
         session = db.execute("SELECT story_id, state_version FROM story_sessions WHERE id=?", (turn[1],)).fetchone()
         speaker = db.execute("SELECT speaker FROM turns WHERE id='legacy-turn'").fetchone()
 
     assert story == ("legacy-story",)
+    assert "gender" in gender_column
     assert session == ("legacy-story", 2)
     assert speaker == ("Narrator",)
 

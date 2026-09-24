@@ -38,6 +38,7 @@ class Character(SQLModel, table=True):
     id: str = Field(default_factory=new_public_id, primary_key=True)
     story_id: str = Field(foreign_key="stories.id", index=True)
     name: str
+    gender: str = "unspecified"
     age: int
     personality: str
     appearance: str

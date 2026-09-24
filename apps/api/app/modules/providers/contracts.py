@@ -1,10 +1,49 @@
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-from app.modules.story_engine.contracts import TurnProposal
+
+class DialogueProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    character_id: str
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class VisualDirective(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["sprite_scene"] = "sprite_scene"
+    emotion: str
+    pose: str = "default"
+    outfit: str = "red_dress"
+    background: str | None = None
+
+
+class ProposedEffect(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    value: str | int | float | bool
+
+
+class TurnProposal(BaseModel):
+    """Provider output is untrusted until the story engine validates it."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "required": ["narration", "dialogue", "visual_directive", "suggested_choices", "proposed_effects"]
+        },
+    )
+
+    narration: str = Field(min_length=1, max_length=6000)
+    dialogue: DialogueProposal
+    visual_directive: VisualDirective
+    suggested_choices: list[str] = Field(min_length=2, max_length=4)
+    proposed_effects: list[ProposedEffect] = Field(default_factory=list, max_length=20)
 
 
 class ProviderStatus(BaseModel):

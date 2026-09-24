@@ -12,13 +12,13 @@ const story: StorySession['story'] = {
 }
 const session: StorySession = {
   id: 'session-1', story, state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
-  characters: [{ id: 'akane', name: 'Аканэ', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
-  latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress' },
+  characters: [{ id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
+  latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress', background: 'neon_crossroads' },
 }
 const turn: TurnResult = {
   id: 'turn-1', session_id: 'session-1', request_id: 'request-1', state_version: 2, action: 'Спросить о веере', speaker: 'Аканэ',
   narration: 'Дождь стихает.', dialogue: 'Я знаю путь.', choices: ['Идти дальше'],
-  visual_directive: { mode: 'sprite_scene', character_id: 'akane', emotion: 'fan', pose: 'fan_open', outfit: 'red_dress' },
+  visual_directive: { mode: 'sprite_scene', character_id: 'akane', emotion: 'fan', pose: 'fan_open', outfit: 'red_dress', background: 'neon_crossroads' },
   provider_id: 'ollama', model_id: 'gemma4-local:32k', prompt_version: 'v1', created_at: '2026-09-24T00:00:00Z',
 }
 
@@ -45,6 +45,7 @@ test('показывает подтверждённое состояние и о
   expect(screen.getByText('v1')).toBeInTheDocument()
   expect(screen.getByText(/gemma4-local:32k/)).toBeInTheDocument()
   expect(screen.getByText('Ходов пока нет')).toBeInTheDocument()
+  expect(screen.getByText('neon_crossroads')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Варианты (3)' }))
   await userEvent.click(screen.getByRole('button', { name: 'Спросить о веере' }))
   await waitFor(() => expect(screen.getByText('v2')).toBeInTheDocument())

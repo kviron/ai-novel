@@ -30,9 +30,9 @@ const restoredSession = {
     narration: 'Неон отражается в лужах.',
     dialogue: 'Я ждала вас.',
     choices: ['Спросить о сигнале', 'Осмотреть комнату'],
-    visual_directive: { character_id: 'akane', emotion: 'neutral', pose: 'default', outfit: 'red_dress' },
+    visual_directive: { character_id: 'akane', emotion: 'neutral', pose: 'default', outfit: 'red_dress', background: 'neon_crossroads' },
   },
-  visual_state: { emotion: 'neutral', pose: 'default', outfit: 'red_dress' },
+  visual_state: { emotion: 'neutral', pose: 'default', outfit: 'red_dress', background: 'neon_crossroads' },
 } satisfies StorySession
 
 test('models a restored session with the persisted turn DTO only', () => {
@@ -45,7 +45,7 @@ test('models a restored session with the persisted turn DTO only', () => {
     narration: 'Неон отражается в лужах.',
     dialogue: 'Я ждала вас.',
     choices: ['Спросить о сигнале', 'Осмотреть комнату'],
-    visual_directive: { character_id: 'akane', emotion: 'neutral', pose: 'default', outfit: 'red_dress' },
+    visual_directive: { character_id: 'akane', emotion: 'neutral', pose: 'default', outfit: 'red_dress', background: 'neon_crossroads' },
   })
   expect(restoredSession.latest_turn).not.toHaveProperty('request_id')
   expect(restoredSession.latest_turn).not.toHaveProperty('provider_id')

@@ -2,9 +2,14 @@ import json
 
 from sqlmodel import Session
 
-from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.db.models import Autosave, Character, Story, StorySession, Turn
+from app.modules.providers.model_selection import (
+    UnsupportedModelError,
+    available_models,
+    choose_model,
+)
 from app.modules.providers.service import ProviderRegistry
+from app.modules.stories.content import AKANE_BACKGROUNDS, AKANE_INITIAL_BACKGROUND
 from app.modules.stories.schemas import (
     CharacterDetail,
     SessionDetail,
@@ -27,26 +32,6 @@ class SessionNotFoundError(Exception):
     pass
 
 
-class UnsupportedModelError(Exception):
-    pass
-
-
-class NoAvailableModelError(Exception):
-    pass
-
-
-def available_models(registry: ProviderRegistry, provider_id: str) -> list[str]:
-    try:
-        models = registry.get(provider_id).list_models()
-    except KeyError as error:
-        raise UnsupportedModelError from error
-    except (ProviderUnavailableError, ProviderResponseError) as error:
-        raise NoAvailableModelError from error
-    if not models:
-        raise NoAvailableModelError
-    return models
-
-
 def list_stories(session: Session) -> list[StorySummary]:
     return [_story_summary(story) for story in repository.list_stories(session)]
 
@@ -67,9 +52,7 @@ def start_story_session(
     if request.provider_id != story.recommended_provider_id:
         raise UnsupportedModelError
     models = available_models(registry, request.provider_id)
-    model_id = request.model_id or (configured_model_id if configured_model_id in models else models[0])
-    if model_id not in models:
-        raise UnsupportedModelError
+    model_id = choose_model(models, request.model_id, configured_model_id)
 
     story_session = StorySession(
         story_id=story.id,
@@ -142,6 +125,7 @@ def _character_detail(character: Character) -> CharacterDetail:
     return CharacterDetail(
         id=character.id,
         name=character.name,
+        gender=character.gender,
         age=character.age,
         personality=character.personality,
         appearance=character.appearance,
@@ -194,5 +178,10 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
             emotion=visual_directive.get("emotion", "neutral") if visual_directive else "neutral",
             pose=visual_directive.get("pose", "default") if visual_directive else "default",
             outfit=visual_directive.get("outfit", "red_dress") if visual_directive else "red_dress",
+            background=(
+                visual_directive.get("background", AKANE_INITIAL_BACKGROUND)
+                if visual_directive and visual_directive.get("background") in AKANE_BACKGROUNDS
+                else AKANE_INITIAL_BACKGROUND
+            ),
         ),
     )

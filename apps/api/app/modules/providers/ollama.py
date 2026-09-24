@@ -4,9 +4,8 @@ import httpx
 from pydantic import ValidationError
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
-from app.modules.story_engine.contracts import TurnProposal
 
-from .contracts import ProviderStatus, TurnGenerationRequest
+from .contracts import ProviderStatus, TurnGenerationRequest, TurnProposal
 
 
 class OllamaProvider:

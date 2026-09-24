@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import Settings
-from app.db.models import StorySession, Turn
+from app.db.models import Character, StorySession, Turn
 from app.main import create_app
 from app.modules.providers.service import ProviderRegistry
 
@@ -68,6 +68,35 @@ def test_seeded_akane_story_can_start_and_restore(client):
     restored = client.get(f'/api/sessions/{game["id"]}')
     assert restored.status_code == 200
     assert restored.json()["id"] == game["id"]
+
+
+def test_seeded_story_contains_distinct_female_and_male_profiles(client):
+    akane = akane_story(client)
+    characters = client.get(f'/api/stories/{akane["id"]}').json()["characters"]
+
+    assert {item["id"]: item["gender"] for item in characters} == {
+        "akane": "female", "mark": "male",
+    }
+    mark = next(item for item in characters if item["id"] == "mark")
+    assert mark["name"] == "Марк Ветров"
+    assert mark["age"] == 29
+    assert "архив" in mark["personality"].lower()
+    assert "серебрист" in mark["appearance"].lower()
+
+
+def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
+    akane = akane_story(client)
+    with Session(client.app.state.engine) as session:
+        session.delete(session.get(Character, "mark"))
+        session.commit()
+
+    with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted:
+        first = restarted.get(f'/api/stories/{akane["id"]}').json()["characters"]
+    with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted:
+        second = restarted.get(f'/api/stories/{akane["id"]}').json()["characters"]
+
+    assert [item["id"] for item in first].count("mark") == 1
+    assert [item["id"] for item in second].count("mark") == 1
 
 
 def test_session_library_lists_only_requested_kind_with_lightweight_data(client):
@@ -313,7 +342,9 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     restored = client.get(f'/api/sessions/{game["id"]}')
 
     assert restored.status_code == 200
-    assert restored.json()["visual_state"] == {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
+    assert restored.json()["visual_state"] == {
+        "emotion": "fan", "pose": "fan_open", "outfit": "red_dress", "background": "neon_crossroads"
+    }
     assert restored.json()["latest_turn"]["visual_directive"] == directive
     assert restored.json()["latest_turn"]["action"] == "Открыть веер"
     assert restored.json()["latest_turn"]["prompt_version"] == "v1"

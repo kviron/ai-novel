@@ -6,9 +6,10 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
+from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail
-from app.modules.stories.service import NoAvailableModelError, SessionNotFoundError, UnsupportedModelError
+from app.modules.stories.service import SessionNotFoundError
 
 from .contracts import ModelChangeRequest, RewindRequest, TurnCreate, TurnResult
 from .repository import RewindUnavailableError, StateConflictError
