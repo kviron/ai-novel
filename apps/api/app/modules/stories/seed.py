@@ -9,6 +9,12 @@ from .repository import get_story_by_slug
 
 AKANE_SLUG = "akane-neon-echo"
 AKANE_EMOTIONS = ["neutral", "happy", "sad", "angry", "surprised", "fan"]
+AKANE_DESCRIPTION = (
+    "Ночной город хранит воспоминания, которые лучше было бы забыть. "
+    "Вместе с Аканэ Куроха вы отправитесь по следу странного сигнала, "
+    "расспросите свидетелей и решите, каким воспоминаниям можно доверять. "
+    "Каждый ответ меняет ваш разговор и путь через неоновый дождь."
+)
 
 
 def seed_akane_story(session: Session) -> None:
@@ -22,6 +28,8 @@ def seed_akane_story(session: Session) -> None:
         slug=AKANE_SLUG,
         title="Эхо неона",
         premise="В дождливом неоновом городе Аканэ помогает распутать чужое воспоминание.",
+        description=AKANE_DESCRIPTION,
+        cover_image_url="/covers/akane-neon-echo.webp",
         theme_labels=json.dumps(AKANE_EMOTIONS, ensure_ascii=False),
         story_mode="hybrid",
         current_scene="Ночной перекрёсток",

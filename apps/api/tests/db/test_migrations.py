@@ -43,6 +43,26 @@ def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
     assert speaker == ("Narrator",)
 
 
+def test_upgrade_keeps_existing_save_and_backfills_library_metadata(tmp_path):
+    database_path = tmp_path / "existing-save.db"
+    create_v01_database(database_path, story_id="akane-neon-echo", turn_id="saved-turn")
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        story = db.execute(
+            "SELECT description, cover_image_url FROM stories WHERE id='akane-neon-echo'"
+        ).fetchone()
+        saved = db.execute(
+            "SELECT id, kind FROM story_sessions WHERE story_id='akane-neon-echo'"
+        ).fetchone()
+        turn = db.execute("SELECT id, session_id FROM turns WHERE id='saved-turn'").fetchone()
+
+    assert story[0]
+    assert story[1] == "/covers/akane-neon-echo.webp"
+    assert saved[1] == "player"
+    assert turn == ("saved-turn", saved[0])
+
+
 def test_upgrade_resequences_duplicate_legacy_turn_versions_without_data_loss(tmp_path):
     database_path = tmp_path / "duplicate-versions.db"
     create_v01_database_with_duplicate_turn_versions(database_path)

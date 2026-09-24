@@ -20,6 +20,8 @@ class Story(SQLModel, table=True):
     slug: str = Field(index=True, unique=True)
     title: str
     premise: str
+    description: str = ""
+    cover_image_url: str | None = None
     theme_labels: str = "[]"
     state_version: int = 1
     story_mode: str = "hybrid"
@@ -47,6 +49,7 @@ class StorySession(SQLModel, table=True):
 
     id: str = Field(default_factory=new_public_id, primary_key=True)
     story_id: str = Field(foreign_key="stories.id", index=True)
+    kind: str = "player"
     state_version: int = 1
     current_scene: str
     provider_id: str
