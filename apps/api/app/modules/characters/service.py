@@ -30,6 +30,10 @@ class CharacterAlreadyAttachedError(Exception):
     pass
 
 
+class LastCastMemberError(Exception):
+    pass
+
+
 def _revision_profile(revision: CharacterRevision) -> RevisionProfile:
     return RevisionProfile.model_validate(revision, from_attributes=True)
 
@@ -44,8 +48,17 @@ def _character_profile(character: Character, revision: CharacterRevision) -> Cha
     )
 
 
-def list_characters(session: Session) -> list[CharacterProfile]:
-    return [_character_profile(character, revision) for character, revision in repository.list_current(session)]
+def list_characters(session: Session, exclude_story_id: str | None = None) -> list[CharacterProfile]:
+    attached = (
+        {link.character_id for link in repository.list_story_links_for_story(session, exclude_story_id)}
+        if exclude_story_id
+        else set()
+    )
+    return [
+        _character_profile(character, revision)
+        for character, revision in repository.list_current(session)
+        if character.id not in attached
+    ]
 
 
 def get_character(session: Session, character_id: str) -> CharacterHistory:
@@ -65,6 +78,7 @@ def get_character(session: Session, character_id: str) -> CharacterHistory:
                 revision_id=link.revision_id,
                 revision_number=revision.revision_number,
                 role=link.role,
+                color=link.color,
             )
             for story, link, revision in repository.list_story_links(session, character_id)
         ],
@@ -119,8 +133,36 @@ def attach_character(session: Session, story_id: str, payload: AttachCharacterRe
     return StoryCharacterProfile.model_validate(link, from_attributes=True)
 
 
+def attach_characters_batch(session: Session, story_id: str, character_ids: list[str]) -> list[StoryCharacterProfile]:
+    if session.get(Story, story_id) is None:
+        raise StoryNotFoundError
+    if len(set(character_ids)) != len(character_ids):
+        raise CharacterAlreadyAttachedError
+    # Validate the complete selection before staging any link so one invalid ID cannot partially add a cast.
+    links = []
+    for character_id in character_ids:
+        character = session.get(Character, character_id)
+        if character is None:
+            raise CharacterNotFoundError
+        if repository.get_story_link(session, story_id, character_id) is not None:
+            raise CharacterAlreadyAttachedError
+        if character.current_revision_id is None:
+            raise InvalidRevisionError
+        links.append(
+            StoryCharacter(story_id=story_id, character_id=character_id, revision_id=character.current_revision_id)
+        )
+    session.add_all(links)
+    session.commit()
+    return [StoryCharacterProfile.model_validate(link, from_attributes=True) for link in links]
+
+
 def pin_revision(
-    session: Session, story_id: str, character_id: str, revision_id: str, role: str | None = None
+    session: Session,
+    story_id: str,
+    character_id: str,
+    revision_id: str,
+    role: str | None = None,
+    color: str | None = None,
 ) -> StoryCharacterProfile:
     link = repository.get_story_link(session, story_id, character_id)
     if link is None:
@@ -131,5 +173,17 @@ def pin_revision(
     link.revision_id = revision.id
     if role is not None:
         link.role = role
+    if color is not None:
+        link.color = color
     session.commit()
     return StoryCharacterProfile.model_validate(link, from_attributes=True)
+
+
+def detach_character(session: Session, story_id: str, character_id: str) -> None:
+    link = repository.get_story_link(session, story_id, character_id)
+    if link is None:
+        raise CharacterNotFoundError
+    if len(repository.list_story_links_for_story(session, story_id)) <= 1:
+        raise LastCastMemberError
+    session.delete(link)
+    session.commit()

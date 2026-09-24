@@ -72,6 +72,7 @@ class StoryCharacter(SQLModel, table=True):
     character_id: str = Field(foreign_key="characters.id", primary_key=True)
     revision_id: str = Field(foreign_key="character_revisions.id")
     role: str = "cast"
+    color: str = "#D9A75F"
 
 
 class SessionCharacter(SQLModel, table=True):
@@ -81,6 +82,7 @@ class SessionCharacter(SQLModel, table=True):
     character_id: str = Field(foreign_key="characters.id", primary_key=True)
     revision_id: str = Field(foreign_key="character_revisions.id")
     role: str = "cast"
+    color: str = "#D9A75F"
 
 
 class StorySession(SQLModel, table=True):
@@ -117,6 +119,7 @@ class Turn(SQLModel, table=True):
     speaker: str
     narration: str
     dialogue: str
+    segments: str | None = None
     choices: str
     visual_directive: str
     raw_response: str

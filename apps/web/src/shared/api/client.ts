@@ -84,6 +84,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     )
   }
 
+  if (response.status === 204) return undefined as T
+
   if (payload === undefined) {
     throw new ApiRequestError('Сервер вернул неожиданный ответ.', response.status, 'invalid_response', false)
   }
@@ -92,8 +94,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
 export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   return {
-    listCharacters(signal?: AbortSignal) {
-      return request<CatalogCharacter[]>('/api/characters', { baseUrl, signal })
+    listCharacters(signal?: AbortSignal, excludeStoryId?: string) {
+      const query = excludeStoryId ? `?exclude_story_id=${encodeURIComponent(excludeStoryId)}` : ''
+      return request<CatalogCharacter[]>(`/api/characters${query}`, { baseUrl, signal })
     },
     getCharacter(characterId: string, signal?: AbortSignal) {
       return request<CharacterHistory>(`/api/characters/${encodeURIComponent(characterId)}`, { baseUrl, signal })
@@ -115,6 +118,15 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     pinCharacterRevision(storyId: string, characterId: string, revisionId: string, role: string) {
       return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'PUT', body: { revision_id: revisionId, role } })
+    },
+    addStoryCharacters(storyId: string, characterIds: string[]) {
+      return request<StoryCharacterLink[]>(`/api/stories/${encodeURIComponent(storyId)}/characters/batch`, { baseUrl, method: 'POST', body: { character_ids: characterIds } })
+    },
+    updateStoryCharacter(storyId: string, characterId: string, revisionId: string, role: string, color: string) {
+      return request<StoryCharacterLink>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'PUT', body: { revision_id: revisionId, role, color } })
+    },
+    removeStoryCharacter(storyId: string, characterId: string) {
+      return request<void>(`/api/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}`, { baseUrl, method: 'DELETE' })
     },
     listStories(signal?: AbortSignal) {
       return request<StorySummary[]>('/api/stories', { baseUrl, signal })

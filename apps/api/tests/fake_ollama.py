@@ -30,8 +30,10 @@ def chat(request: ChatRequest) -> dict:
         }
     action = draft["action"]
     proposal = {
-        "narration": "Аканэ раскрыла веер и взглянула на неон за окном.",
-        "dialogue": {"character_id": "akane", "text": f"Я ждала этого вопроса. {action}"},
+        "segments": [
+            {"kind": "narration", "text": "Аканэ раскрыла веер и взглянула на неон за окном."},
+            {"kind": "dialogue", "character_id": "akane", "text": f"Я ждала этого вопроса. {action}"},
+        ],
         "visual_directive": {"mode": "sprite_scene", "emotion": "fan", "pose": "fan_open", "outfit": "red_dress"},
         "suggested_choices": ["Уточнить подробности", "Посмотреть на улицу", "Продолжить разговор"],
         "proposed_effects": [],

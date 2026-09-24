@@ -66,17 +66,28 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,
         story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
-        characters=[{
-            "id": character.id,
-            "source_type": character.source_type,
-            "name": revision.name,
-            "gender": revision.gender,
-            "age": revision.age,
-            "personality": revision.personality,
-            "appearance": revision.appearance,
-            "role": link.role,
-        } for character, revision, link in characters],
-        recent_turns=[_turn_result(session, turn).model_dump(mode="json") for turn in reversed(turns)],
+        characters=[
+            {
+                "id": character.id,
+                "source_type": character.source_type,
+                "name": revision.name,
+                "gender": revision.gender,
+                "age": revision.age,
+                "personality": revision.personality,
+                "appearance": revision.appearance,
+                "role": link.role,
+                "color": link.color,
+            }
+            for character, revision, link in characters
+        ],
+        # The model sees one canonical scene form; legacy compatibility fields stay API-only.
+        recent_turns=[
+            _turn_result(session, turn).model_dump(
+                mode="json",
+                include={"request_id", "state_version", "action", "segments", "choices", "visual_directive"},
+            )
+            for turn in reversed(turns)
+        ],
     )
 
 
@@ -113,6 +124,7 @@ def commit_turn(
                 speaker=accepted.speaker,
                 narration=accepted.narration,
                 dialogue=accepted.dialogue,
+                segments=json.dumps([part.model_dump(mode="json") for part in accepted.segments], ensure_ascii=False),
                 choices=json.dumps(accepted.choices, ensure_ascii=False),
                 visual_directive=accepted.visual_directive.model_dump_json(),
                 raw_response=raw_response,
@@ -217,6 +229,12 @@ def _turn_result(session: Session, turn: Turn) -> TurnResult:
         speaker=turn.speaker,
         narration=turn.narration,
         dialogue=turn.dialogue,
+        segments=json.loads(turn.segments)
+        if turn.segments
+        else [
+            {"kind": "narration", "text": turn.narration},
+            {"kind": "dialogue", "character_id": directive["character_id"], "text": turn.dialogue},
+        ],
         choices=json.loads(turn.choices),
         visual_directive=directive,
         provider_id=turn.provider_id,

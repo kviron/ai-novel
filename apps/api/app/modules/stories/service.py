@@ -122,7 +122,7 @@ def _story_summary(story: Story) -> StorySummary:
     )
 
 
-def _character_detail(character: Character, revision: CharacterRevision, role: str) -> CharacterDetail:
+def _character_detail(character: Character, revision: CharacterRevision, role: str, color: str) -> CharacterDetail:
     return CharacterDetail(
         id=character.id,
         name=revision.name,
@@ -131,6 +131,7 @@ def _character_detail(character: Character, revision: CharacterRevision, role: s
         personality=revision.personality,
         appearance=revision.appearance,
         role=role,
+        color=color,
         visual_profile_version=revision.revision_number,
     )
 
@@ -140,7 +141,7 @@ def _story_detail(session: Session, story: Story) -> StoryDetail:
         **_story_summary(story).model_dump(),
         current_scene=story.current_scene,
         characters=[
-            _character_detail(character, revision, link.role)
+            _character_detail(character, revision, link.role, link.color)
             for character, revision, link in repository.list_story_characters(session, story.id)
         ],
     )
@@ -161,6 +162,16 @@ def _turn_detail(turn: Turn | None, visual_directive: dict[str, str] | None) -> 
         speaker=turn.speaker,
         narration=turn.narration,
         dialogue=turn.dialogue,
+        segments=json.loads(turn.segments)
+        if turn.segments
+        else [
+            {"kind": "narration", "text": turn.narration},
+            {
+                "kind": "dialogue",
+                "character_id": (visual_directive or {}).get("character_id", "legacy"),
+                "text": turn.dialogue,
+            },
+        ],
         choices=json.loads(turn.choices),
         visual_directive=visual_directive or {},
     )
@@ -173,7 +184,7 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
         id=story_session.id,
         story=_story_summary(story),
         characters=[
-            _character_detail(character, revision, link.role)
+            _character_detail(character, revision, link.role, link.color)
             for character, revision, link in repository.list_session_characters(session, story_session.id)
         ],
         state_version=story_session.state_version,

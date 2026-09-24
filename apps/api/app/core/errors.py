@@ -49,6 +49,7 @@ def install_exception_handlers(app: FastAPI) -> None:
             response = ErrorResponse(code="http_error", detail="Не удалось выполнить запрос.")
         return JSONResponse(status_code=error.status_code, content=response.model_dump())
 
+
 ProviderErrorCode = Literal[
     "provider_unavailable",
     "model_unavailable",
@@ -76,9 +77,7 @@ class ProviderResponseError(Exception):
         raw_response: str | None = None,
     ) -> None:
         message = (
-            "Provider returned an invalid response"
-            if code == "provider_invalid_response"
-            else "Model is unavailable"
+            "Provider returned an invalid response" if code == "provider_invalid_response" else "Model is unavailable"
         )
         super().__init__(message)
         self.code: ProviderErrorCode = code

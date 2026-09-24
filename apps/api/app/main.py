@@ -29,9 +29,7 @@ def create_app(
     settings = settings_override if settings_override is not None else get_settings()
     owns_providers = provider_registry_override is None
     providers = (
-        provider_registry_override
-        if provider_registry_override is not None
-        else create_provider_registry(settings)
+        provider_registry_override if provider_registry_override is not None else create_provider_registry(settings)
     )
     app = FastAPI(
         title="API нейровизуальной новеллы",

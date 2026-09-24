@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { MessagesSquare } from 'lucide-react'
 
-import { api, type TurnResult } from '@/shared/api'
+import { api, type Character, type TurnResult } from '@/shared/api'
 import { resolveStoryTheme } from '@/shared/config'
 import { Button } from '@/shared/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
+import { SceneSegments } from './SceneSegments'
 
-export function DialogueHistory({ sessionId, storySlug }: { sessionId: string; storySlug?: string }) {
+export function DialogueHistory({ sessionId, storySlug, characters = [] }: { sessionId: string; storySlug?: string; characters?: Character[] }) {
   const [open, setOpen] = useState(false)
   const [turns, setTurns] = useState<TurnResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -45,9 +46,8 @@ export function DialogueHistory({ sessionId, storySlug }: { sessionId: string; s
             <p className="whitespace-pre-wrap">{turn.action}</p>
           </div>
           <div className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-foreground" data-speaker="character">
-            <p className="mb-1 text-xs font-semibold text-primary">{turn.speaker || 'Новелла'}</p>
-            {turn.narration && <p className="mb-2 whitespace-pre-wrap text-muted-foreground italic">{turn.narration}</p>}
-            <p className="whitespace-pre-wrap">{turn.dialogue}</p>
+            {new Set(turn.segments?.filter((part) => part.kind === 'dialogue').map((part) => part.character_id)).size <= 1 && <p className="mb-1 text-xs font-semibold text-primary">{turn.speaker || 'Новелла'}</p>}
+            <SceneSegments segments={turn.segments} narration={turn.narration} dialogue={turn.dialogue} speaker={turn.speaker} characters={characters} />
           </div>
         </div>)}
       </div>

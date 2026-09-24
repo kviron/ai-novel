@@ -56,7 +56,7 @@ def test_seeded_akane_story_can_start_and_restore(client):
     assert akane["cover_image_url"] == "/covers/akane-neon-echo.webp"
 
     created = client.post(
-        f'/api/stories/{akane["id"]}/sessions',
+        f"/api/stories/{akane['id']}/sessions",
         json={"provider_id": "ollama", "model_id": "qwen3:14b-q4_K_M"},
     )
     assert created.status_code == 201
@@ -65,17 +65,18 @@ def test_seeded_akane_story_can_start_and_restore(client):
     assert game["characters"][0]["name"] == "Аканэ Куроха"
     assert game["latest_turn"] is None
 
-    restored = client.get(f'/api/sessions/{game["id"]}')
+    restored = client.get(f"/api/sessions/{game['id']}")
     assert restored.status_code == 200
     assert restored.json()["id"] == game["id"]
 
 
 def test_seeded_story_contains_distinct_female_and_male_profiles(client):
     akane = akane_story(client)
-    characters = client.get(f'/api/stories/{akane["id"]}').json()["characters"]
+    characters = client.get(f"/api/stories/{akane['id']}").json()["characters"]
 
     assert {item["id"]: item["gender"] for item in characters} == {
-        "akane": "female", "mark": "male",
+        "akane": "female",
+        "mark": "male",
     }
     mark = next(item for item in characters if item["id"] == "mark")
     assert mark["name"] == "Марк Ветров"
@@ -108,9 +109,9 @@ def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
         session.commit()
 
     with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted:
-        first = restarted.get(f'/api/stories/{akane["id"]}').json()["characters"]
+        first = restarted.get(f"/api/stories/{akane['id']}").json()["characters"]
     with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted:
-        second = restarted.get(f'/api/stories/{akane["id"]}').json()["characters"]
+        second = restarted.get(f"/api/stories/{akane['id']}").json()["characters"]
 
     assert [item["id"] for item in first].count("mark") == 1
     assert [item["id"] for item in second].count("mark") == 1
@@ -118,9 +119,9 @@ def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
 
 def test_session_library_lists_only_requested_kind_with_lightweight_data(client):
     akane = akane_story(client)
-    first = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
-    author = client.post(f'/api/stories/{akane["id"]}/sessions', json={"kind": "author"}).json()
-    second = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    first = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
+    author = client.post(f"/api/stories/{akane['id']}/sessions", json={"kind": "author"}).json()
+    second = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
 
     player_saves = client.get("/api/sessions?kind=player")
     author_saves = client.get("/api/sessions?kind=author")
@@ -150,9 +151,9 @@ def test_autosave_points_to_one_player_session_per_story(client):
     akane = akane_story(client)
     assert client.get("/api/autosaves").json() == []
 
-    first = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
-    second = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
-    client.post(f'/api/stories/{akane["id"]}/sessions', json={"kind": "author"})
+    first = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
+    second = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
+    client.post(f"/api/stories/{akane['id']}/sessions", json={"kind": "author"})
 
     with Session(client.app.state.engine) as session:
         old_game = session.get(StorySession, first["id"])
@@ -172,9 +173,9 @@ def test_seed_is_idempotent_across_lifespan_startups(client):
         restarted = akane_story(restarted_client)
 
     with sqlite3.connect(client.app.state.settings.database_path) as database:
-        story_count = database.execute(
-            "SELECT COUNT(*) FROM stories WHERE slug = ?", ("akane-neon-echo",)
-        ).fetchone()[0]
+        story_count = database.execute("SELECT COUNT(*) FROM stories WHERE slug = ?", ("akane-neon-echo",)).fetchone()[
+            0
+        ]
         character_count = database.execute("SELECT COUNT(*) FROM characters WHERE id = ?", ("akane",)).fetchone()[0]
 
     assert restarted["id"] == akane["id"]
@@ -185,8 +186,8 @@ def test_seed_is_idempotent_across_lifespan_startups(client):
 def test_each_story_start_creates_an_independent_initial_session(client):
     akane = akane_story(client)
 
-    first = client.post(f'/api/stories/{akane["id"]}/sessions', json={})
-    second = client.post(f'/api/stories/{akane["id"]}/sessions', json={})
+    first = client.post(f"/api/stories/{akane['id']}/sessions", json={})
+    second = client.post(f"/api/stories/{akane['id']}/sessions", json={})
 
     assert first.status_code == 201
     assert second.status_code == 201
@@ -199,7 +200,7 @@ def test_new_session_falls_back_to_an_installed_ollama_model(client, fake_provid
     fake_provider.models = ["gemma4-local:32k", "qwen38-local:32k"]
     akane = akane_story(client)
 
-    response = client.post(f'/api/stories/{akane["id"]}/sessions', json={})
+    response = client.post(f"/api/stories/{akane['id']}/sessions", json={})
 
     assert response.status_code == 201
     assert response.json()["model_id"] == "gemma4-local:32k"
@@ -209,9 +210,7 @@ def test_new_session_accepts_explicit_installed_model(client, fake_provider):
     fake_provider.models = ["gemma4-local:32k", "qwen38-local:32k"]
     akane = akane_story(client)
 
-    response = client.post(
-        f'/api/stories/{akane["id"]}/sessions', json={"model_id": "qwen38-local:32k"}
-    )
+    response = client.post(f"/api/stories/{akane['id']}/sessions", json={"model_id": "qwen38-local:32k"})
 
     assert response.status_code == 201
     assert response.json()["model_id"] == "qwen38-local:32k"
@@ -220,17 +219,17 @@ def test_new_session_accepts_explicit_installed_model(client, fake_provider):
 def test_switch_model_in_same_session_preserves_progress_and_rejects_stale_revision(client, fake_provider):
     fake_provider.models = ["qwen3:14b-q4_K_M", "gemma4-local:32k"]
     akane = akane_story(client)
-    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    game = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
 
     changed = client.post(
-        f'/api/sessions/{game["id"]}/model',
+        f"/api/sessions/{game['id']}/model",
         json={"model_id": "gemma4-local:32k", "expected_state_version": 1},
     )
     stale = client.post(
-        f'/api/sessions/{game["id"]}/model',
+        f"/api/sessions/{game['id']}/model",
         json={"model_id": "qwen3:14b-q4_K_M", "expected_state_version": 1},
     )
-    restored = client.get(f'/api/sessions/{game["id"]}')
+    restored = client.get(f"/api/sessions/{game['id']}")
 
     assert changed.status_code == 200
     assert changed.json()["id"] == game["id"]
@@ -243,15 +242,15 @@ def test_switch_model_in_same_session_preserves_progress_and_rejects_stale_revis
 def test_switch_rejects_uninstalled_model_without_mutation(client, fake_provider):
     fake_provider.models = ["qwen3:14b-q4_K_M"]
     akane = akane_story(client)
-    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    game = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
 
     response = client.post(
-        f'/api/sessions/{game["id"]}/model',
+        f"/api/sessions/{game['id']}/model",
         json={"model_id": "missing:model", "expected_state_version": 1},
     )
 
     assert response.status_code == 422
-    assert client.get(f'/api/sessions/{game["id"]}').json()["state_version"] == 1
+    assert client.get(f"/api/sessions/{game['id']}").json()["state_version"] == 1
 
 
 def test_start_rejects_unknown_story_without_creating_a_session(client):
@@ -272,7 +271,7 @@ def test_start_rejects_unsupported_model_without_creating_a_session(client):
     before = session_count(client)
 
     response = client.post(
-        f'/api/stories/{akane["id"]}/sessions',
+        f"/api/stories/{akane['id']}/sessions",
         json={"provider_id": "ollama", "model_id": "unsupported:model"},
     )
 
@@ -286,7 +285,7 @@ def test_start_rejects_unsupported_provider_without_creating_a_session(client):
     before = session_count(client)
 
     response = client.post(
-        f'/api/stories/{akane["id"]}/sessions',
+        f"/api/stories/{akane['id']}/sessions",
         json={"provider_id": "unsupported", "model_id": "qwen3:14b-q4_K_M"},
     )
 
@@ -300,7 +299,7 @@ def test_start_rejects_a_hidden_player_character_without_creating_a_session(clie
     before = session_count(client)
 
     response = client.post(
-        f'/api/stories/{akane["id"]}/sessions',
+        f"/api/stories/{akane['id']}/sessions",
         json={"player_character": {"name": "Игрок"}},
     )
 
@@ -317,10 +316,10 @@ def test_restore_rejects_an_unknown_session(client):
 
 def test_session_restores_through_a_fresh_application_client(client):
     akane = akane_story(client)
-    created = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    created = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
 
     with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted_client:
-        restored = restarted_client.get(f'/api/sessions/{created["id"]}')
+        restored = restarted_client.get(f"/api/sessions/{created['id']}")
 
     assert restored.status_code == 200
     assert restored.json()["id"] == created["id"]
@@ -328,7 +327,7 @@ def test_session_restores_through_a_fresh_application_client(client):
 
 def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     akane = akane_story(client)
-    game = client.post(f'/api/stories/{akane["id"]}/sessions', json={}).json()
+    game = client.post(f"/api/stories/{akane['id']}/sessions", json={}).json()
     directive = {"mode": "sprite_scene", "emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
 
     with Session(client.app.state.engine) as session:
@@ -356,11 +355,14 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
         )
         session.commit()
 
-    restored = client.get(f'/api/sessions/{game["id"]}')
+    restored = client.get(f"/api/sessions/{game['id']}")
 
     assert restored.status_code == 200
     assert restored.json()["visual_state"] == {
-        "emotion": "fan", "pose": "fan_open", "outfit": "red_dress", "background": "neon_crossroads"
+        "emotion": "fan",
+        "pose": "fan_open",
+        "outfit": "red_dress",
+        "background": "neon_crossroads",
     }
     assert restored.json()["latest_turn"]["visual_directive"] == directive
     assert restored.json()["latest_turn"]["action"] == "Открыть веер"

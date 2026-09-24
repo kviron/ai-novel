@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.providers.contracts import SceneSegment
+
 
 class StartSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -31,6 +33,7 @@ class CharacterDetail(BaseModel):
     personality: str
     appearance: str
     role: str
+    color: str = "#D9A75F"
     visual_profile_version: int
 
 
@@ -54,6 +57,7 @@ class TurnDetail(BaseModel):
     speaker: str
     narration: str
     dialogue: str
+    segments: list[SceneSegment]
     choices: list[str]
     visual_directive: dict[str, str]
 

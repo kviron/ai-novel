@@ -88,6 +88,65 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
     assert json.loads(turns[0].raw_response)["visual_directive"]["emotion"] == "fan"
 
 
+def test_interleaved_scene_preserves_two_speakers_in_history(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(
+            visual_directive={"emotion": "neutral", "pose": "default", "outfit": "dark_coat"},
+            segments=[
+                {"kind": "narration", "text": "Аканэ закрывает веер."},
+                {"kind": "dialogue", "character_id": "akane", "text": "Я слышала сигнал."},
+                {"kind": "narration", "text": "Марк подходит к окну."},
+                {"kind": "dialogue", "character_id": "mark", "text": "Я тоже."},
+            ],
+        )
+    ]
+
+    result = post_turn(client, akane_session)
+
+    assert result.status_code == 201
+    assert [(part["kind"], part.get("character_id"), part["text"]) for part in result.json()["segments"]] == [
+        ("narration", None, "Аканэ закрывает веер."),
+        ("dialogue", "akane", "Я слышала сигнал."),
+        ("narration", None, "Марк подходит к окну."),
+        ("dialogue", "mark", "Я тоже."),
+    ]
+    restored = client.get(f"/api/sessions/{akane_session.id}").json()
+    assert restored["latest_turn"]["segments"] == result.json()["segments"]
+
+
+def test_repeated_dialogue_in_narration_is_repaired_once(client, fake_provider, akane_session):
+    repeated = "Моё присутствие здесь результат тщательного планирования."
+    fake_provider.responses = [
+        proposal(
+            segments=[
+                {"kind": "narration", "text": f"Аканэ сказала: {repeated}"},
+                {"kind": "dialogue", "character_id": "akane", "text": repeated},
+            ]
+        ),
+        proposal(
+            segments=[
+                {"kind": "narration", "text": "Аканэ закрыла веер."},
+                {"kind": "dialogue", "character_id": "akane", "text": repeated},
+            ]
+        ),
+    ]
+
+    result = post_turn(client, akane_session)
+
+    assert result.status_code == 201
+    assert result.json()["segments"][0]["text"] == "Аканэ закрыла веер."
+    assert fake_provider.call_count == 2
+
+
+def test_missing_legacy_narration_is_repaired_instead_of_crashing(client, fake_provider, akane_session):
+    fake_provider.responses = [proposal(narration=None), proposal()]
+
+    result = post_turn(client, akane_session)
+
+    assert result.status_code == 201
+    assert fake_provider.call_count == 2
+
+
 def test_dialogue_history_follows_only_the_active_branch(client, fake_provider, akane_session):
     fake_provider.responses = [proposal(), proposal()]
     first = post_turn(client, akane_session).json()
@@ -569,9 +628,8 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
     assert context["state"]["state_version"] == 10
     assert len(context["recent_turns"]) == 8
     assert [turn["action"] for turn in context["recent_turns"]] == [f"Действие {n}" for n in range(1, 9)]
-    assert all(
-        {"narration", "dialogue", "choices", "visual_directive"} <= turn.keys() for turn in context["recent_turns"]
-    )
+    assert all({"segments", "choices", "visual_directive"} <= turn.keys() for turn in context["recent_turns"])
+    assert all("narration" not in turn and "dialogue" not in turn for turn in context["recent_turns"])
 
 
 @pytest.mark.parametrize("failure", ["unavailable", "model_unavailable", "invalid_twice", "domain_invalid_twice"])
@@ -675,7 +733,7 @@ def test_migrated_legacy_history_supports_next_strict_canonical_turn(migrated_ga
     assert requests[0].model_id == "legacy"
     history = json.loads(requests[0].user_prompt)["recent_turns"]
     assert history[0]["visual_directive"]["character_id"] == "a-character"
-    assert history[0]["dialogue"] == "Legacy dialogue"
+    assert history[0]["segments"][-1]["text"] == "Legacy dialogue"
     with Session(client.app.state.engine) as db:
         assert db.get(Turn, "old-turn").model_dump() == original
         turns = list(db.exec(select(Turn).where(Turn.session_id == game.id).order_by(Turn.state_version)))

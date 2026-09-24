@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from app.modules.providers.contracts import SceneSegment
 from app.modules.stories.content import (
     AKANE_BACKGROUNDS,
     AKANE_EMOTIONS,
@@ -35,7 +36,37 @@ class InvalidProposalError(Exception):
 def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> AcceptedTurn:
     """Accept only known identifiers and meaningful choices; normalize missing emotion assets."""
     characters = {character["id"]: character for character in context.characters}
-    character = characters.get(proposal.dialogue.character_id)
+    if proposal.segments is not None:
+        segments = proposal.segments
+    elif proposal.dialogue is not None:
+        if not proposal.narration or not proposal.narration.strip():
+            raise InvalidProposalError("empty_narration_or_dialogue")
+        segments = [
+            SceneSegment(kind="narration", text=proposal.narration),
+            SceneSegment(kind="dialogue", text=proposal.dialogue.text, character_id=proposal.dialogue.character_id),
+        ]
+    else:
+        segments = []
+    if not segments or not any(segment.kind == "dialogue" for segment in segments):
+        raise InvalidProposalError("missing_dialogue")
+    for segment in segments:
+        if not segment.text.strip():
+            raise InvalidProposalError("empty_segment")
+        if segment.kind == "dialogue" and segment.character_id not in characters:
+            raise InvalidProposalError("unknown_character_id")
+        if segment.kind == "narration" and segment.character_id is not None:
+            raise InvalidProposalError("narration_has_character_id")
+        if segment.kind == "dialogue" and segment.character_id is None:
+            raise InvalidProposalError("missing_character_id")
+    dialogue_segments = [segment for segment in segments if segment.kind == "dialogue"]
+    narration_segments = [segment for segment in segments if segment.kind == "narration"]
+    for narration in narration_segments:
+        normalized_narration = " ".join(narration.text.casefold().split())
+        for dialogue in dialogue_segments:
+            normalized_dialogue = " ".join(dialogue.text.casefold().split())
+            if len(normalized_dialogue) >= 24 and normalized_dialogue in normalized_narration:
+                raise InvalidProposalError("dialogue_repeated_in_narration")
+    character = characters.get(dialogue_segments[-1].character_id)
     if character is None:
         raise InvalidProposalError("unknown_character_id")
     directive = proposal.visual_directive
@@ -51,7 +82,7 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
         raise InvalidProposalError("expected_2_to_4_nonempty_choices")
     if len({choice.casefold() for choice in choices}) != len(choices):
         raise InvalidProposalError("duplicate_choices")
-    if not proposal.narration.strip() or not proposal.dialogue.text.strip():
+    if proposal.segments is None and (not proposal.narration or not proposal.narration.strip()):
         raise InvalidProposalError("empty_narration_or_dialogue")
     # MVP sessions have no reversible world-state effects; accepting one would make rewind unsafe.
     if proposal.proposed_effects:
@@ -65,8 +96,9 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
         background = AKANE_INITIAL_BACKGROUND
     return AcceptedTurn(
         speaker=character["name"],
-        narration=proposal.narration.strip(),
-        dialogue=proposal.dialogue.text.strip(),
+        narration="\n".join(segment.text.strip() for segment in narration_segments),
+        dialogue=dialogue_segments[-1].text.strip(),
+        segments=[segment.model_copy(update={"text": segment.text.strip()}) for segment in segments],
         choices=choices,
         visual_directive=CanonicalVisualDirective(
             character_id=character["id"],

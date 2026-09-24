@@ -65,16 +65,19 @@ def generate_story_role(
     if revision is None or revision.character_id != payload.character_id:
         raise InvalidRevisionError
     current = payload.existing_text.strip()
-    prompt = json.dumps({
-        "story": {"title": story.title, "premise": story.premise, "description": story.description},
-        "character": {
-            "name": revision.name,
-            "personality": revision.personality,
-            "biography": revision.biography,
-            "speech": revision.speech,
+    prompt = json.dumps(
+        {
+            "story": {"title": story.title, "premise": story.premise, "description": story.description},
+            "character": {
+                "name": revision.name,
+                "personality": revision.personality,
+                "biography": revision.biography,
+                "speech": revision.speech,
+            },
+            "existing_text_to_preserve_and_expand": current,
         },
-        "existing_text_to_preserve_and_expand": current,
-    }, ensure_ascii=False)
+        ensure_ascii=False,
+    )
     return _generate_text(
         registry,
         configured_model,

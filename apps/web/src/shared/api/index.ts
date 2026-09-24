@@ -7,6 +7,7 @@ export type {
   CharacterRevision,
   CharacterWrite,
   CharacterTextField,
+  SceneSegment,
   StoryCharacterLink,
   CreateTurnRequest,
   ProviderStatus,

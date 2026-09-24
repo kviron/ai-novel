@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CharacterWrite(BaseModel):
@@ -57,11 +57,23 @@ class AttachCharacterRequest(BaseModel):
     role: str = "cast"
 
 
+class BatchAttachRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    character_ids: list[str] = Field(min_length=1, max_length=50)
+
+
 class PinRevisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revision_id: str
     role: str | None = Field(default=None, max_length=2000)
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+
+    @field_validator("color")
+    @classmethod
+    def normalize_color(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
 
 
 class RevisionProfile(BaseModel):
@@ -98,6 +110,7 @@ class LinkedStory(BaseModel):
     revision_id: str
     revision_number: int
     role: str
+    color: str = "#D9A75F"
 
 
 class StoryCharacterProfile(BaseModel):
@@ -105,3 +118,4 @@ class StoryCharacterProfile(BaseModel):
     character_id: str
     revision_id: str
     role: str
+    color: str = "#D9A75F"

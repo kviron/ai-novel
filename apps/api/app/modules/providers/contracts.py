@@ -12,6 +12,14 @@ class DialogueProposal(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class SceneSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["narration", "dialogue"]
+    text: str = Field(min_length=1, max_length=4000)
+    character_id: str | None = None
+
+
 class VisualDirective(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -34,13 +42,13 @@ class TurnProposal(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
-        json_schema_extra={
-            "required": ["narration", "dialogue", "visual_directive", "suggested_choices", "proposed_effects"]
-        },
+        json_schema_extra={"required": ["segments", "visual_directive", "suggested_choices", "proposed_effects"]},
     )
 
-    narration: str = Field(min_length=1, max_length=6000)
-    dialogue: DialogueProposal
+    # Legacy test/provider payloads remain readable; the new prompt schema requires segments.
+    narration: str | None = Field(default=None, max_length=6000)
+    dialogue: DialogueProposal | None = None
+    segments: list[SceneSegment] | None = Field(default=None, min_length=1, max_length=12)
     visual_directive: VisualDirective
     suggested_choices: list[str] = Field(min_length=2, max_length=4)
     proposed_effects: list[ProposedEffect] = Field(default_factory=list, max_length=20)

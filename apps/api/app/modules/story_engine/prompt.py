@@ -6,7 +6,7 @@ from app.modules.stories.content import AKANE_EMOTIONS
 from .contracts import TurnCreate, TurnProposal
 from .rules import GenerationContext
 
-PROMPT_VERSION = "first-playable-v1"
+PROMPT_VERSION = "scene-segments-v2"
 
 
 def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens: int) -> TurnGenerationRequest:
@@ -30,6 +30,13 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "Для visual_directive.background выбирай neon_crossroads для улицы или signal_archive для архива сигнала. "
             "Меняй фон только когда повествование действительно перемещается в эту локацию. "
             "Предложи 2–4 содержательных, непустых и разных выбора. "
+            "Верни segments в порядке сцены: narration, dialogue, narration, dialogue. "
+            "У каждой dialogue укажи character_id; в narration его не указывай. "
+            "Пример: [{kind: narration, text: 'Она опустила веер.'}, "
+            "{kind: dialogue, character_id: 'akane', text: 'Я слышала сигнал.'}, "
+            "{kind: narration, text: 'Марк подошёл к окну.'}, "
+            "{kind: dialogue, character_id: 'mark', text: 'Я тоже.'}]. "
+            "Не повторяй прямую речь в описании и не вставляй её в narration. "
             "proposed_effects должен быть пустым: изменения канона в этой истории не разрешены. "
             "Верни только JSON по переданной схеме."
         ),

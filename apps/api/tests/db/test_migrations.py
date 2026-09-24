@@ -62,9 +62,7 @@ def test_upgrade_pins_each_legacy_character_revision_to_story_and_session(tmp_pa
         revision = database.execute(
             "SELECT id, character_id, revision_number, name, age FROM character_revisions"
         ).fetchall()
-        story_link = database.execute(
-            "SELECT story_id, character_id, revision_id FROM story_characters"
-        ).fetchall()
+        story_link = database.execute("SELECT story_id, character_id, revision_id FROM story_characters").fetchall()
         session_link = database.execute(
             "SELECT session_id, character_id, revision_id FROM session_characters"
         ).fetchall()
@@ -87,12 +85,8 @@ def test_upgrade_keeps_existing_save_and_backfills_library_metadata(tmp_path):
     run_migrations(database_path)
 
     with sqlite3.connect(database_path) as db:
-        story = db.execute(
-            "SELECT description, cover_image_url FROM stories WHERE id='akane-neon-echo'"
-        ).fetchone()
-        saved = db.execute(
-            "SELECT id, kind FROM story_sessions WHERE story_id='akane-neon-echo'"
-        ).fetchone()
+        story = db.execute("SELECT description, cover_image_url FROM stories WHERE id='akane-neon-echo'").fetchone()
+        saved = db.execute("SELECT id, kind FROM story_sessions WHERE story_id='akane-neon-echo'").fetchone()
         turn = db.execute("SELECT id, session_id FROM turns WHERE id='saved-turn'").fetchone()
 
     assert story[0]

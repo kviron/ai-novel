@@ -27,6 +27,10 @@ def get_story_link(session: Session, story_id: str, character_id: str) -> StoryC
     return session.get(StoryCharacter, (story_id, character_id))
 
 
+def list_story_links_for_story(session: Session, story_id: str) -> list[StoryCharacter]:
+    return list(session.exec(select(StoryCharacter).where(StoryCharacter.story_id == story_id)))
+
+
 def list_story_links(session: Session, character_id: str) -> list[tuple[Story, StoryCharacter, CharacterRevision]]:
     return list(
         session.exec(

@@ -18,6 +18,7 @@ export type Character = {
   personality: string
   appearance: string
   role?: string
+  color?: string
   visual_profile_version: number
 }
 
@@ -39,14 +40,16 @@ export type CharacterHistory = {
   current_revision_id: string
   source_type: string
   revisions: CharacterRevision[]
-  linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number; role: string }[]
+  linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number; role: string; color?: string }[]
 }
 
 export type CharacterWrite = Pick<CharacterRevision, 'name' | 'gender' | 'age' | 'personality' | 'appearance' | 'biography' | 'speech'>
 
 export type CharacterTextField = 'personality' | 'appearance' | 'biography' | 'speech'
 
-export type StoryCharacterLink = { story_id: string; character_id: string; revision_id: string; role: string }
+export type StoryCharacterLink = { story_id: string; character_id: string; revision_id: string; role: string; color: string }
+
+export type SceneSegment = { kind: 'narration' | 'dialogue'; text: string; character_id?: string | null }
 
 export type StoryDetail = StorySummary & {
   current_scene: string
@@ -71,6 +74,7 @@ export type TurnResult = {
   speaker: string
   narration: string
   dialogue: string
+  segments?: SceneSegment[]
   choices: string[]
   visual_directive: VisualDirective
   provider_id: string
@@ -87,6 +91,7 @@ export type SessionTurn = {
   speaker: string
   narration: string
   dialogue: string
+  segments?: SceneSegment[]
   choices: string[]
   visual_directive: Record<string, string>
 }

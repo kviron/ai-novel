@@ -68,8 +68,10 @@ def seed_akane_story(session: Session) -> None:
             session.flush()
             character.current_revision_id = revision.id
         if session.get(StoryCharacter, (story.id, character.id)) is None:
-            session.add(StoryCharacter(
-                story_id=story.id,
-                character_id=character.id,
-                revision_id=character.current_revision_id,
-            ))
+            session.add(
+                StoryCharacter(
+                    story_id=story.id,
+                    character_id=character.id,
+                    revision_id=character.current_revision_id,
+                )
+            )

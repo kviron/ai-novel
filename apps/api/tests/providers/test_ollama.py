@@ -52,8 +52,7 @@ def test_ollama_sends_schema_and_parses_turn():
             {"role": "user", "content": "Игрок спрашивает о веере."},
         ]
         assert body["format"]["required"] == [
-            "narration",
-            "dialogue",
+            "segments",
             "visual_directive",
             "suggested_choices",
             "proposed_effects",
@@ -143,11 +142,7 @@ def test_ollama_http_error_is_provider_unavailable_without_raw_body_in_message()
     provider = OllamaProvider(
         "http://ollama.test",
         1,
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(503, text="diagnostic upstream body")
-            )
-        ),
+        httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(503, text="diagnostic upstream body"))),
     )
 
     with pytest.raises(ProviderUnavailableError) as raised:
@@ -162,11 +157,7 @@ def test_ollama_unknown_model_has_distinct_stable_code():
     provider = OllamaProvider(
         "http://ollama.test",
         1,
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(404, text='{"error":"model not found"}')
-            )
-        ),
+        httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(404, text='{"error":"model not found"}'))),
     )
 
     with pytest.raises(ProviderResponseError) as raised:
@@ -220,9 +211,7 @@ def test_validation_failure_traceback_does_not_expose_generated_content():
     with pytest.raises(ProviderResponseError) as raised:
         provider.generate_turn(turn_request())
 
-    formatted_traceback = "".join(
-        traceback.format_exception(raised.type, raised.value, raised.tb)
-    )
+    formatted_traceback = "".join(traceback.format_exception(raised.type, raised.value, raised.tb))
     assert sensitive_marker not in formatted_traceback
     assert sensitive_marker in raised.value.raw_response
     assert raised.value.__cause__ is None
@@ -246,7 +235,7 @@ def test_request_schema_is_deeply_immutable_and_wire_payload_is_a_defensive_copy
         wire_schema = json.loads(http_request.content)["format"]
         assert isinstance(wire_schema, dict)
         assert isinstance(wire_schema["required"], list)
-        assert wire_schema["required"][0] == "narration"
+        assert wire_schema["required"][0] == "segments"
         return httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
 
     provider = OllamaProvider(
@@ -265,7 +254,7 @@ def test_immutable_request_schema_remains_json_serializable():
 
     assert isinstance(serialized["response_schema"], dict)
     assert isinstance(serialized["response_schema"]["required"], list)
-    assert serialized["response_schema"]["required"][0] == "narration"
+    assert serialized["response_schema"]["required"][0] == "segments"
 
 
 def test_ollama_lists_models_and_reports_health():

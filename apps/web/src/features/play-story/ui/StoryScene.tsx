@@ -14,7 +14,7 @@ import { Separator } from '@/shared/ui/separator'
 import { useStoryPlayer } from '../model/useStoryPlayer'
 import { CharacterSprite } from './CharacterSprite'
 import { SceneBackground } from './SceneBackground'
-import { TypewriterText } from './TypewriterText'
+import { SceneSegments } from './SceneSegments'
 
 export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlayer> }) {
   const [choicesOpen, setChoicesOpen] = useState(false)
@@ -27,6 +27,9 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
 
   const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.phase === 'switching_model' || player.checking
   const choices = turn?.choices ?? (isAkaneStory ? ['Спросить о сигнале', 'Спросить о веере', 'Осмотреть комнату'] : [])
+  const sceneSpeakers = new Set(turn?.segments?.filter((part) => part.kind === 'dialogue').map((part) => part.character_id))
+  const singleSpeaker = sceneSpeakers.size <= 1
+  const activeCharacter = session?.characters.find((character) => character.id === turn?.visual_directive.character_id)
 
   return <section className="stage" aria-label="Игровая сцена" aria-busy={working}>
     {isAkaneStory && session
@@ -41,10 +44,9 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         {player.error && <p role="alert" className="text-destructive">{player.error}</p>}
       </div>
       {session && <>
-        {(turn?.speaker || session.characters[0]?.name) && <p className="speaker">{turn?.speaker ?? session.characters[0]?.name}</p>}
+        {(turn?.speaker || session.characters[0]?.name) && singleSpeaker && <p className="speaker" style={activeCharacter?.color ? { backgroundColor: `color-mix(in srgb, ${activeCharacter.color} 65%, #111)` } : undefined}>{turn?.speaker?.split(/\s+/)[0] ?? session.characters[0]?.name.split(/\s+/)[0]}</p>}
         <div className="story-copy">
-          <p className="narration">{turn?.narration ?? session.story.premise}</p>
-          <TypewriterText text={turn?.dialogue ?? (isAkaneStory ? 'Вы всё-таки пришли. Что привело вас сюда?' : 'Начните историю своим действием.')} />
+          <SceneSegments segments={turn?.segments} narration={turn?.narration ?? session.story.premise} dialogue={turn?.dialogue ?? (isAkaneStory ? 'Вы всё-таки пришли. Что привело вас сюда?' : 'Начните историю своим действием.')} speaker={turn?.speaker ?? session.characters[0]?.name ?? ''} characters={session.characters} animateLast hideSpeakerNames={singleSpeaker} />
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>

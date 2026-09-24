@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.providers.contracts import SceneSegment as SceneSegment
 from app.modules.providers.contracts import TurnProposal as TurnProposal
 from app.modules.providers.contracts import VisualDirective as VisualDirective
 
@@ -37,6 +38,7 @@ class AcceptedTurn(BaseModel):
     speaker: str
     narration: str
     dialogue: str
+    segments: list[SceneSegment]
     choices: list[str]
     visual_directive: CanonicalVisualDirective
 

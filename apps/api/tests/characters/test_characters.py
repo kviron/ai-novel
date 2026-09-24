@@ -62,6 +62,7 @@ def test_create_and_revise_do_not_move_story_pin(client):
             "revision_id": character["current_revision_id"],
             "revision_number": 1,
             "role": "cast",
+            "color": "#D9A75F",
         }
     ]
     with Session(client.app.state.engine) as session:

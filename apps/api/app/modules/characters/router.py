@@ -12,6 +12,7 @@ from app.modules.providers.router import ProviderRegistryDep
 from .field_generation import generate_character_field, generate_story_role
 from .schemas import (
     AttachCharacterRequest,
+    BatchAttachRequest,
     CharacterHistory,
     CharacterProfile,
     CharacterWrite,
@@ -25,9 +26,12 @@ from .service import (
     CharacterAlreadyAttachedError,
     CharacterNotFoundError,
     InvalidRevisionError,
+    LastCastMemberError,
     StoryNotFoundError,
     attach_character,
+    attach_characters_batch,
     create_character,
+    detach_character,
     get_character,
     list_characters,
     pin_revision,
@@ -39,8 +43,26 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/characters", response_model=list[CharacterProfile])
-def read_characters(session: SessionDep) -> list[CharacterProfile]:
-    return list_characters(session)
+def read_characters(session: SessionDep, exclude_story_id: str | None = None) -> list[CharacterProfile]:
+    return list_characters(session, exclude_story_id)
+
+
+@router.post(
+    "/stories/{story_id}/characters/batch",
+    status_code=status.HTTP_201_CREATED,
+    response_model=list[StoryCharacterProfile],
+)
+def add_story_characters_batch(
+    story_id: str, payload: BatchAttachRequest, session: SessionDep
+) -> list[StoryCharacterProfile]:
+    try:
+        return attach_characters_batch(session, story_id, payload.character_ids)
+    except (StoryNotFoundError, CharacterNotFoundError) as error:
+        raise ApiError(404, "not_found", "История или персонаж не найдены.") from error
+    except InvalidRevisionError as error:
+        raise ApiError(422, "validation_error", "У персонажа нет доступной ревизии.") from error
+    except CharacterAlreadyAttachedError as error:
+        raise ApiError(409, "conflict", "Персонаж уже добавлен в историю.") from error
 
 
 @router.post("/characters/generate-field", response_model=GeneratedCharacterField)
@@ -96,8 +118,11 @@ def add_story_character(story_id: str, payload: AttachCharacterRequest, session:
 
 @router.post("/stories/{story_id}/characters/generate-role", response_model=GeneratedCharacterField)
 def generate_role(
-    story_id: str, payload: GenerateStoryRoleRequest, session: SessionDep,
-    settings: RuntimeSettingsDep, registry: ProviderRegistryDep,
+    story_id: str,
+    payload: GenerateStoryRoleRequest,
+    session: SessionDep,
+    settings: RuntimeSettingsDep,
+    registry: ProviderRegistryDep,
 ) -> GeneratedCharacterField:
     try:
         return generate_story_role(session, story_id, payload, registry, settings.ollama_model)
@@ -116,8 +141,18 @@ def update_story_character(
     story_id: str, character_id: str, payload: PinRevisionRequest, session: SessionDep
 ) -> StoryCharacterProfile:
     try:
-        return pin_revision(session, story_id, character_id, payload.revision_id, payload.role)
+        return pin_revision(session, story_id, character_id, payload.revision_id, payload.role, payload.color)
     except CharacterNotFoundError as error:
         raise ApiError(404, "not_found", "Персонаж не привязан к истории.") from error
     except InvalidRevisionError as error:
         raise ApiError(422, "validation_error", "Ревизия не принадлежит персонажу.") from error
+
+
+@router.delete("/stories/{story_id}/characters/{character_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_story_character(story_id: str, character_id: str, session: SessionDep) -> None:
+    try:
+        detach_character(session, story_id, character_id)
+    except CharacterNotFoundError as error:
+        raise ApiError(404, "not_found", "Персонаж не привязан к истории.") from error
+    except LastCastMemberError as error:
+        raise ApiError(409, "conflict", "Нельзя удалить последнего персонажа новеллы.") from error

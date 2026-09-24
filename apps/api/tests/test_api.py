@@ -46,11 +46,11 @@ def test_session_restores_through_a_fresh_application(tmp_path):
 
     with TestClient(create_app(settings, ProviderRegistry([provider]))) as first_client:
         akane = _akane_story(first_client)
-        created = first_client.post(f'/api/stories/{akane["id"]}/sessions', json={})
+        created = first_client.post(f"/api/stories/{akane['id']}/sessions", json={})
         assert created.status_code == 201
 
     with TestClient(create_app(settings, ProviderRegistry([provider]))) as second_client:
-        restored = second_client.get(f'/api/sessions/{created.json()["id"]}')
+        restored = second_client.get(f"/api/sessions/{created.json()['id']}")
 
     assert restored.status_code == 200
     assert restored.json()["id"] == created.json()["id"]
@@ -81,9 +81,9 @@ def test_runtime_model_and_context_config_drive_new_sessions_and_turns(tmp_path)
 
     with TestClient(create_app(settings, ProviderRegistry([provider]))) as client:
         story = _akane_story(client)
-        default_session = client.post(f'/api/stories/{story["id"]}/sessions', json={})
+        default_session = client.post(f"/api/stories/{story['id']}/sessions", json={})
         explicit_session = client.post(
-            f'/api/stories/{story["id"]}/sessions',
+            f"/api/stories/{story['id']}/sessions",
             json={"provider_id": "ollama", "model_id": "review:model"},
         )
         assert default_session.status_code == 201
@@ -91,10 +91,10 @@ def test_runtime_model_and_context_config_drive_new_sessions_and_turns(tmp_path)
 
         game = explicit_session.json()
         turn = client.post(
-            f'/api/sessions/{game["id"]}/turns',
+            f"/api/sessions/{game['id']}/turns",
             json={"request_id": "configured-turn", "expected_state_version": 1, "action": "Искать след"},
         )
-        restored = client.get(f'/api/sessions/{game["id"]}')
+        restored = client.get(f"/api/sessions/{game['id']}")
 
     assert story["recommended_model_id"] == "qwen3:14b-q4_K_M"
     assert default_session.json()["model_id"] == "review:model"
@@ -161,9 +161,7 @@ def test_openapi_operation_ids_are_unique_stable_and_turn_responses_are_complete
     assert set(responses) == {"200", "201", "404", "409", "422", "502", "503"}
     assert responses["200"]["content"]["application/json"]["schema"]["$ref"].endswith("/TurnResult")
     for status_code in ("404", "409", "422", "502", "503"):
-        assert responses[status_code]["content"]["application/json"]["schema"]["$ref"].endswith(
-            "/ErrorResponse"
-        )
+        assert responses[status_code]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorResponse")
 
 
 def test_shutdown_disposes_engine_but_does_not_close_injected_registry(tmp_path):

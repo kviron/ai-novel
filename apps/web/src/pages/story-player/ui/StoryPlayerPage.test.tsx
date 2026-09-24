@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
@@ -82,6 +82,29 @@ test('восстанавливает подтверждённый ход и пр
   await userEvent.keyboard('{Escape}')
   await userEvent.click(screen.getByRole('button', { name: 'Показать полностью' }))
   expect(screen.getByText(turn.dialogue)).toBeInTheDocument()
+})
+
+test('показывает чередование двух персонажей в сцене и истории', async () => {
+  const multi = { ...turn, segments: [
+    { kind: 'narration' as const, text: 'Аканэ закрыла веер.' },
+    { kind: 'dialogue' as const, character_id: 'akane', text: 'Я слышала сигнал.' },
+    { kind: 'narration' as const, text: 'Марк подошёл к окну.' },
+    { kind: 'dialogue' as const, character_id: 'mark', text: 'Я тоже.' },
+  ] }
+  apiServer.session({ ...session, state_version: 2, characters: [
+    { ...session.characters[0], name: 'Аканэ Куроха', color: '#AA3344' },
+    { ...session.characters[0], id: 'mark', name: 'Марк Ветров', color: '#3366AA' },
+  ], latest_turn: multi })
+  apiServer.dialogueHistory(session.id, [multi])
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const scene = await screen.findByRole('region', { name: 'Игровая сцена' })
+  expect(scene.textContent?.indexOf('Аканэ закрыла веер.')).toBeLessThan(scene.textContent?.indexOf('Я слышала сигнал.') ?? 0)
+  expect(scene.textContent?.indexOf('Я слышала сигнал.')).toBeLessThan(scene.textContent?.indexOf('Марк подошёл к окну.') ?? 0)
+  expect(scene).toHaveTextContent('Марк:')
+  await userEvent.click(screen.getByRole('button', { name: 'История диалогов' }))
+  const history = await screen.findByRole('dialog', { name: 'История диалогов' })
+  expect(history).toHaveTextContent('Я тоже.')
+  expect(within(history).queryByText('Аканэ', { exact: true })).toBeNull()
 })
 
 test('блокирует действия offline и после проверки возвращает управление', async () => {

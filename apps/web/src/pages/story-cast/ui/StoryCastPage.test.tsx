@@ -6,57 +6,47 @@ import { apiServer } from '@/test/api-server'
 import { TestRouter } from '@/test/TestRouter'
 
 const story = { id: 'story-1', slug: 'test', title: 'Тестовая новелла', premise: 'Тест', description: 'Тест', cover_image_url: null, story_mode: 'free' as const, recommended_provider_id: 'ollama', recommended_model_id: 'test' }
-const character = { id: 'mark', character_id: 'mark', current_revision_id: 'mark-v2', revision_number: 2, name: 'Марк', gender: 'male', age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '', role: '', source_type: 'local', created_at: '2026-09-24' }
-const revision = { id: 'mark-v2', revision_number: 2, name: 'Марк', gender: 'male', age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '', role: '', created_at: '2026-09-24' }
+const character = { id: 'mark', character_id: 'mark', current_revision_id: 'mark-v2', revision_number: 2, name: 'Марк Ветров', gender: 'male', age: 29, personality: 'Спокойный', appearance: 'Тёмные волосы', biography: '', speech: '', source_type: 'local', created_at: '2026-09-24' }
+const revision = { ...character, id: 'mark-v2', revision_number: 2 }
 
 afterEach(() => { cleanup(); apiServer.reset() })
 
-test('attaches a selected character revision to a story', async () => {
+test('opens a server-filtered catalog and adds selected characters in one batch', async () => {
   apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [] })
   apiServer.listCharacters([character])
   apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision], linked_stories: [] })
   render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
 
-  await userEvent.click(await screen.findByRole('button', { name: /Марк.*Не добавлен/ }))
-  await userEvent.type(screen.getByRole('textbox', { name: 'Роль в новелле' }), 'Союзник героини')
-  await userEvent.click(screen.getByRole('button', { name: 'Добавить в новеллу' }))
-
-  expect(await screen.findByText('Сейчас закреплена ревизия v2.')).toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters' && options?.method === 'POST')).toBe(true)
-  const attach = vi.mocked(fetch).mock.calls.find(([url, options]) => url === '/api/stories/story-1/characters' && options?.method === 'POST')
-  expect(JSON.parse(String(attach?.[1]?.body)).role).toBe('Союзник героини')
+  await userEvent.click(await screen.findByRole('button', { name: 'Добавить персонажа' }))
+  expect(screen.getByRole('dialog', { name: 'Добавить персонажей' })).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('exclude_story_id=story-1'))).toBe(true)
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Марк Ветров' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Добавить выбранных' }))
+  expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters/batch' && options?.method === 'POST')).toBe(true)
+  expect(await screen.findByText('Марк Ветров')).toBeInTheDocument()
 })
 
-test('repins an attached character without starting a session', async () => {
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [{ ...revision, id: 'mark', visual_profile_version: 1 }] })
-  apiServer.listCharacters([character])
-  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision, { ...revision, id: 'mark-v1', revision_number: 1 }], linked_stories: [{ story_id: 'story-1', story_title: story.title, story_slug: story.slug, revision_id: 'mark-v1', revision_number: 1, role: 'Союзник героини' }] })
+test('edits a story-specific role, revision and color without starting a session', async () => {
+  apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [{ ...revision, id: 'mark', role: 'cast', color: '#D9A75F', visual_profile_version: 2 }] })
+  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision, { ...revision, id: 'mark-v1', revision_number: 1 }], linked_stories: [{ story_id: 'story-1', story_title: story.title, story_slug: story.slug, revision_id: 'mark-v2', revision_number: 2, role: 'cast', color: '#D9A75F' }] })
   render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
 
-  await userEvent.click(await screen.findByRole('button', { name: /Марк.*В составе/ }))
-  await userEvent.selectOptions(screen.getByLabelText('Ревизия'), 'mark-v2')
-  await userEvent.clear(screen.getByRole('textbox', { name: 'Роль в новелле' }))
-  await userEvent.type(screen.getByRole('textbox', { name: 'Роль в новелле' }), 'Соперник героини')
-  await userEvent.click(screen.getByRole('button', { name: 'Сохранить роль и ревизию' }))
-
-  expect(await screen.findByText('Сейчас закреплена ревизия v2.')).toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters/mark' && options?.method === 'PUT')).toBe(true)
+  await userEvent.click(await screen.findByRole('button', { name: 'Редактировать Марк Ветров' }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Роль в новелле' }), 'Союзник героини')
+  await userEvent.click(screen.getByRole('button', { name: 'Сгенерировать роль' }))
+  expect(await screen.findByDisplayValue('Союзник героини и хранитель секрета города.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
   const update = vi.mocked(fetch).mock.calls.find(([url, options]) => url === '/api/stories/story-1/characters/mark' && options?.method === 'PUT')
-  expect(JSON.parse(String(update?.[1]?.body)).role).toBe('Соперник героини')
+  expect(JSON.parse(String(update?.[1]?.body))).toMatchObject({ role: 'Союзник героини и хранитель секрета города.', color: '#D9A75F', revision_id: 'mark-v2' })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/sessions'))).toBe(false)
 })
 
-test('generates a story-specific role as an unsaved draft', async () => {
-  apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [] })
-  apiServer.listCharacters([character])
-  apiServer.characterDetail('mark', { id: 'mark', current_revision_id: 'mark-v2', source_type: 'local', revisions: [revision], linked_stories: [] })
+test('removes only the story link after confirmation', async () => {
+  apiServer.storyDetail(story.id, { ...story, current_scene: 'Начало', characters: [{ ...revision, id: 'mark', role: 'cast', color: '#D9A75F', visual_profile_version: 2 }, { ...revision, id: 'akane', name: 'Аканэ', role: 'cast', visual_profile_version: 1 }] })
   render(<TestRouter initialEntries={['/studio/stories/story-1/characters']} />)
 
-  await userEvent.click(await screen.findByRole('button', { name: /Марк.*Не добавлен/ }))
-  await userEvent.click(screen.getByRole('button', { name: 'Сгенерировать роль' }))
-
-  expect(await screen.findByDisplayValue('Союзник героини и хранитель секрета города.')).toBeInTheDocument()
-  const request = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/stories/story-1/characters/generate-role')
-  expect(JSON.parse(String(request?.[1]?.body))).toEqual({ character_id: 'mark', revision_id: 'mark-v2', existing_text: '' })
-  expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/stories/story-1/characters')).toBe(false)
+  await userEvent.click(await screen.findByRole('button', { name: 'Удалить Марк Ветров' }))
+  expect(screen.getByRole('dialog', { name: 'Убрать персонажа?' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Убрать из новеллы' }))
+  expect(vi.mocked(fetch).mock.calls.some(([url, options]) => url === '/api/stories/story-1/characters/mark' && options?.method === 'DELETE')).toBe(true)
 })
