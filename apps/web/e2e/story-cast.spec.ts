@@ -9,7 +9,7 @@ test('автор добавляет персонажа, настраивает �
   const character = await created.json() as { id: string }
 
   await page.goto(`/studio/stories/${story.id}/characters`)
-  await page.getByRole('button', { name: 'Добавить персонажа' }).click()
+  await page.getByRole('button', { name: 'Добавить' }).click()
   await expect(page.getByRole('dialog', { name: 'Добавить персонажей' })).toContainText('Леон для состава')
   await page.getByRole('checkbox', { name: 'Леон для состава' }).check()
   await page.getByRole('button', { name: 'Добавить выбранных' }).click()
@@ -35,8 +35,11 @@ test('состав остаётся доступным на узком экра�
   const [story] = await (await page.request.get('/api/stories')).json() as { id: string }[]
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(`/studio/stories/${story.id}/characters`)
-  await expect(page.getByRole('button', { name: 'Добавить персонажа' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Редактировать Аканэ/ })).toBeVisible()
+  const editBounds = await page.getByRole('button', { name: /Редактировать Аканэ/ }).boundingBox()
+  expect(editBounds).not.toBeNull()
+  expect(editBounds!.x + editBounds!.width).toBeLessThanOrEqual(390)
   const widths = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: window.innerWidth }))
   expect(widths.document).toBeLessThanOrEqual(widths.viewport)
 })
