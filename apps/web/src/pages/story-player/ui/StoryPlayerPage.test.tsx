@@ -79,6 +79,18 @@ test('пустая отправка объясняет блокировку, с�
   expect(send).toBeEnabled()
 })
 
+test('варианты открываются иконкой внутри поля, а отправка остаётся кнопкой без текста', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const input = await screen.findByRole('textbox', { name: 'Ваше действие' })
+  const choices = screen.getByRole('button', { name: 'Варианты (3)' })
+  const send = screen.getByRole('button', { name: 'Отправить' })
+  expect(choices.closest('[data-slot="input-group"]')).toContainElement(input)
+  expect(choices).toHaveTextContent('')
+  expect(send).toHaveTextContent('')
+  await userEvent.click(choices)
+  expect(screen.getByRole('dialog', { name: 'Варианты ответа' })).toBeInTheDocument()
+})
+
 test('медленная проверка блокирует повторные проверки и отправку', async () => {
   apiServer.providersAvailable(false)
   render(<StoryPlayerPage sessionId="session-1" />)
@@ -109,6 +121,7 @@ test('двойной submit отправляет один запрос и мен
   expect(screen.getByRole('img')).toHaveAttribute('data-expression', 'neutral')
   expect(input).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Генерация…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Генерация…' })).toHaveTextContent('')
   expect(screen.queryByText('Генерация', { selector: '[data-slot="badge"]' })).not.toBeInTheDocument()
   await act(async () => pending.resolve(json(turn, 201)))
   expect(screen.getByRole('img')).toHaveAttribute('data-expression', 'fan')

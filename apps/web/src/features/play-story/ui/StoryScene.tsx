@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { ChevronUp, LoaderCircle, Send } from 'lucide-react'
+import { List, LoaderCircle, Send } from 'lucide-react'
 
 import { resolveStoryTheme } from '@/shared/config'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/shared/ui/drawer'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/shared/ui/field'
-import { Input } from '@/shared/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/shared/ui/input-group'
 
 import { useStoryPlayer } from '../model/useStoryPlayer'
 import spriteSheet from './akane-sprite-sheet-v1.png'
@@ -47,23 +47,25 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
           <p className="narration">{turn?.narration ?? session.story.premise}</p>
           <TypewriterText text={turn?.dialogue ?? (isAkaneStory ? 'Вы всё-таки пришли. Что привело вас сюда?' : 'Начните историю своим действием.')} />
         </div>
-        <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
-          <FieldGroup><Field data-disabled={player.disabled}>
-            <FieldLabel htmlFor="player-action" className="sr-only">Ваше действие</FieldLabel>
-            <Input id="player-action" value={player.action} disabled={player.disabled} maxLength={4000} aria-describedby="player-status action-help" placeholder="Напишите своё действие…" onChange={(event) => player.setAction(event.target.value)} />
-            <FieldDescription id="action-help" className="sr-only">Введите действие или выберите готовый вариант.</FieldDescription>
-          </Field></FieldGroup>
-          <Button type="submit" size="lg" disabled={player.disabled || !player.action.trim()} aria-describedby="player-status action-help">{player.phase === 'submitting' || player.phase === 'loading' ? <LoaderCircle className="animate-spin" data-icon="inline-start" aria-hidden="true" /> : <Send data-icon="inline-start" aria-hidden="true" />}{player.phase === 'submitting' ? 'Генерация…' : player.phase === 'loading' ? 'Загрузка…' : 'Отправить'}</Button>
-        </form>
-        {choices.length > 0 && <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
-          <DrawerTrigger asChild><Button className="choices-trigger" type="button" variant="ghost" size="sm"><ChevronUp data-icon="inline-start" />Варианты ({choices.length})</Button></DrawerTrigger>
-          <DrawerContent className="choices-drawer" style={resolveStoryTheme(session.story.slug).variables}>
+        <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
+          <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
+            <FieldGroup><Field data-disabled={player.disabled}>
+              <FieldLabel htmlFor="player-action" className="sr-only">Ваше действие</FieldLabel>
+              <InputGroup>
+                <InputGroupInput id="player-action" value={player.action} disabled={player.disabled} maxLength={4000} aria-describedby="player-status action-help" placeholder="Напишите своё действие…" onChange={(event) => player.setAction(event.target.value)} />
+                {choices.length > 0 && <InputGroupAddon align="inline-start"><DrawerTrigger asChild><InputGroupButton size="icon-xs" aria-label={`Варианты (${choices.length})`} title="Варианты ответа"><List data-icon="inline-start" aria-hidden="true" /></InputGroupButton></DrawerTrigger></InputGroupAddon>}
+              </InputGroup>
+              <FieldDescription id="action-help" className="sr-only">Введите действие или выберите готовый вариант.</FieldDescription>
+            </Field></FieldGroup>
+            <Button type="submit" size="icon-lg" disabled={player.disabled || !player.action.trim()} aria-label={player.phase === 'submitting' ? 'Генерация…' : player.phase === 'loading' ? 'Загрузка…' : 'Отправить'} title={player.phase === 'submitting' ? 'Генерация…' : 'Отправить'} aria-describedby="player-status action-help">{player.phase === 'submitting' || player.phase === 'loading' ? <LoaderCircle className="animate-spin" data-icon="inline-start" aria-hidden="true" /> : <Send data-icon="inline-start" aria-hidden="true" />}</Button>
+          </form>
+          {choices.length > 0 && <DrawerContent className="choices-drawer" style={resolveStoryTheme(session.story.slug).variables}>
             <DrawerHeader><DrawerTitle>Варианты ответа</DrawerTitle><DrawerDescription>Выберите действие, чтобы продолжить историю.</DrawerDescription></DrawerHeader>
             <div className="choices" aria-label="Варианты действия">
               {choices.map((choice) => <Button key={choice} variant="outline" size="lg" disabled={player.disabled} aria-describedby="player-status" onClick={() => { setChoicesOpen(false); void player.submit(choice) }}>{choice}</Button>)}
             </div>
-          </DrawerContent>
-        </Drawer>}
+          </DrawerContent>}
+        </Drawer>
       </>}
     </div>
   </section>
