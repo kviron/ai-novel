@@ -203,3 +203,5 @@ def test_restore_uses_visual_state_from_the_latest_committed_turn(client):
     assert restored.status_code == 200
     assert restored.json()["visual_state"] == {"emotion": "fan", "pose": "fan_open", "outfit": "red_dress"}
     assert restored.json()["latest_turn"]["visual_directive"] == directive
+    assert restored.json()["latest_turn"]["action"] == "Открыть веер"
+    assert restored.json()["latest_turn"]["prompt_version"] == "v1"

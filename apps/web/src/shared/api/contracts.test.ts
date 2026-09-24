@@ -21,6 +21,8 @@ const restoredSession = {
   latest_turn: {
     id: 'turn-1',
     state_version: 2,
+    action: 'Посмотреть на Аканэ',
+    prompt_version: 'v1',
     speaker: 'Аканэ Куроха',
     narration: 'Неон отражается в лужах.',
     dialogue: 'Я ждала вас.',
@@ -34,6 +36,8 @@ test('models a restored session with the persisted turn DTO only', () => {
   expect(restoredSession.latest_turn).toEqual({
     id: 'turn-1',
     state_version: 2,
+    action: 'Посмотреть на Аканэ',
+    prompt_version: 'v1',
     speaker: 'Аканэ Куроха',
     narration: 'Неон отражается в лужах.',
     dialogue: 'Я ждала вас.',

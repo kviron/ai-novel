@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .runlogs/
 output/playwright/
+.playwright-cli/
 .worktrees/
 *.py[cod]
 *.db

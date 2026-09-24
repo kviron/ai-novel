@@ -43,6 +43,8 @@ class VisualState(BaseModel):
 class TurnDetail(BaseModel):
     id: str
     state_version: int
+    action: str
+    prompt_version: str
     speaker: str
     narration: str
     dialogue: str

@@ -1,5 +1,7 @@
 # Compact Player and Author Studio Implementation Plan
 
+> Revision: Later user direction selects shadcn preset `b1D1mJdI` (Mira/Inter/amber), per-story CSS-token themes, and honest agent status patterns from assistant-ui. This supersedes the older Manrope/17–18 px and unchanged-contract notes below. The API session DTO is extended with persisted last action and prompt version. Commands shown with `npm --workspace apps/web` should be run from `apps/web` as `npm run ...` because the root has no npm workspace configuration. Studio inspector is colocated in `StudioPage.tsx` for now; no shallow wrapper file is required.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver editable Figma screens and a compact React player plus working author Studio for the current “Эхо неона” story.

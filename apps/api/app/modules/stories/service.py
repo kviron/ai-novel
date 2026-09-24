@@ -115,6 +115,8 @@ def _turn_detail(turn: Turn | None, visual_directive: dict[str, str] | None) -> 
     return TurnDetail(
         id=turn.id,
         state_version=turn.state_version,
+        action=turn.action,
+        prompt_version=turn.prompt_version,
         speaker=turn.speaker,
         narration=turn.narration,
         dialogue=turn.dialogue,

@@ -28,13 +28,28 @@ const error = (code: string, status: number) => json({ code, detail: 'Не уд�
 beforeEach(() => { apiServer.session(session); apiServer.providersAvailable(true, ['gemma4-local:32k']); apiServer.turn(session.id, turn) })
 afterEach(() => { cleanup(); apiServer.reset(); vi.restoreAllMocks() })
 
-test('восстанавливает подтверждённый ход, версию, модель и пропорции спрайта', async () => {
+test('даёт перейти в Студию без технических деталей в шапке игрока', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByRole('link', { name: 'Студия' })).toHaveAttribute('href', '/studio/session-1')
+  expect(screen.getByRole('banner')).not.toHaveTextContent('gemma4-local:32k')
+  expect(screen.getByTestId('story-player-route')).toHaveAttribute('data-story-theme', 'akane-neon-echo')
+})
+
+test('не приписывает новой истории Аканэ и готовые варианты Эха неона', async () => {
+  apiServer.session({ ...session, story: { ...session.story, slug: 'another-story', title: 'Другая история', premise: 'Новая завязка' }, characters: [] })
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByText('Новая завязка')).toBeInTheDocument()
+  expect(screen.queryByRole('img', { name: /Аканэ/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Спросить о веере' })).not.toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Ваше действие' })).toBeEnabled()
+})
+
+test('восстанавливает подтверждённый ход и пропорции спрайта без технических данных', async () => {
   apiServer.session({ ...session, state_version: 2, latest_turn: turn })
   render(<StoryPlayerPage sessionId="session-1" />)
   const sprite = await screen.findByRole('img', { name: 'Аканэ: С веером' })
   expect(sprite).toHaveStyle({ aspectRatio: '1 / 3', backgroundSize: '600% 100%' })
-  expect(screen.getByText('Состояние · v2')).toBeInTheDocument()
-  expect(screen.getByText(/gemma4-local:32k/)).toBeInTheDocument()
+  expect(screen.getByRole('banner')).not.toHaveTextContent('gemma4-local:32k')
   expect(screen.getByText('Дождь стихает.')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Уточнить' })).toBeEnabled()
   await userEvent.click(screen.getByRole('button', { name: 'Показать полностью' }))

@@ -1,5 +1,9 @@
 # Compact Player and Author Studio — Design
 
+## Approved revision: preset and agent states
+
+The later user direction supersedes the Manrope/current-primitive and unchanged-contract statements below. The UI uses shadcn/ui preset `b1D1mJdI` (Mira, neutral, amber, Inter) and installed shadcn primitives. A `story.slug` theme registry overrides semantic CSS tokens only within player/Studio story roots; system menus retain the Mira base theme. Agent progress follows assistant-ui's honest state model: loading/generating/ready/error/unavailable, with an indeterminate spinner while waiting and no invented percentage. The session DTO now returns persisted `latest_turn.action` and `latest_turn.prompt_version` so Studio remains accurate after reload. See `docs/research/2026-09-24-sillytavern-assistant-ui.md`.
+
 ## Goal and scope
 
 Redesign the first playable slice of “Эхо неона” as two clearly separated experiences: an immersive, compact player view and a working author Studio for testing the existing story. Produce editable desktop player, mobile player, and desktop Studio screens in the supplied Figma file first, then implement those screens in React using the application's existing tokens and UI primitives.

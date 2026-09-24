@@ -45,6 +45,8 @@ export type TurnResult = {
 export type SessionTurn = {
   id: string
   state_version: number
+  action: string
+  prompt_version: string
   speaker: string
   narration: string
   dialogue: string
