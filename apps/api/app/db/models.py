@@ -43,6 +43,43 @@ class Character(SQLModel, table=True):
     personality: str
     appearance: str
     visual_profile_version: int = 1
+    current_revision_id: str | None = None
+    source_type: str = "local"
+
+
+class CharacterRevision(SQLModel, table=True):
+    __tablename__ = "character_revisions"
+    __table_args__ = (UniqueConstraint("character_id", "revision_number"),)
+
+    id: str = Field(default_factory=new_public_id, primary_key=True)
+    character_id: str = Field(foreign_key="characters.id", index=True)
+    revision_number: int
+    name: str
+    gender: str
+    age: int
+    personality: str
+    appearance: str
+    biography: str = ""
+    speech: str = ""
+    role: str = ""
+    created_at: str = Field(default_factory=utc_timestamp)
+
+
+class StoryCharacter(SQLModel, table=True):
+    __tablename__ = "story_characters"
+
+    story_id: str = Field(foreign_key="stories.id", primary_key=True)
+    character_id: str = Field(foreign_key="characters.id", primary_key=True)
+    revision_id: str = Field(foreign_key="character_revisions.id")
+    role: str = "cast"
+
+
+class SessionCharacter(SQLModel, table=True):
+    __tablename__ = "session_characters"
+
+    session_id: str = Field(foreign_key="story_sessions.id", primary_key=True)
+    character_id: str = Field(foreign_key="characters.id", primary_key=True)
+    revision_id: str = Field(foreign_key="character_revisions.id")
 
 
 class StorySession(SQLModel, table=True):

@@ -45,6 +45,42 @@ def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
     assert speaker == ("Narrator",)
 
 
+def test_upgrade_pins_each_legacy_character_revision_to_story_and_session(tmp_path):
+    database_path = tmp_path / "legacy-characters.db"
+    create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "INSERT INTO characters (id, story_id, name, age, personality, appearance, visual_profile_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-hero", "legacy-story", "Старый герой", 32, "Осторожный", "Серый плащ", 1),
+        )
+
+    run_migrations(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as database:
+        revision = database.execute(
+            "SELECT id, character_id, revision_number, name, age FROM character_revisions"
+        ).fetchall()
+        story_link = database.execute(
+            "SELECT story_id, character_id, revision_id FROM story_characters"
+        ).fetchall()
+        session_link = database.execute(
+            "SELECT session_id, character_id, revision_id FROM session_characters"
+        ).fetchall()
+        active_revision = database.execute(
+            "SELECT current_revision_id FROM characters WHERE id = 'legacy-hero'"
+        ).fetchone()
+
+    assert len(revision) == 1
+    revision_id, character_id, number, name, age = revision[0]
+    assert (character_id, number, name, age) == ("legacy-hero", 1, "Старый герой", 32)
+    assert story_link == [("legacy-story", "legacy-hero", revision_id)]
+    assert len(session_link) == 1
+    assert session_link[0][1:] == ("legacy-hero", revision_id)
+    assert active_revision == (revision_id,)
+
+
 def test_upgrade_keeps_existing_save_and_backfills_library_metadata(tmp_path):
     database_path = tmp_path / "existing-save.db"
     create_v01_database(database_path, story_id="akane-neon-echo", turn_id="saved-turn")
