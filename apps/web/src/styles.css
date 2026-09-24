@@ -30,12 +30,13 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 button, input, textarea { font: inherit; }
+.app-shell-trigger { position: absolute; z-index: 5; top: 16px; left: 16px; }
+[data-slot="sidebar-inset"] { position: relative; }
+.game-header, .studio-entry-header { padding-left: 72px; }
 
 .game-shell, .studio-shell { min-height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--background); }
 .game-header, .studio-entry-header { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 28px; background: var(--card); border-bottom: 1px solid var(--border); }
 .game-header h1 { font-size: .875rem; font-weight: 500; margin: 0; }
-.logo { letter-spacing: .14em; font-size: .75rem; font-weight: 700; text-decoration: none; color: var(--foreground); white-space: nowrap; }
-.logo span { color: var(--primary); }
 .mode-link { color: var(--muted-foreground); font-size: .75rem; text-decoration: none; }
 .mode-link:hover { color: var(--foreground); }
 .stage { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; min-height: calc(100dvh - 64px); background: linear-gradient(#090d18aa, #090a11 88%), radial-gradient(circle at 68% 28%, #51627c, var(--scene-sky, #182335) 28%, #080b12 65%); }
@@ -76,7 +77,6 @@ button, input, textarea { font: inherit; }
 .inspector-fields > div:first-child { border-top: 0; }
 .inspector-fields span { color: var(--muted-foreground); font-size: .6875rem; }
 .inspector-fields strong, .inspector-fields code { font-size: .75rem; font-weight: 500; }
-.logo:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
 @media (max-width: 640px) {
   .game-header, .studio-entry-header { padding: 12px 16px; min-height: 56px; }
   .game-header h1 { display: none; }

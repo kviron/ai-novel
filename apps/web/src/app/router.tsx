@@ -1,16 +1,24 @@
 import type { RouteObject } from 'react-router-dom'
 import { createBrowserRouter } from 'react-router-dom'
 
+import { SidebarPreferenceProvider } from './model/sidebar-preference'
+import { AppShell } from './layout/AppShell'
 import { NovelLibraryPage } from '@/pages/novel-library'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
 import { routes } from '@/shared/config'
 
 export const routeObjects: RouteObject[] = [
-  { path: routes.novelLibrary, element: <NovelLibraryPage /> },
-  { path: '/play/:sessionId', element: <StoryPlayerRoute /> },
-  { path: routes.studio, element: <StudioRoute /> },
-  { path: '/studio/:sessionId', element: <StudioRoute /> },
+  {
+    path: routes.novelLibrary,
+    element: <SidebarPreferenceProvider><AppShell /></SidebarPreferenceProvider>,
+    children: [
+      { index: true, element: <NovelLibraryPage /> },
+      { path: 'play/:sessionId', element: <StoryPlayerRoute /> },
+      { path: 'studio', element: <StudioRoute /> },
+      { path: 'studio/:sessionId', element: <StudioRoute /> },
+    ],
+  },
 ]
 
 export const router = createBrowserRouter(routeObjects)

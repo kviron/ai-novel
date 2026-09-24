@@ -45,8 +45,8 @@ function StudioEntry() {
     if (value) navigate(routes.studioSession(value))
   }
 
-  return <main className="studio-entry">
-    <header className="studio-entry-header"><Link className="logo" to={routes.novelLibrary}>МНЕМОЗИНА <span>α</span></Link><Badge variant="secondary">Режим автора</Badge></header>
+  return <div className="studio-entry">
+    <header className="studio-entry-header"><Badge variant="secondary">Режим автора</Badge></header>
     <div className="studio-entry-content">
       <div><p className="eyebrow">Студия</p><h1>Проверка сцен</h1><p className="muted-copy">Запустите отдельное прохождение, чтобы проверить историю, решения и состояние генерации.</p></div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -55,7 +55,7 @@ function StudioEntry() {
       {stories.map((story) => <Card key={story.id} className="studio-story-card"><CardHeader><CardTitle>{story.title}</CardTitle><CardDescription>{story.premise}</CardDescription></CardHeader><CardContent className="studio-story-action"><span className="muted-copy">{story.recommended_provider_id} · модель из настроек сервера</span><Button disabled={pending} onClick={() => void start(story)}>{pending ? 'Создаём…' : 'Новая тестовая сессия'}</Button></CardContent></Card>)}
       <Card><CardHeader><CardTitle>Продолжить тест</CardTitle><CardDescription>Откройте уже созданную сессию по её ID.</CardDescription></CardHeader><CardContent><form className="studio-open-form" onSubmit={open}><Field><FieldLabel htmlFor="studio-session-id">ID сессии</FieldLabel><Input id="studio-session-id" value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder="ID сессии" /></Field><Button type="submit" disabled={!sessionId.trim()}>Открыть сессию</Button></form></CardContent></Card>
     </div>
-  </main>
+  </div>
 }
 
 function Inspector({ session, phase }: { session: StorySession | null; phase: ReturnType<typeof useStoryPlayer>['phase'] }) {
@@ -78,7 +78,7 @@ function Inspector({ session, phase }: { session: StorySession | null; phase: Re
 function StudioSession({ sessionId }: { sessionId: string }) {
   const player = useStoryPlayer(sessionId)
   const theme = resolveStoryTheme(player.session?.story.slug)
-  return <main className="studio-shell" data-story-theme={theme.id} style={theme.variables}><header className="game-header"><Link className="logo" to={routes.novelLibrary}>МНЕМОЗИНА <span>α</span></Link><div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1></div><Link className="mode-link" to={routes.studio}>Все тесты</Link></header><div className="studio-workspace"><StoryScene player={player} /><Inspector session={player.session} phase={player.phase} /></div></main>
+  return <div className="studio-shell" data-story-theme={theme.id} style={theme.variables}><header className="game-header"><div className="studio-header-title"><Badge variant="secondary">Режим автора</Badge><h1>{player.session?.story.title ?? 'Тестовая сессия'}</h1></div><Link className="mode-link" to={routes.studio}>Все тесты</Link></header><div className="studio-workspace"><StoryScene player={player} /><Inspector session={player.session} phase={player.phase} /></div></div>
 }
 
 export function StudioPage({ sessionId }: { sessionId?: string }) {

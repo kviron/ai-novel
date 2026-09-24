@@ -40,10 +40,10 @@ export function NovelLibraryPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 p-6">
+    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-6 pb-6 pt-16">
       <header className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground">Локальная визуальная новелла</p>
-        <h1 className="text-4xl font-semibold tracking-tight">Библиотека историй</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Библиотека историй</h1>
       </header>
       {loading && <p role="status" className="text-muted-foreground">Загружаем истории…</p>}
       {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -52,7 +52,7 @@ export function NovelLibraryPage() {
         {stories.map((story) => (
           <article key={story.id} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-col gap-2">
-              <h2 className="text-2xl font-medium">{story.title}</h2>
+              <h2 className="text-lg font-medium">{story.title}</h2>
               <p className="max-w-xl text-muted-foreground">{story.premise}</p>
             </div>
             <Button disabled={startingId !== null} onClick={() => void startStory(story)}>
@@ -61,6 +61,6 @@ export function NovelLibraryPage() {
           </article>
         ))}
       </section>
-    </main>
+    </div>
   )
 }
