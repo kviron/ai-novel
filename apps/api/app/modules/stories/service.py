@@ -2,7 +2,7 @@ import json
 
 from sqlmodel import Session
 
-from app.db.models import Autosave, Character, CharacterRevision, Story, StorySession, Turn
+from app.db.models import Autosave, Character, CharacterRevision, SessionProtagonist, Story, StorySession, Turn
 from app.modules.providers.model_selection import (
     UnsupportedModelError,
     available_models,
@@ -12,16 +12,19 @@ from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.content import AKANE_BACKGROUNDS, AKANE_INITIAL_BACKGROUND
 from app.modules.stories.schemas import (
     CharacterDetail,
+    ProtagonistDetail,
     SessionDetail,
     SessionSummary,
     StartSessionRequest,
     StoryDetail,
+    StorySetup,
     StorySummary,
     TurnDetail,
     VisualState,
 )
 
 from . import repository
+from .protagonist import resolve_protagonist, story_setup
 
 
 class StoryNotFoundError(Exception):
@@ -39,6 +42,10 @@ def list_stories(session: Session) -> list[StorySummary]:
 def get_story(session: Session, story_id: str) -> StoryDetail:
     story = _require_story(session, story_id)
     return _story_detail(session, story)
+
+
+def get_story_setup(session: Session, story_id: str) -> StorySetup:
+    return story_setup(session, _require_story(session, story_id))
 
 
 def start_story_session(
@@ -63,7 +70,8 @@ def start_story_session(
     )
     session.add(story_session)
     session.flush()
-    repository.pin_story_characters(session, story.id, story_session.id)
+    protagonist = resolve_protagonist(session, story, request.hero, story_session.id)
+    repository.pin_story_characters(session, story.id, story_session.id, protagonist.source_character_id)
     if request.kind == "player":
         autosave = session.get(Autosave, story.id)
         if autosave is None:
@@ -180,6 +188,7 @@ def _turn_detail(turn: Turn | None, visual_directive: dict[str, str] | None) -> 
 def _session_detail(session: Session, story_session: StorySession, story: Story) -> SessionDetail:
     latest_turn = repository.get_active_turn(session, story_session)
     visual_directive = _visual_directive(latest_turn) if latest_turn else None
+    protagonist = session.get(SessionProtagonist, story_session.id)
     return SessionDetail(
         id=story_session.id,
         story=_story_summary(story),
@@ -187,6 +196,7 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
             _character_detail(character, revision, link.role, link.color)
             for character, revision, link in repository.list_session_characters(session, story_session.id)
         ],
+        protagonist=ProtagonistDetail.model_validate(protagonist, from_attributes=True),
         state_version=story_session.state_version,
         can_rewind=story_session.active_turn_id is not None and story_session.rewind_count < 10,
         current_scene=story_session.current_scene,

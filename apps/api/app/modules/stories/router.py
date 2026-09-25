@@ -8,13 +8,22 @@ from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
-from app.modules.stories.schemas import SessionDetail, SessionSummary, StartSessionRequest, StoryDetail, StorySummary
+from app.modules.stories.schemas import (
+    SessionDetail,
+    SessionSummary,
+    StartSessionRequest,
+    StoryDetail,
+    StorySetup,
+    StorySummary,
+)
 
+from .protagonist import HeroSelectionError
 from .service import (
     SessionNotFoundError,
     StoryNotFoundError,
     get_session_detail,
     get_story,
+    get_story_setup,
     list_autosaves,
     list_session_summaries,
     list_stories,
@@ -38,6 +47,18 @@ def read_story(story_id: str, session: SessionDep) -> StoryDetail:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
 
 
+@router.get("/stories/{story_id}/setup", response_model=StorySetup)
+def read_story_setup(story_id: str, session: SessionDep) -> StorySetup:
+    try:
+        return get_story_setup(session, story_id)
+    except StoryNotFoundError as error:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
+    except HeroSelectionError as error:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "hero_policy_invalid", "Настройка героя недоступна."
+        ) from error
+
+
 @router.post(
     "/stories/{story_id}/sessions",
     status_code=status.HTTP_201_CREATED,
@@ -55,6 +76,12 @@ def create_story_session(
         return start_story_session(session, story_id, payload, settings.ollama_model, registry)
     except StoryNotFoundError as error:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
+    except HeroSelectionError as error:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "hero_not_allowed",
+            "Выбранный герой недоступен в этой новелле. Выберите другого героя.",
+        ) from error
     except UnsupportedModelError as error:
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

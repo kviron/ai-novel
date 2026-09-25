@@ -1,8 +1,38 @@
-from typing import Literal
+from __future__ import annotations
+
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.providers.contracts import SceneSegment
+
+
+class FixedHeroChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["fixed"]
+
+
+class CatalogHeroChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["catalog"]
+    character_id: str
+    revision_id: str
+
+
+class DraftHeroChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source_kind: Literal["draft"]
+    name: str = Field(min_length=1, max_length=120)
+    address: str | None = Field(default=None, max_length=120)
+    gender: Literal["female", "male", "unspecified"] = "unspecified"
+    appearance: str = Field(default="", max_length=6000)
+    biography: str = Field(default="", max_length=6000)
+
+
+HeroChoice = Annotated[FixedHeroChoice | CatalogHeroChoice | DraftHeroChoice, Field(discriminator="source_kind")]
 
 
 class StartSessionRequest(BaseModel):
@@ -11,6 +41,22 @@ class StartSessionRequest(BaseModel):
     provider_id: str = Field(default="ollama", min_length=1, max_length=40)
     model_id: str | None = Field(default=None, max_length=160)
     kind: Literal["player", "author"] = "player"
+    hero: HeroChoice | None = None
+
+
+class ProtagonistDetail(BaseModel):
+    session_id: str
+    source_kind: Literal["fixed", "catalog", "draft", "legacy"]
+    source_character_id: str | None
+    source_revision_id: str | None
+    policy_version: int
+    name: str
+    address: str
+    gender: str
+    appearance: str
+    biography: str
+    personality: str
+    age: int | None
 
 
 class StorySummary(BaseModel):
@@ -35,6 +81,15 @@ class CharacterDetail(BaseModel):
     role: str
     color: str = "#D9A75F"
     visual_profile_version: int
+
+
+class StorySetup(BaseModel):
+    story_id: str
+    policy: Literal["fixed", "choice"]
+    policy_version: int
+    allowed_sources: list[Literal["catalog", "draft"]]
+    playable_character_ids: list[str]
+    fixed_hero: CharacterDetail | None = None
 
 
 class StoryDetail(StorySummary):
@@ -66,6 +121,7 @@ class SessionDetail(BaseModel):
     id: str
     story: StorySummary
     characters: list[CharacterDetail]
+    protagonist: ProtagonistDetail
     state_version: int
     can_rewind: bool
     current_scene: str

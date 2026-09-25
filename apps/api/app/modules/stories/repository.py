@@ -50,10 +50,14 @@ def list_session_characters(
     )
 
 
-def pin_story_characters(session: Session, story_id: str, session_id: str) -> None:
+def pin_story_characters(
+    session: Session, story_id: str, session_id: str, exclude_character_id: str | None = None
+) -> None:
     # A session owns an immutable cast snapshot; later editor changes cannot recolor old dialogue.
     links = session.exec(select(StoryCharacter).where(StoryCharacter.story_id == story_id))
     for link in links:
+        if link.character_id == exclude_character_id:
+            continue
         session.add(
             SessionCharacter(
                 session_id=session_id,
