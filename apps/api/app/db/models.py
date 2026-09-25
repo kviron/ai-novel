@@ -45,6 +45,7 @@ class Character(SQLModel, table=True):
     visual_profile_version: int = 1
     current_revision_id: str | None = None
     source_type: str = "local"
+    origin_character_id: str | None = None
 
 
 class CharacterRevision(SQLModel, table=True):
@@ -62,6 +63,22 @@ class CharacterRevision(SQLModel, table=True):
     biography: str = ""
     speech: str = ""
     role: str = ""
+    created_at: str = Field(default_factory=utc_timestamp)
+
+
+class CharacterMaterial(SQLModel, table=True):
+    __tablename__ = "character_materials"
+    __table_args__ = (UniqueConstraint("revision_id", "kind"),)
+
+    id: str = Field(default_factory=new_public_id, primary_key=True)
+    revision_id: str = Field(foreign_key="character_revisions.id", index=True)
+    kind: str = "avatar"
+    sha256: str
+    mime_type: str
+    filename: str
+    creator: str
+    license: str
+    source: str
     created_at: str = Field(default_factory=utc_timestamp)
 
 

@@ -86,7 +86,12 @@ def client(tmp_path, fake_provider):
     from app.main import create_app
 
     app = create_app(
-        Settings(_env_file=None, database_path=tmp_path / "test.db", provider_timeout_seconds=1),
+        Settings(
+            _env_file=None,
+            database_path=tmp_path / "test.db",
+            asset_dir=tmp_path / "assets",
+            provider_timeout_seconds=1,
+        ),
         ProviderRegistry([fake_provider]),
     )
     with TestClient(app) as test_client:

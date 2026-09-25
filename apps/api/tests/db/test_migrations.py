@@ -27,6 +27,22 @@ def test_upgrade_creates_playable_story_tables(tmp_path, monkeypatch):
     assert {"session_id", "raw_response", "visual_directive", "provider_id", "model_id"} <= columns
 
 
+def test_upgrade_repairs_early_character_materials_schema(tmp_path):
+    database_path = tmp_path / "early-materials.db"
+    run_migrations(database_path)
+    with sqlite3.connect(database_path) as db:
+        db.execute("ALTER TABLE characters DROP COLUMN origin_character_id")
+        db.execute("UPDATE alembic_version SET version_num = '20260925_10'")
+
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
+        version = db.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert "origin_character_id" in columns
+    assert version == ("20260925_11",)
+
+
 def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
     database_path = tmp_path / "legacy.db"
     create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")

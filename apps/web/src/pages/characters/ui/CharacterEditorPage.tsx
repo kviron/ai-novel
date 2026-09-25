@@ -48,6 +48,7 @@ export function CharacterEditorPage() {
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState<TextFieldName | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!characterId) return
@@ -60,6 +61,7 @@ export function CharacterEditorPage() {
           (item) => item.id === history.current_revision_id,
         )
         if (!revision) throw new Error('Current revision is missing')
+        setAvatarUrl(revision.avatar?.url ?? null)
         const {
           name,
           gender,
@@ -345,6 +347,7 @@ export function CharacterEditorPage() {
                 <CharacterArtwork
                   characterId={characterId}
                   name={profile.name}
+                  avatarUrl={avatarUrl}
                   className="aspect-[3/4] rounded-lg"
                 />
               ) : (
@@ -354,8 +357,7 @@ export function CharacterEditorPage() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Генерацию и загрузку изображений добавим отдельным шагом;
-                структура страницы уже оставляет для них место.
+                Загрузить аватар и указать его происхождение можно на странице персонажа. Изменение изображения создаёт новую ревизию.
               </p>
             </CardContent>
           </Card>

@@ -92,6 +92,25 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return payload as T
 }
 
+async function fileRequest(path: string, baseUrl: string, options?: RequestInit): Promise<Response> {
+  let response: Response
+  try {
+    response = await fetch(apiUrl(path, baseUrl), options)
+  } catch {
+    throw new ApiRequestError('Не удалось подключиться к серверу. Повторите попытку.', 0, 'network_error', true)
+  }
+  if (!response.ok) {
+    const payload = await readJson(response)
+    throw new ApiRequestError(
+      isApiError(payload) ? payload.detail : 'Не удалось обработать файл.',
+      response.status,
+      isApiError(payload) ? payload.code : 'http_error',
+      isApiError(payload) ? payload.retryable : false,
+    )
+  }
+  return response
+}
+
 export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   return {
     listCharacters(signal?: AbortSignal, excludeStoryId?: string) {
@@ -106,6 +125,29 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     reviseCharacter(characterId: string, body: CharacterWrite) {
       return request<CatalogCharacter>(`/api/characters/${encodeURIComponent(characterId)}/revisions`, { baseUrl, method: 'POST', body })
+    },
+    async uploadCharacterMaterial(characterId: string, kind: 'avatar' | 'cover', file: File, metadata: { creator: string; license: string; source: string }) {
+      const query = new URLSearchParams({ filename: file.name, ...metadata })
+      const response = await fileRequest(`/api/characters/${encodeURIComponent(characterId)}/${kind}?${query}`, baseUrl, {
+        method: 'POST', headers: { 'Content-Type': file.type }, body: file,
+      })
+      return response.json() as Promise<CatalogCharacter>
+    },
+    async importCharacter(file: File) {
+      const response = await fileRequest('/api/characters/import', baseUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file,
+      })
+      return response.json() as Promise<CatalogCharacter>
+    },
+    async exportCharacter(characterId: string) {
+      const response = await fileRequest(`/api/characters/${encodeURIComponent(characterId)}/export`, baseUrl)
+      return response.blob()
+    },
+    extractSessionCharacter(sessionId: string, characterId: string) {
+      return request<CatalogCharacter>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/characters/${encodeURIComponent(characterId)}/extract`,
+        { baseUrl, method: 'POST' },
+      )
     },
       generateCharacterField(field: CharacterTextField, draft: CharacterWrite) {
         return request<{ text: string }>('/api/characters/generate-field', { baseUrl, method: 'POST', body: { field, draft } })

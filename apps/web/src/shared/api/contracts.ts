@@ -27,18 +27,34 @@ export type CharacterRevision = Omit<Character, 'visual_profile_version' | 'role
   biography: string
   speech: string
   created_at: string
+  avatar?: CharacterMaterial | null
+  cover?: CharacterMaterial | null
+}
+
+export type CharacterMaterial = {
+  id: string
+  kind: 'avatar' | 'cover'
+  sha256: string
+  mime_type: string
+  filename: string
+  creator: string
+  license: string
+  source: string
+  url: string
 }
 
 export type CatalogCharacter = CharacterRevision & {
   character_id: string
   current_revision_id: string
   source_type: string
+  origin_character_id?: string | null
 }
 
 export type CharacterHistory = {
   id: string
   current_revision_id: string
   source_type: string
+  origin_character_id?: string | null
   revisions: CharacterRevision[]
   linked_stories: { story_id: string; story_title: string; story_slug: string; revision_id: string; revision_number: number; role: string; color?: string }[]
 }

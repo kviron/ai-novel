@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import Settings
-from app.db.models import Character, CharacterRevision, StoryCharacter, StorySession, Turn
+from app.db.models import Character, CharacterMaterial, CharacterRevision, StoryCharacter, StorySession, Turn
 from app.main import create_app
 from app.modules.providers.service import ProviderRegistry
 
@@ -103,6 +103,11 @@ def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
     with Session(client.app.state.engine) as session:
         character = session.get(Character, "mark")
         session.delete(session.get(StoryCharacter, (akane["id"], "mark")))
+        for material in session.exec(
+            select(CharacterMaterial).where(CharacterMaterial.revision_id == character.current_revision_id)
+        ):
+            session.delete(material)
+        session.flush()
         session.delete(session.get(CharacterRevision, character.current_revision_id))
         session.flush()
         session.delete(session.get(Character, "mark"))

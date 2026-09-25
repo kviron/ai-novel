@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CornerUpLeft, List, LoaderCircle, Send, Settings2 } from 'lucide-react'
 
 import { resolveStoryTheme } from '@/shared/config'
+import { api, ApiRequestError } from '@/shared/api'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
@@ -20,6 +21,10 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const [choicesOpen, setChoicesOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState('')
+  const [selectedCharacter, setSelectedCharacter] = useState('')
+  const [extractedName, setExtractedName] = useState('')
+  const [extractError, setExtractError] = useState('')
+  const [extracting, setExtracting] = useState(false)
   const session = player.session
   const turn = session?.latest_turn
   const isAkaneStory = session?.story.slug === 'akane-neon-echo'
@@ -30,6 +35,20 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const sceneSpeakers = new Set(turn?.segments?.filter((part) => part.kind === 'dialogue').map((part) => part.character_id))
   const singleSpeaker = sceneSpeakers.size <= 1
   const activeCharacter = session?.characters.find((character) => character.id === turn?.visual_directive.character_id)
+
+  async function extractCharacter() {
+    if (!session || !selectedCharacter) return
+    setExtracting(true)
+    setExtractError('')
+    try {
+      const result = await api.extractSessionCharacter(session.id, selectedCharacter)
+      setExtractedName(result.name)
+    } catch (error) {
+      setExtractError(error instanceof ApiRequestError ? error.message : 'Не удалось сохранить персонажа в каталог.')
+    } finally {
+      setExtracting(false)
+    }
+  }
 
   return <section className="stage" aria-label="Игровая сцена" aria-busy={working}>
     {isAkaneStory && session
@@ -50,7 +69,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
-            <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) setSelectedModel(player.models.includes(session.model_id) ? session.model_id : '') }}>
+            <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) { setSelectedModel(player.models.includes(session.model_id) ? session.model_id : ''); setSelectedCharacter(session.characters[0]?.id ?? ''); setExtractedName(''); setExtractError('') } }}>
               <DialogTrigger asChild><Button type="button" variant="outline" size="icon-lg" aria-label="Настройки прохождения" title="Настройки прохождения" disabled={working}><Settings2 aria-hidden="true" /></Button></DialogTrigger>
               <DialogContent style={resolveStoryTheme(session.story.slug).variables}>
                 <DialogHeader><DialogTitle>Настройки прохождения</DialogTitle><DialogDescription>Модель можно сменить между ходами без потери истории.</DialogDescription></DialogHeader>
@@ -66,6 +85,17 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
                   {player.models.length === 0 && <p className="text-muted-foreground">Ollama не сообщает об установленных моделях. Проверьте подключение.</p>}
                   <Separator />
                   <div className="flex flex-col gap-1"><p className="font-medium">Автосохранение</p><p className="text-muted-foreground">Прогресс сохраняется после каждого хода. Для возврата используйте стрелку рядом с полем действия.</p></div>
+                  <Separator />
+                  <FieldGroup><Field><FieldLabel htmlFor="extract-character">Персонаж из прохождения</FieldLabel>
+                    <Select value={selectedCharacter} onValueChange={setSelectedCharacter} disabled={extracting || session.characters.length === 0}>
+                      <SelectTrigger id="extract-character" className="w-full"><SelectValue placeholder="Выберите персонажа" /></SelectTrigger>
+                      <SelectContent><SelectGroup>{session.characters.map((character) => <SelectItem key={character.id} value={character.id}>{character.name}</SelectItem>)}</SelectGroup></SelectContent>
+                    </Select>
+                    <FieldDescription>Создаст независимую копию закреплённой в этом прохождении версии.</FieldDescription>
+                  </Field></FieldGroup>
+                  <Button type="button" variant="outline" disabled={!selectedCharacter || extracting} onClick={() => void extractCharacter()}>{extracting ? 'Сохраняем…' : 'Сохранить персонажа в каталог'}</Button>
+                  {extractedName && <p role="status">{extractedName} добавлен в каталог как новый персонаж.</p>}
+                  {extractError && <p role="alert" className="text-destructive">{extractError}</p>}
                 </div>
                 <DialogFooter><Button type="button" disabled={!selectedModel || selectedModel === session.model_id || working} onClick={() => void player.changeModel(selectedModel)}>Применить модель</Button></DialogFooter>
               </DialogContent>

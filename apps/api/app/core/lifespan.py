@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.core.config import Settings
 from app.db.engine import create_engine_from_settings
 from app.db.migrate import run_migrations
+from app.modules.characters.materials import seed_builtin_materials
 from app.modules.providers.ollama import OllamaProvider
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.seed import seed_akane_story
@@ -56,10 +57,11 @@ def create_lifespan(
             run_migrations(settings.database_path)
             engine = create_engine_from_settings(settings)
             app.state.engine = engine
+            settings.asset_dir.mkdir(parents=True, exist_ok=True)
             with Session(engine) as session:
                 seed_akane_story(session)
+                seed_builtin_materials(session, settings.asset_dir)
                 session.commit()
-            settings.asset_dir.mkdir(parents=True, exist_ok=True)
             yield
         finally:
             if engine is not None:

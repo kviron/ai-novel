@@ -42,6 +42,20 @@ def turn_request() -> TurnGenerationRequest:
     )
 
 
+def test_local_ollama_client_ignores_system_proxy(monkeypatch):
+    options = []
+    original_client = httpx.Client
+
+    def capture_client(**kwargs):
+        options.append(kwargs)
+        return original_client(transport=httpx.MockTransport(lambda _: httpx.Response(200)), **kwargs)
+
+    monkeypatch.setattr("app.modules.providers.ollama.httpx.Client", capture_client)
+    provider = OllamaProvider("http://127.0.0.1:11434", 5)
+    provider.close()
+    assert options == [{"trust_env": False}]
+
+
 def test_ollama_sends_schema_and_parses_turn():
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -332,7 +346,7 @@ def test_registry_selects_provider_by_stable_id():
 def test_ollama_closes_only_the_http_client_it_created(monkeypatch):
     client_type = httpx.Client
     owned_client = client_type()
-    monkeypatch.setattr(httpx, "Client", lambda: owned_client)
+    monkeypatch.setattr(httpx, "Client", lambda **_kwargs: owned_client)
     owned_provider = OllamaProvider("http://ollama.test", 1)
 
     owned_provider.close()

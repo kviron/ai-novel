@@ -1,6 +1,6 @@
 from sqlmodel import Session, select
 
-from app.db.models import Character, CharacterRevision, Story, StoryCharacter
+from app.db.models import Character, CharacterMaterial, CharacterRevision, Story, StoryCharacter
 
 
 def list_current(session: Session) -> list[tuple[Character, CharacterRevision]]:
@@ -21,6 +21,16 @@ def list_revisions(session: Session, character_id: str) -> list[CharacterRevisio
             .order_by(CharacterRevision.revision_number)
         )
     )
+
+
+def material_for_revision(session: Session, revision_id: str, kind: str = "avatar") -> CharacterMaterial | None:
+    return session.exec(
+        select(CharacterMaterial).where(CharacterMaterial.revision_id == revision_id, CharacterMaterial.kind == kind)
+    ).first()
+
+
+def materials_for_revision(session: Session, revision_id: str) -> list[CharacterMaterial]:
+    return list(session.exec(select(CharacterMaterial).where(CharacterMaterial.revision_id == revision_id)))
 
 
 def get_story_link(session: Session, story_id: str, character_id: str) -> StoryCharacter | None:

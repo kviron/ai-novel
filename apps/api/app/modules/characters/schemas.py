@@ -87,18 +87,34 @@ class RevisionProfile(BaseModel):
     biography: str
     speech: str
     created_at: str
+    avatar: "MaterialProfile | None" = None
+    cover: "MaterialProfile | None" = None
+
+
+class MaterialProfile(BaseModel):
+    id: str
+    kind: str
+    sha256: str
+    mime_type: str
+    filename: str
+    creator: str
+    license: str
+    source: str
+    url: str
 
 
 class CharacterProfile(RevisionProfile):
     character_id: str
     current_revision_id: str
     source_type: str
+    origin_character_id: str | None = None
 
 
 class CharacterHistory(BaseModel):
     id: str
     current_revision_id: str
     source_type: str
+    origin_character_id: str | None = None
     revisions: list[RevisionProfile]
     linked_stories: list["LinkedStory"]
 

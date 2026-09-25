@@ -1,6 +1,14 @@
 from sqlmodel import Session
 
-from app.db.models import Character, CharacterRevision, Story, StoryCharacter
+from app.db.models import (
+    Character,
+    CharacterMaterial,
+    CharacterRevision,
+    SessionCharacter,
+    Story,
+    StoryCharacter,
+    StorySession,
+)
 
 from . import repository
 from .schemas import (
@@ -9,6 +17,7 @@ from .schemas import (
     CharacterProfile,
     CharacterWrite,
     LinkedStory,
+    MaterialProfile,
     RevisionProfile,
     StoryCharacterProfile,
 )
@@ -34,17 +43,40 @@ class LastCastMemberError(Exception):
     pass
 
 
-def _revision_profile(revision: CharacterRevision) -> RevisionProfile:
-    return RevisionProfile.model_validate(revision, from_attributes=True)
+class SessionNotFoundError(Exception):
+    pass
 
 
-def _character_profile(character: Character, revision: CharacterRevision) -> CharacterProfile:
+def _material_profile(material: CharacterMaterial | None) -> MaterialProfile | None:
+    if material is None:
+        return None
+    return MaterialProfile(
+        **{
+            key: getattr(material, key)
+            for key in ("id", "kind", "sha256", "mime_type", "filename", "creator", "license", "source")
+        },
+        url=f"/api/character-materials/{material.id}",
+    )
+
+
+def _revision_profile(session: Session, revision: CharacterRevision) -> RevisionProfile:
+    return RevisionProfile.model_validate(
+        {
+            **RevisionProfile.model_validate(revision, from_attributes=True).model_dump(exclude={"avatar", "cover"}),
+            "avatar": _material_profile(repository.material_for_revision(session, revision.id)),
+            "cover": _material_profile(repository.material_for_revision(session, revision.id, "cover")),
+        }
+    )
+
+
+def _character_profile(session: Session, character: Character, revision: CharacterRevision) -> CharacterProfile:
     return CharacterProfile(
-        **_revision_profile(revision).model_dump(exclude={"id"}),
+        **_revision_profile(session, revision).model_dump(exclude={"id"}),
         id=character.id,
         character_id=character.id,
         current_revision_id=revision.id,
         source_type=character.source_type,
+        origin_character_id=character.origin_character_id,
     )
 
 
@@ -55,7 +87,7 @@ def list_characters(session: Session, exclude_story_id: str | None = None) -> li
         else set()
     )
     return [
-        _character_profile(character, revision)
+        _character_profile(session, character, revision)
         for character, revision in repository.list_current(session)
         if character.id not in attached
     ]
@@ -69,7 +101,10 @@ def get_character(session: Session, character_id: str) -> CharacterHistory:
         id=character.id,
         current_revision_id=character.current_revision_id,
         source_type=character.source_type,
-        revisions=[_revision_profile(revision) for revision in repository.list_revisions(session, character_id)],
+        origin_character_id=character.origin_character_id,
+        revisions=[
+            _revision_profile(session, revision) for revision in repository.list_revisions(session, character_id)
+        ],
         linked_stories=[
             LinkedStory(
                 story_id=story.id,
@@ -97,7 +132,7 @@ def create_character(session: Session, payload: CharacterWrite) -> CharacterProf
     session.flush()
     character.current_revision_id = revision.id
     session.commit()
-    return _character_profile(character, revision)
+    return _character_profile(session, character, revision)
 
 
 def revise_character(session: Session, character_id: str, payload: CharacterWrite) -> CharacterProfile:
@@ -112,9 +147,64 @@ def revise_character(session: Session, character_id: str, payload: CharacterWrit
     )
     session.add(revision)
     session.flush()
+    previous_materials = (
+        repository.materials_for_revision(session, character.current_revision_id)
+        if character.current_revision_id
+        else []
+    )
+    for previous_material in previous_materials:
+        session.add(
+            CharacterMaterial(
+                revision_id=revision.id,
+                kind=previous_material.kind,
+                sha256=previous_material.sha256,
+                mime_type=previous_material.mime_type,
+                filename=previous_material.filename,
+                creator=previous_material.creator,
+                license=previous_material.license,
+                source=previous_material.source,
+            )
+        )
     character.current_revision_id = revision.id
     session.commit()
-    return _character_profile(character, revision)
+    return _character_profile(session, character, revision)
+
+
+def extract_session_character(session: Session, session_id: str, character_id: str) -> CharacterProfile:
+    """Fork the session's pinned profile, never the catalog's possibly newer revision."""
+    if session.get(StorySession, session_id) is None:
+        raise SessionNotFoundError
+    pinned = session.get(SessionCharacter, (session_id, character_id))
+    if pinned is None:
+        raise CharacterNotFoundError
+    source_revision = session.get(CharacterRevision, pinned.revision_id)
+    profile = CharacterWrite(**{field: getattr(source_revision, field) for field in CharacterWrite.model_fields})
+    character = Character(
+        source_type="extracted",
+        origin_character_id=character_id,
+        **profile.model_dump(include={"name", "gender", "age", "personality", "appearance"}),
+    )
+    session.add(character)
+    session.flush()
+    revision = CharacterRevision(character_id=character.id, revision_number=1, **profile.model_dump())
+    session.add(revision)
+    session.flush()
+    for material in repository.materials_for_revision(session, source_revision.id):
+        session.add(
+            CharacterMaterial(
+                revision_id=revision.id,
+                kind=material.kind,
+                sha256=material.sha256,
+                mime_type=material.mime_type,
+                filename=material.filename,
+                creator=material.creator,
+                license=material.license,
+                source=material.source,
+            )
+        )
+    character.current_revision_id = revision.id
+    session.commit()
+    return _character_profile(session, character, revision)
 
 
 def attach_character(session: Session, story_id: str, payload: AttachCharacterRequest) -> StoryCharacterProfile:

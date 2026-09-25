@@ -24,6 +24,12 @@ test('loads the global catalog once and links to a canonical profile', async () 
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/stories'))).toHaveLength(0)
 })
 
+test('shows a revision avatar from the API instead of the bundled portrait', async () => {
+  apiServer.listCharacters([{ ...character, avatar: { id: 'material-1', url: '/api/character-materials/material-1', kind: 'avatar', sha256: 'hash', mime_type: 'image/png', filename: 'avatar.png', creator: 'Author', license: 'CC-BY-4.0', source: 'manual' } }])
+  render(<TestRouter initialEntries={['/characters']} />)
+  expect(await screen.findByRole('img', { name: 'Портрет Аканэ' })).toHaveAttribute('src', '/api/character-materials/material-1')
+})
+
 test('opens the current revision and preserves old deep links', async () => {
   const revision = {
     ...character, id: 'akane-v1',
@@ -47,6 +53,17 @@ test('does not hide unfamiliar JSON appearance fields', async () => {
   apiServer.characterDetail('akane', { id: 'akane', current_revision_id: 'akane-v1', source_type: 'builtin', revisions: [revision], linked_stories: [] })
   render(<TestRouter initialEntries={['/characters/akane']} />)
   expect(await screen.findByText('Серебряный узор')).toBeInTheDocument()
+})
+
+test('displays the current revision cover and its provenance', async () => {
+  const material = { id: 'cover-1', url: '/api/character-materials/cover-1', kind: 'cover', sha256: 'hash', mime_type: 'image/png', filename: 'cover.png', creator: 'Author', license: 'CC-BY-4.0', source: 'original art' }
+  apiServer.characterDetail('akane', {
+    id: 'akane', current_revision_id: 'akane-v1', source_type: 'builtin',
+    revisions: [{ ...character, id: 'akane-v1', cover: material }], linked_stories: [],
+  })
+  render(<TestRouter initialEntries={['/characters/akane']} />)
+  expect(await screen.findByRole('img', { name: 'Обложка Аканэ' })).toHaveAttribute('src', material.url)
+  expect(screen.getByText(/Author.*CC-BY-4.0/)).toBeInTheDocument()
 })
 
 test('filters profiles by gender without duplicating a character across stories', async () => {

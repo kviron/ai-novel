@@ -240,6 +240,15 @@ test('позволяет сменить отсутствующую модель 
   expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe('/api/sessions/session-1/model')
 })
 
+test('сохраняет персонажа из текущего прохождения как независимый профиль', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Настройки прохождения' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить персонажа в каталог' }))
+  expect(await screen.findByText(/Аканэ.*добавлен.*каталог/)).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([url, options]) =>
+    url === '/api/sessions/session-1/characters/akane/extract' && options?.method === 'POST')).toBe(true)
+})
+
 test.each([{ models: [] }, { models: ['other-model:latest'] }])('отсутствующая модель сессии блокирует управление: $models', async ({ models }) => {
   apiServer.providerSequence([{ provider_id: 'ollama', available: true, detail: 'Подключено', models }])
   render(<StoryPlayerPage sessionId="session-1" />)

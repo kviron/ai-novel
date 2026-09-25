@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from pydantic import ValidationError
@@ -22,7 +23,9 @@ class OllamaProvider:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._owns_client = client is None
-        self._client = client or httpx.Client()
+        # Local Ollama must not be routed through a machine-wide HTTP proxy.
+        is_loopback = urlsplit(self._base_url).hostname in {"127.0.0.1", "localhost", "::1"}
+        self._client = client or httpx.Client(trust_env=not is_loopback)
 
     def close(self) -> None:
         """Release the HTTP client only when this adapter created it."""

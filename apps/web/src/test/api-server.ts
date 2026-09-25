@@ -88,6 +88,11 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (method === 'POST' && pathname === '/api/characters/generate-field') {
     return json({ text: 'Любит дождь и исследует ночной город.' })
   }
+  const extractionMatch = pathname.match(/^\/api\/sessions\/[^/]+\/characters\/([^/]+)\/extract$/)
+  if (method === 'POST' && extractionMatch) {
+    const original = characters.find((item) => (item as { id?: string }).id === extractionMatch[1]) as Record<string, unknown> | undefined
+    return json({ ...original, id: 'extracted-1', name: original?.name ?? 'Аканэ', source_type: 'extracted' }, 201)
+  }
   if (method === 'POST' && /^\/api\/stories\/[^/]+\/characters\/generate-role$/.test(pathname)) {
     return json({ text: 'Союзник героини и хранитель секрета города.' })
   }
