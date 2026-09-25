@@ -92,6 +92,14 @@ class StorySetup(BaseModel):
     fixed_hero: CharacterDetail | None = None
 
 
+class ProtagonistCatalogCompletion(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    age: int | None = Field(default=None, ge=18)
+    personality: str | None = Field(default=None, min_length=1, max_length=6000)
+    appearance: str | None = Field(default=None, min_length=1, max_length=6000)
+
+
 class StoryDetail(StorySummary):
     current_scene: str
     characters: list[CharacterDetail]

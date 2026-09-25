@@ -6,9 +6,11 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse
 from app.db.engine import get_session
+from app.modules.characters.schemas import CharacterProfile
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import (
+    ProtagonistCatalogCompletion,
     SessionDetail,
     SessionSummary,
     StartSessionRequest,
@@ -17,7 +19,7 @@ from app.modules.stories.schemas import (
     StorySummary,
 )
 
-from .protagonist import HeroSelectionError
+from .protagonist import HeroSelectionError, save_protagonist_to_catalog
 from .service import (
     SessionNotFoundError,
     StoryNotFoundError,
@@ -116,4 +118,22 @@ def read_session(session_id: str, session: SessionDep) -> SessionDetail:
             status.HTTP_404_NOT_FOUND,
             "not_found",
             "Игровая сессия не найдена. Начните новую игру.",
+        ) from error
+
+
+@router.post(
+    "/sessions/{session_id}/protagonist/save-to-catalog",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CharacterProfile,
+)
+def save_hero_to_catalog(
+    session_id: str, payload: ProtagonistCatalogCompletion, session: SessionDep
+) -> CharacterProfile:
+    try:
+        return save_protagonist_to_catalog(session, session_id, payload)
+    except HeroSelectionError as error:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "hero_cannot_be_saved",
+            "Заполните возраст, характер и внешность героя перед сохранением в каталог.",
         ) from error

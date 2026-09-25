@@ -4,7 +4,9 @@ import json
 
 from sqlmodel import Session
 
-from app.db.models import Character, CharacterRevision, SessionProtagonist, Story, StoryCharacter
+from app.db.models import Character, CharacterRevision, ProtagonistExport, SessionProtagonist, Story, StoryCharacter
+from app.modules.characters.schemas import CharacterProfile, CharacterWrite
+from app.modules.characters.service import current_character_profile, stage_character
 
 from .schemas import (
     CatalogHeroChoice,
@@ -12,6 +14,7 @@ from .schemas import (
     DraftHeroChoice,
     FixedHeroChoice,
     HeroChoice,
+    ProtagonistCatalogCompletion,
     StorySetup,
 )
 
@@ -135,3 +138,34 @@ def resolve_protagonist(
         )
     session.add(protagonist)
     return protagonist
+
+
+def save_protagonist_to_catalog(
+    session: Session, session_id: str, completion: ProtagonistCatalogCompletion
+) -> CharacterProfile:
+    """Promote a draft once; the playthrough keeps its original snapshot."""
+    existing = session.get(ProtagonistExport, session_id)
+    if existing is not None:
+        return current_character_profile(session, existing.character_id)
+    protagonist = session.get(SessionProtagonist, session_id)
+    if protagonist is None:
+        raise HeroSelectionError("session_missing")
+    if protagonist.source_kind != "draft":
+        raise HeroSelectionError("only_draft_can_be_promoted")
+    age = protagonist.age or completion.age
+    personality = protagonist.personality or completion.personality
+    appearance = protagonist.appearance or completion.appearance
+    if age is None or not personality or not appearance:
+        raise HeroSelectionError("catalog_fields_missing")
+    payload = CharacterWrite(
+        name=protagonist.name,
+        gender=protagonist.gender,
+        age=age,
+        personality=personality,
+        appearance=appearance,
+        biography=protagonist.biography,
+    )
+    character, _ = stage_character(session, payload)
+    session.add(ProtagonistExport(session_id=session_id, character_id=character.id))
+    session.commit()
+    return current_character_profile(session, character.id)

@@ -121,6 +121,13 @@ def get_character(session: Session, character_id: str) -> CharacterHistory:
 
 
 def create_character(session: Session, payload: CharacterWrite) -> CharacterProfile:
+    character, revision = stage_character(session, payload)
+    session.commit()
+    return _character_profile(session, character, revision)
+
+
+def stage_character(session: Session, payload: CharacterWrite) -> tuple[Character, CharacterRevision]:
+    """Create a catalog profile inside the caller's transaction."""
     # Legacy columns stay populated until all story readers use revision links.
     character = Character(
         source_type="local", **payload.model_dump(include={"name", "gender", "age", "personality", "appearance"})
@@ -131,7 +138,15 @@ def create_character(session: Session, payload: CharacterWrite) -> CharacterProf
     session.add(revision)
     session.flush()
     character.current_revision_id = revision.id
-    session.commit()
+    session.flush()
+    return character, revision
+
+
+def current_character_profile(session: Session, character_id: str) -> CharacterProfile:
+    character = session.get(Character, character_id)
+    if character is None or character.current_revision_id is None:
+        raise CharacterNotFoundError
+    revision = session.get(CharacterRevision, character.current_revision_id)
     return _character_profile(session, character, revision)
 
 

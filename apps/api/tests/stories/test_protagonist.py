@@ -142,3 +142,27 @@ def test_policy_rejects_disallowed_hero_source(client):
     )
 
     assert response.status_code == 422
+
+
+def test_draft_hero_can_be_saved_to_catalog_once_without_changing_playthrough(client):
+    game = client.post(
+        f"/api/stories/{story_id(client)}/sessions",
+        json={"provider_id": "ollama", "hero": {"source_kind": "draft", "name": "Мира", "biography": "Ищет сестру"}},
+    ).json()
+    before = len(client.get("/api/characters").json())
+    url = f"/api/sessions/{game['id']}/protagonist/save-to-catalog"
+
+    missing = client.post(url, json={})
+    assert missing.status_code == 422
+    assert len(client.get("/api/characters").json()) == before
+
+    completion = {"age": 26, "personality": "Настойчивая", "appearance": "Синий плащ"}
+    saved = client.post(url, json=completion)
+    again = client.post(url, json=completion)
+
+    assert saved.status_code == 201, saved.text
+    assert again.status_code == 201, again.text
+    assert saved.json()["id"] == again.json()["id"]
+    assert saved.json()["biography"] == "Ищет сестру"
+    assert len(client.get("/api/characters").json()) == before + 1
+    assert client.get(f"/api/sessions/{game['id']}").json()["protagonist"]["source_kind"] == "draft"
