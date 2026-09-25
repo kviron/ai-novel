@@ -24,7 +24,7 @@ function portrait(id: string) { return id === 'akane' ? akaneAvatar : id === 'ma
 
 function CastPortrait({ character }: { character: Pick<Character, 'id' | 'name'> }) {
   const image = portrait(character.id)
-  return <Avatar>{image && <AvatarImage src={image} alt="" />}<AvatarFallback>{character.name.slice(0, 1)}</AvatarFallback></Avatar>
+  return <Avatar size="lg" className="rounded-md after:rounded-md">{image && <AvatarImage src={image} alt="" className="rounded-md" />}<AvatarFallback className="rounded-md">{character.name.slice(0, 1)}</AvatarFallback></Avatar>
 }
 
 const palette = ['#D9A75F', '#E57779', '#A587DF', '#68B8C5', '#7FB997', '#DA9A75']
@@ -166,7 +166,21 @@ export function StoryCastPage() {
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <FieldGroup><Field><FieldLabel htmlFor="cast-revision">Ревизия</FieldLabel><Select value={revisionId} onValueChange={setRevisionId}><SelectTrigger id="cast-revision" className="w-full"><SelectValue placeholder="Выберите ревизию" /></SelectTrigger><SelectContent><SelectGroup>{editing?.revisions.map((revision) => <SelectItem key={revision.id} value={revision.id}>v{revision.revision_number} · {revision.name}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
         <Field><FieldLabel htmlFor="cast-role">Роль в новелле</FieldLabel><Textarea id="cast-role" rows={5} maxLength={2000} value={role} onChange={(event) => setRole(event.target.value)} /><FieldDescription>Описание участия героя в этой истории.</FieldDescription><Button variant="outline" size="sm" className="w-fit" disabled={busy} onClick={() => void generateRole()}><Sparkles data-icon="inline-start" />Сгенерировать роль</Button></Field>
-        <Field data-invalid={!/^#[0-9A-Fa-f]{6}$/.test(color) || undefined}><FieldLabel htmlFor="cast-color">Цвет реплик</FieldLabel><div className="flex items-center gap-3"><Popover><PopoverTrigger asChild><Button variant="outline" aria-label="Выбрать цвет" className="gap-2"><span aria-hidden="true" className="size-4 rounded-sm border" style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(color) ? color : defaultColor }} />Палитра</Button></PopoverTrigger><PopoverContent align="start" className="flex flex-wrap gap-2">{palette.map((shade) => <Button key={shade} type="button" variant="outline" size="icon-sm" aria-label={`Цвет ${shade}`} aria-pressed={color === shade} onClick={() => setColor(shade)}><span aria-hidden="true" className="size-5 rounded-sm" style={{ backgroundColor: shade }} /></Button>)}</PopoverContent></Popover><Input id="cast-color" aria-label="HEX-код цвета" aria-invalid={!/^#[0-9A-Fa-f]{6}$/.test(color)} className="w-28 font-mono" maxLength={7} value={color} onChange={(event) => setColor(event.target.value.toUpperCase())} /></div><FieldDescription>Выберите оттенок или введите HEX-код.</FieldDescription></Field></FieldGroup>
+        <Field data-invalid={!/^#[0-9A-Fa-f]{6}$/.test(color) || undefined}>
+          <FieldLabel htmlFor="cast-color">Цвет реплик</FieldLabel>
+          <div className="flex items-center gap-3">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" aria-label="Выбрать цвет" className="gap-2"><span aria-hidden="true" className="size-4 rounded-sm border" style={{ backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(color) ? color : defaultColor }} />Палитра</Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="grid w-fit grid-cols-6 gap-2">
+                {palette.map((shade) => <Button key={shade} type="button" variant="outline" size="icon-sm" aria-label={`Цвет ${shade}`} aria-pressed={color === shade} onClick={() => setColor(shade)}><span aria-hidden="true" className="size-5 rounded-sm" style={{ backgroundColor: shade }} /></Button>)}
+              </PopoverContent>
+            </Popover>
+            <Input id="cast-color" aria-label="HEX-код цвета" aria-invalid={!/^#[0-9A-Fa-f]{6}$/.test(color)} className="w-28 font-mono" maxLength={7} value={color} onChange={(event) => setColor(event.target.value.toUpperCase())} />
+          </div>
+          <FieldDescription>Выберите оттенок или введите HEX-код.</FieldDescription>
+        </Field></FieldGroup>
       <DialogFooter><Button disabled={busy || !revisionId || !/^#[0-9A-Fa-f]{6}$/.test(color)} onClick={() => void save()}>Сохранить</Button></DialogFooter>
     </DialogContent></Dialog>
 
