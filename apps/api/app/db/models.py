@@ -26,6 +26,11 @@ class Story(SQLModel, table=True):
     state_version: int = 1
     story_mode: str = "hybrid"
     content_version: int = 1
+    hero_policy: str = "choice"
+    hero_policy_version: int = 1
+    hero_allowed_sources: str = '["catalog", "draft"]'
+    fixed_hero_revision_id: str | None = Field(default=None, foreign_key="character_revisions.id")
+    playable_character_ids: str = "[]"
     current_scene: str
     recommended_provider_id: str = "ollama"
     recommended_model_id: str = "qwen3:14b-q4_K_M"
@@ -116,6 +121,30 @@ class StorySession(SQLModel, table=True):
     model_id: str
     created_at: str = Field(default_factory=utc_timestamp)
     updated_at: str = Field(default_factory=utc_timestamp)
+
+
+class SessionProtagonist(SQLModel, table=True):
+    __tablename__ = "session_protagonists"
+
+    session_id: str = Field(foreign_key="story_sessions.id", primary_key=True)
+    source_kind: str
+    source_character_id: str | None = Field(default=None, foreign_key="characters.id")
+    source_revision_id: str | None = Field(default=None, foreign_key="character_revisions.id")
+    policy_version: int = 1
+    name: str
+    address: str
+    gender: str = "unspecified"
+    appearance: str = ""
+    biography: str = ""
+    personality: str = ""
+    age: int | None = None
+
+
+class ProtagonistExport(SQLModel, table=True):
+    __tablename__ = "protagonist_exports"
+
+    session_id: str = Field(foreign_key="story_sessions.id", primary_key=True)
+    character_id: str = Field(foreign_key="characters.id", unique=True)
 
 
 class Turn(SQLModel, table=True):

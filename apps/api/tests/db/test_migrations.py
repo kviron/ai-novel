@@ -1,6 +1,9 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from conftest import create_v01_database, create_v01_database_with_duplicate_turn_versions
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
@@ -29,10 +32,11 @@ def test_upgrade_creates_playable_story_tables(tmp_path, monkeypatch):
 
 def test_upgrade_repairs_early_character_materials_schema(tmp_path):
     database_path = tmp_path / "early-materials.db"
-    run_migrations(database_path)
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    command.upgrade(config, "20260925_10")
     with sqlite3.connect(database_path) as db:
         db.execute("ALTER TABLE characters DROP COLUMN origin_character_id")
-        db.execute("UPDATE alembic_version SET version_num = '20260925_10'")
 
     run_migrations(database_path)
 
@@ -40,7 +44,28 @@ def test_upgrade_repairs_early_character_materials_schema(tmp_path):
         columns = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
         version = db.execute("SELECT version_num FROM alembic_version").fetchone()
     assert "origin_character_id" in columns
-    assert version == ("20260925_11",)
+    assert version == ("20260926_12",)
+
+
+def test_protagonist_migration_preserves_existing_playthrough(tmp_path):
+    database_path = tmp_path / "existing-player.db"
+    create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
+
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        story = db.execute(
+            "SELECT hero_policy, hero_policy_version, playable_character_ids FROM stories WHERE id='legacy-story'"
+        ).fetchone()
+        hero = db.execute(
+            "SELECT source_kind, name, address, gender FROM session_protagonists"
+        ).fetchone()
+        session_count = db.execute("SELECT COUNT(*) FROM story_sessions").fetchone()[0]
+        turn_count = db.execute("SELECT COUNT(*) FROM turns WHERE id='legacy-turn'").fetchone()[0]
+
+    assert story == ("choice", 1, "[]")
+    assert hero == ("legacy", "Игрок", "Игрок", "unspecified")
+    assert (session_count, turn_count) == (1, 1)
 
 
 def test_upgrade_preserves_legacy_story_and_turn(tmp_path):
