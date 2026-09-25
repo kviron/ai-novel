@@ -10,9 +10,9 @@ from app.modules.characters.service import current_character_profile, stage_char
 
 from .schemas import (
     CatalogHeroChoice,
-    CharacterDetail,
     DraftHeroChoice,
     FixedHeroChoice,
+    FixedHeroDetail,
     HeroChoice,
     ProtagonistCatalogCompletion,
     StorySetup,
@@ -49,13 +49,14 @@ def story_setup(session: Session, story: Story) -> StorySetup:
         revision = session.get(CharacterRevision, story.fixed_hero_revision_id)
         if revision is None:
             raise HeroSelectionError("fixed_hero_missing")
-        fixed_hero = CharacterDetail(
+        fixed_hero = FixedHeroDetail(
             id=revision.character_id,
             name=revision.name,
             gender=revision.gender,
             age=revision.age,
             personality=revision.personality,
             appearance=revision.appearance,
+            biography=revision.biography,
             role="hero",
             visual_profile_version=revision.revision_number,
         )

@@ -29,6 +29,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const session = player.session
   const turn = session?.latest_turn
   const isAkaneStory = session?.story.slug === 'akane-neon-echo'
+  const hasAkaneNpc = isAkaneStory && session?.characters.some((character) => character.id === 'akane')
   const canRetry = player.phase === 'provider_unavailable' || player.reloadRequired || (!session && player.phase === 'error')
 
   const working = player.phase === 'loading' || player.phase === 'submitting' || player.rewinding || player.phase === 'switching_model' || player.checking
@@ -64,9 +65,10 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         {player.error && <p role="alert" className="text-destructive">{player.error}</p>}
       </div>
       {session && <>
-        {(turn?.speaker || session.characters[0]?.name) && singleSpeaker && <p className="speaker" style={activeCharacter?.color ? { backgroundColor: `color-mix(in srgb, ${activeCharacter.color} 65%, #111)` } : undefined}>{turn?.speaker?.split(/\s+/)[0] ?? session.characters[0]?.name.split(/\s+/)[0]}</p>}
+        {(turn?.speaker || hasAkaneNpc) && singleSpeaker && <p className="speaker" style={activeCharacter?.color ? { backgroundColor: `color-mix(in srgb, ${activeCharacter.color} 65%, #111)` } : undefined}>{turn?.speaker?.split(/\s+/)[0] ?? 'Аканэ'}</p>}
         <div className="story-copy">
-          <SceneSegments segments={turn?.segments} narration={turn?.narration ?? session.story.premise} dialogue={turn?.dialogue ?? (isAkaneStory ? 'Вы всё-таки пришли. Что привело вас сюда?' : 'Начните историю своим действием.')} speaker={turn?.speaker ?? session.characters[0]?.name ?? ''} characters={session.characters} animateLast hideSpeakerNames={singleSpeaker} />
+          <SceneSegments segments={turn?.segments} narration={turn?.narration ?? session.story.premise} dialogue={turn?.dialogue ?? (hasAkaneNpc ? 'Вы всё-таки пришли. Что привело вас сюда?' : '')} speaker={turn?.speaker ?? (hasAkaneNpc ? session.characters.find((character) => character.id === 'akane')?.name ?? '' : '')} characters={session.characters} animateLast hideSpeakerNames={singleSpeaker} />
+          {!turn && !hasAkaneNpc && <p className="text-sm text-muted-foreground">Начните историю своим действием.</p>}
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>

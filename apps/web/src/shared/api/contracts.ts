@@ -78,7 +78,7 @@ export type StorySetup = {
   policy_version: number
   allowed_sources: ('catalog' | 'draft')[]
   playable_character_ids: string[]
-  fixed_hero: Character | null
+  fixed_hero: (Character & { biography: string }) | null
 }
 
 export type HeroChoice =

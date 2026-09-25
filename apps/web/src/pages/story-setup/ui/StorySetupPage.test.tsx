@@ -53,13 +53,14 @@ test('каталог исключает сюжетных NPC и фиксируе
 test('закреплённый автором герой показывается без смены источника', async () => {
   apiServer.listStories([story])
   apiServer.storySetup(story.id, { story_id: story.id, policy: 'fixed', policy_version: 3, allowed_sources: [], playable_character_ids: [], fixed_hero: {
-    id: 'akane', name: 'Аканэ Куроха', gender: 'female', age: 25, personality: '', appearance: '', role: 'hero', visual_profile_version: 1,
+    id: 'akane', name: 'Аканэ Куроха', gender: 'female', age: 25, personality: '', appearance: '', biography: 'Знает тайну города.', role: 'hero', visual_profile_version: 1,
   } })
   apiServer.startSession({ id: 'session-fixed', state_version: 1 })
   render(<TestRouter initialEntries={['/stories/story-1/setup']} />)
   expect(await screen.findByText(/Автор закрепил героя/)).toHaveTextContent('Аканэ Куроха')
   expect(screen.queryByRole('button', { name: 'Из каталога' })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Проверить героя' }))
+  expect(screen.getByText('Знает тайну города.')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Начать историю' }))
   expect(apiServer.lastStartSessionRequest()?.hero).toEqual({ source_kind: 'fixed' })
 })

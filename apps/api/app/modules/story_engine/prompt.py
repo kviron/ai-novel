@@ -10,6 +10,28 @@ PROMPT_VERSION = "scene-segments-v2"
 
 
 def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens: int) -> TurnGenerationRequest:
+    npc_ids = {character["id"] for character in context.characters}
+    visual_rules = (
+        ("Для Аканэ используй pose: default или fan_open, outfit: red_dress. " if "akane" in npc_ids else "")
+        + (
+            "Для Марка используй pose: default, outfit: dark_coat; "
+            "emotion: neutral, happy, sad, angry или surprised. "
+            if "mark" in npc_ids
+            else ""
+        )
+    )
+    # An example is valid only when its speaker belongs to this session's AI cast.
+    example = (
+        json.dumps(
+            [
+                {"kind": "narration", "text": "Шум дождя усилился."},
+                {"kind": "dialogue", "character_id": context.characters[0]["id"], "text": "Я слышу шаги."},
+            ],
+            ensure_ascii=False,
+        )
+        if context.characters
+        else "[]"
+    )
     facts = json.dumps(
         {"story": context.story, "protagonist": context.protagonist, "characters": context.characters},
         ensure_ascii=False,
@@ -27,8 +49,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "Запрещено придумывать неизвестные IDs персонажей, поз и костюмов. "
             "Используй character_id только из фактов выше. "
             f"Допустимые эмоции: {', '.join(AKANE_EMOTIONS)}. "
-            "Для Аканэ используй pose: default или fan_open, outfit: red_dress. "
-            "Для Марка используй pose: default, outfit: dark_coat; emotion: neutral, happy, sad, angry или surprised. "
+            f"{visual_rules}"
             "Для унаследованных персонажей (source_type: legacy) сохраняй pose: default или fan_open, "
             "outfit: red_dress. "
             "Для остальных персонажей пока нет визуальных материалов: pose: default, outfit: none; "
@@ -37,12 +58,9 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "Для visual_directive.background выбирай neon_crossroads для улицы или signal_archive для архива сигнала. "
             "Меняй фон только когда повествование действительно перемещается в эту локацию. "
             "Предложи 2–4 содержательных, непустых и разных выбора. "
-            "Верни segments в порядке сцены: narration, dialogue, narration, dialogue. "
+            "Верни segments в порядке сцены, чередуя narration и dialogue управляемых NPC. "
             "У каждой dialogue укажи character_id; в narration его не указывай. "
-            "Пример: [{kind: narration, text: 'Она опустила веер.'}, "
-            "{kind: dialogue, character_id: 'akane', text: 'Я слышала сигнал.'}, "
-            "{kind: narration, text: 'Марк подошёл к окну.'}, "
-            "{kind: dialogue, character_id: 'mark', text: 'Я тоже.'}]. "
+            f"Пример: {example}. "
             "Не повторяй прямую речь в описании и не вставляй её в narration. "
             "proposed_effects должен быть пустым: изменения канона в этой истории не разрешены. "
             "Верни только JSON по переданной схеме."

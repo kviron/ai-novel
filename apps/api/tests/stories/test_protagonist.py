@@ -2,7 +2,7 @@ import json
 
 from sqlmodel import Session, select
 
-from app.db.models import Character, Story, StorySession
+from app.db.models import Character, CharacterRevision, Story, StorySession
 
 
 def story_id(client):
@@ -117,6 +117,7 @@ def test_author_fixed_hero_excludes_playable_cast_member(client):
         row.hero_policy = "fixed"
         row.fixed_hero_revision_id = akane.current_revision_id
         row.playable_character_ids = json.dumps(["akane"])
+        session.get(CharacterRevision, akane.current_revision_id).biography = "Помнит тайну города."
         session.commit()
 
     response = client.post(
@@ -127,6 +128,8 @@ def test_author_fixed_hero_excludes_playable_cast_member(client):
     assert response.status_code == 201, response.text
     assert response.json()["protagonist"]["name"] == "Аканэ Куроха"
     assert "akane" not in {item["id"] for item in response.json()["characters"]}
+    setup = client.get(f"/api/stories/{story}/setup").json()
+    assert setup["fixed_hero"]["biography"] == "Помнит тайну города."
 
 
 def test_policy_rejects_disallowed_hero_source(client):

@@ -59,7 +59,7 @@ export function StorySetupPage() {
   if (!storyId || !setup || !story) return <div className="mx-auto max-w-3xl px-4 py-10" role="alert">{error || 'История не найдена.'}</div>
 
   const name = source === 'fixed' ? setup.fixed_hero?.name : source === 'catalog' ? selected?.name : draft.name.trim()
-  const biography = source === 'catalog' ? selected?.biography : source === 'draft' ? draft.biography.trim() : ''
+  const biography = source === 'catalog' ? selected?.biography : source === 'draft' ? draft.biography.trim() : setup.fixed_hero?.biography
   const canContinue = source === 'fixed' ? Boolean(setup.fixed_hero) : source === 'catalog' ? Boolean(selected) : Boolean(draft.name.trim())
 
   function chooseSource(next: 'catalog' | 'draft') {

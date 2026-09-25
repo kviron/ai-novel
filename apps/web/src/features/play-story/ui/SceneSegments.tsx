@@ -14,7 +14,7 @@ type Props = {
 export function SceneSegments({ segments, narration, dialogue, speaker, characters, animateLast = false, hideSpeakerNames = false }: Props) {
   const parts = segments?.length ? segments : [
     { kind: 'narration' as const, text: narration },
-    { kind: 'dialogue' as const, text: dialogue, character_id: characters.find((item) => item.name === speaker)?.id },
+    ...(dialogue ? [{ kind: 'dialogue' as const, text: dialogue, character_id: characters.find((item) => item.name === speaker)?.id }] : []),
   ]
   return <div className="flex flex-col gap-2">
     {parts.map((part, index) => {

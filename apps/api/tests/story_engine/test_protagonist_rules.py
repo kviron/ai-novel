@@ -42,6 +42,9 @@ def test_generation_context_separates_player_hero_from_npcs(client):
     assert '"protagonist"' in prompt.system_prompt
     assert "не придумывай действия и реплики героя игрока" in prompt.system_prompt
     assert '"id": "mark"' in prompt.system_prompt
+    assert "character_id: 'akane'" not in prompt.system_prompt
+    assert "Для Аканэ используй" not in prompt.system_prompt
+    assert '"character_id": "mark"' in prompt.system_prompt
 
 
 def test_model_cannot_give_player_hero_a_dialogue_segment(client):

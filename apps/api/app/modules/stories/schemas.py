@@ -83,13 +83,17 @@ class CharacterDetail(BaseModel):
     visual_profile_version: int
 
 
+class FixedHeroDetail(CharacterDetail):
+    biography: str
+
+
 class StorySetup(BaseModel):
     story_id: str
     policy: Literal["fixed", "choice"]
     policy_version: int
     allowed_sources: list[Literal["catalog", "draft"]]
     playable_character_ids: list[str]
-    fixed_hero: CharacterDetail | None = None
+    fixed_hero: FixedHeroDetail | None = None
 
 
 class ProtagonistCatalogCompletion(BaseModel):

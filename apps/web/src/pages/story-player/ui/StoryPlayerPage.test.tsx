@@ -36,6 +36,16 @@ test('даёт перейти в Студию без технических де
   expect(screen.getByTestId('story-player-route')).toHaveAttribute('data-story-theme', 'akane-neon-echo')
 })
 
+test('не приписывает вступительную реплику закреплённого героя NPC', async () => {
+  apiServer.session({ ...session,
+    protagonist: { ...session.protagonist, source_kind: 'fixed', source_character_id: 'akane', name: 'Аканэ Куроха' },
+    characters: [{ id: 'mark', name: 'Марк Ветров', gender: 'male', age: 29, personality: '', appearance: '', visual_profile_version: 1 }],
+  })
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByRole('region', { name: 'Игровая сцена' })).not.toHaveTextContent('Вы всё-таки пришли. Что привело вас сюда?')
+  expect(screen.getByText('Начните историю своим действием.')).toBeInTheDocument()
+})
+
 test('открывает переписку из кнопки после названия с разными цветами игрока и персонажа', async () => {
   apiServer.dialogueHistory(session.id, [turn, { ...turn, id: 'turn-2', action: 'Идти дальше', speaker: 'Марк', narration: 'В архиве темно.', dialogue: 'Я нашёл запись.' }])
   render(<StoryPlayerPage sessionId="session-1" />)
