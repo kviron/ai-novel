@@ -72,6 +72,35 @@ export type StoryDetail = StorySummary & {
   characters: Character[]
 }
 
+export type StorySetup = {
+  story_id: string
+  policy: 'fixed' | 'choice'
+  policy_version: number
+  allowed_sources: ('catalog' | 'draft')[]
+  playable_character_ids: string[]
+  fixed_hero: Character | null
+}
+
+export type HeroChoice =
+  | { source_kind: 'fixed' }
+  | { source_kind: 'catalog'; character_id: string; revision_id: string }
+  | { source_kind: 'draft'; name: string; address: string | null; gender: 'female' | 'male' | 'unspecified'; appearance: string; biography: string }
+
+export type Protagonist = {
+  session_id: string
+  source_kind: 'fixed' | 'catalog' | 'draft' | 'legacy'
+  source_character_id: string | null
+  source_revision_id: string | null
+  policy_version: number
+  name: string
+  address: string
+  gender: string
+  appearance: string
+  biography: string
+  personality: string
+  age: number | null
+}
+
 export type VisualDirective = {
   mode: 'sprite_scene'
   character_id: string
@@ -116,6 +145,7 @@ export type StorySession = {
   id: string
   story: StorySummary
   characters: Character[]
+  protagonist: Protagonist
   state_version: number
   can_rewind: boolean
   current_scene: string
@@ -151,6 +181,7 @@ export type StartSessionRequest = {
   provider_id: string
   model_id?: string
   kind?: 'player' | 'author'
+  hero?: HeroChoice
 }
 
 export type CreateTurnRequest = {

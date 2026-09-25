@@ -10,7 +10,7 @@ afterEach(() => {
   apiServer.reset()
 })
 
-test('запускает историю с моделью, настроенной на сервере, даже если рекомендация истории другая', async () => {
+test('открывает настройку героя перед новой игрой', async () => {
   apiServer.listStories([{
     id: 'story-1',
     slug: 'akane-neon-echo',
@@ -20,17 +20,14 @@ test('запускает историю с моделью, настроенно�
     recommended_provider_id: 'ollama',
     recommended_model_id: 'qwen3:14b-q4_K_M',
   }])
-  apiServer.startSession({ id: 'session-1', state_version: 1, model_id: 'gemma4-local:32k' })
+  apiServer.storySetup('story-1', { story_id: 'story-1', policy: 'choice', policy_version: 1, allowed_sources: ['draft'], playable_character_ids: [], fixed_hero: null })
 
   render(<TestRouter initialEntries={['/']} />)
 
   expect(await screen.findByRole('heading', { name: 'Эхо неона' })).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Начать новую игру' }))
-  expect(apiServer.lastStartSessionRequest()).toEqual({
-    provider_id: 'ollama',
-    kind: 'player',
-  })
-  expect(await screen.findByTestId('story-player-route')).toHaveAttribute('data-session-id', 'session-1')
+  expect(await screen.findByRole('heading', { name: /Ваш герой/ })).toBeInTheDocument()
+  expect(apiServer.lastStartSessionRequest()).toBeNull()
 })
 
 test('показывает сохранённое прохождение и продолжает ту же сессию', async () => {

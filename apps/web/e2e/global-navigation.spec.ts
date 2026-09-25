@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { startStory } from './helpers/start-story'
 
 test('режим сцены скрывает интерфейс и возвращает его кликом без потери набранного действия', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   const sessionUrl = page.url()
   await page.getByRole('textbox', { name: 'Ваше действие' }).fill('Осмотреть улицу')
@@ -24,7 +25,7 @@ test('режим сцены скрывает интерфейс и возвра�
 
 test('режим сцены прячет и возвращает инспектор автора', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
   await expect(inspector).toBeVisible()
@@ -37,7 +38,7 @@ test('режим сцены прячет и возвращает инспект�
 test('длинный инспектор прокручивается внутри экрана, не прокручивая всю студию', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 600 })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
   await expect(inspector).toBeVisible()
@@ -61,7 +62,7 @@ test('длинный инспектор прокручивается внутр�
 test('на телефоне инспектор автора открывается поверх сцены и прокручивается внутри', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   await page.getByRole('button', { name: 'Открыть инспектор' }).click()
   const inspector = page.getByRole('complementary', { name: 'Инспектор сессии' })
@@ -73,7 +74,7 @@ test('на телефоне инспектор автора открываетс
 
 test('шапка новеллы компактна и лежит поверх фона без нижней границы', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   const header = page.locator('.game-shell .game-header')
   const stage = page.getByRole('region', { name: 'Игровая сцена' })
   await expect(header).toBeVisible()
@@ -99,7 +100,7 @@ test('шапка новеллы компактна и лежит поверх ф
 
 test('игра сохраняется под настройками, а выбор способа сворачивания переживает перезагрузку', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   const sessionUrl = page.url()
   const sidebar = page.locator('[data-slot="sidebar"][data-side="left"]')
@@ -140,7 +141,7 @@ test('игра сохраняется под настройками, а выбо
 test('на узком экране навигация открывается поверх новеллы и закрывается после перехода', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await page.getByRole('button', { name: 'Открыть навигацию' }).click()
   await expect(page.locator('[data-mobile="true"]')).toBeVisible()
@@ -158,7 +159,7 @@ test('на узком экране навигация открывается п�
 
 test('настройки поверх тестовой сцены не сбрасывают инспектор автора', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()
   await expect(page).toHaveURL(/\/studio\/[^/]+$/)

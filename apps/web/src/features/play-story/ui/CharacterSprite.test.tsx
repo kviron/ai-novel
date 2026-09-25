@@ -4,9 +4,12 @@ import { expect, test } from 'vitest'
 import type { StorySession } from '@/shared/api'
 import { CharacterSprite } from './CharacterSprite'
 
+const protagonist: StorySession['protagonist'] = { session_id: 'session-1', source_kind: 'legacy', source_character_id: null, source_revision_id: null, policy_version: 1, name: 'Игрок', address: 'Игрок', gender: 'unspecified', appearance: '', biography: '', personality: '', age: null }
+
 test('shows Mark rather than Akane when Mark speaks', () => {
   const session: StorySession = {
     id: 'session-1', state_version: 2, can_rewind: true, current_scene: 'Архив', provider_id: 'ollama', model_id: 'local',
+    protagonist,
     story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: '', description: '', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'local' },
     characters: [
       { id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: '', appearance: '', visual_profile_version: 1 },
@@ -24,6 +27,7 @@ test('shows Mark rather than Akane when Mark speaks', () => {
 test('shows a named placeholder for a playable character without visual assets', () => {
   const session: StorySession = {
     id: 'session-2', state_version: 2, can_rewind: true, current_scene: 'Архив', provider_id: 'ollama', model_id: 'local',
+    protagonist: { ...protagonist, session_id: 'session-2' },
     story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: '', description: '', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'local' },
     characters: [{ id: 'mira', name: 'Мира', gender: 'female', age: 27, personality: '', appearance: '', visual_profile_version: 1 }],
     latest_turn: { id: 'turn-2', state_version: 2, action: 'Спросить Миру', prompt_version: 'v1', speaker: 'Мира', narration: '', dialogue: 'Я видела сигнал.', choices: [], visual_directive: { character_id: 'mira', emotion: 'neutral', pose: 'default', outfit: 'none', background: 'signal_archive' } },

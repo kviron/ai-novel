@@ -9,6 +9,7 @@ import { SettingsPage } from '@/pages/settings'
 import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
 import { StoryCastPage } from '@/pages/story-cast'
+import { StorySetupPage } from '@/pages/story-setup'
 import { routes } from '@/shared/config'
 
 export const routeObjects: RouteObject[] = [
@@ -18,6 +19,7 @@ export const routeObjects: RouteObject[] = [
     children: [
       { index: true, element: <NovelLibraryPage /> },
       { path: 'play/:sessionId', element: <StoryPlayerRoute /> },
+      { path: 'stories/:storyId/setup', element: <StorySetupPage /> },
       { path: 'studio', element: <StudioRoute /> },
       { path: 'studio/stories/:storyId/characters', element: <StoryCastPage /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },

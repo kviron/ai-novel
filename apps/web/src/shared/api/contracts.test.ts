@@ -16,6 +16,7 @@ const restoredSession = {
     recommended_model_id: 'qwen3:14b-q4_K_M',
   },
   characters: [],
+  protagonist: { session_id: 'session-1', source_kind: 'legacy', source_character_id: null, source_revision_id: null, policy_version: 1, name: 'Игрок', address: 'Игрок', gender: 'unspecified', appearance: '', biography: '', personality: '', age: null },
   state_version: 2,
   can_rewind: true,
   current_scene: 'Прибытие',

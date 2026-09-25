@@ -23,10 +23,12 @@ type Session = {
   model_id?: string
   latest_turn?: unknown
   visual_state?: { emotion: string; pose: string; outfit: string }
+  protagonist?: unknown
 }
 
 type Provider = { provider_id: string; available: boolean; detail: string; models: string[] }
-type StartSessionRequest = { provider_id: string; model_id?: string; kind?: 'player' | 'author' }
+type StartSessionRequest = { provider_id: string; model_id?: string; kind?: 'player' | 'author'; hero?: unknown }
+type Setup = { story_id: string; policy: 'fixed' | 'choice'; policy_version: number; allowed_sources: ('catalog' | 'draft')[]; playable_character_ids: string[]; fixed_hero: unknown }
 type Save = { id: string; story: Story; state_version: number; current_scene: string; created_at: string; updated_at: string; kind: 'player' | 'author' }
 
 let stories: Story[] = []
@@ -34,6 +36,7 @@ let characters: unknown[] = []
 let characterDetails = new Map<string, unknown>()
 let failNextCharacterList = false
 let storyDetails = new Map<string, Story & { current_scene: string; characters: unknown[] }>()
+let storySetups = new Map<string, Setup>()
 let failNextStoryList = false
 let failNextSaveList = false
 let nextSession: Session = { id: 'session-1', state_version: 1 }
@@ -43,6 +46,7 @@ let lastProvider: Provider | null = null
 let turns = new Map<string, unknown>()
 let dialogueHistories = new Map<string, unknown[]>()
 let lastStartRequest: StartSessionRequest | null = null
+let lastHeroSave: unknown = null
 let saves: Save[] = []
 let rewinds = new Map<string, Session>()
 let modelChanges = new Map<string, Session>()
@@ -93,6 +97,10 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     const original = characters.find((item) => (item as { id?: string }).id === extractionMatch[1]) as Record<string, unknown> | undefined
     return json({ ...original, id: 'extracted-1', name: original?.name ?? 'Аканэ', source_type: 'extracted' }, 201)
   }
+  if (method === 'POST' && /^\/api\/sessions\/[^/]+\/protagonist\/save-to-catalog$/.test(pathname)) {
+    lastHeroSave = await requestBody(input, init)
+    return json({ character_id: 'hero-saved', name: 'Лена' }, 201)
+  }
   if (method === 'POST' && /^\/api\/stories\/[^/]+\/characters\/generate-role$/.test(pathname)) {
     return json({ text: 'Союзник героини и хранитель секрета города.' })
   }
@@ -141,6 +149,11 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (method === 'GET' && storyMatch) {
     const story = storyDetails.get(decodeURIComponent(storyMatch[1]))
     return story ? json(story) : json({ code: 'not_found', detail: 'История не найдена.', retryable: false }, 404)
+  }
+  const setupMatch = pathname.match(/^\/api\/stories\/([^/]+)\/setup$/)
+  if (method === 'GET' && setupMatch) {
+    const setup = storySetups.get(decodeURIComponent(setupMatch[1]))
+    return setup ? json(setup) : json({ code: 'not_found', detail: 'Настройка не найдена.', retryable: false }, 404)
   }
   const castMatch = pathname.match(/^\/api\/stories\/([^/]+)\/characters(?:\/([^/]+))?$/)
   const batchMatch = pathname.match(/^\/api\/stories\/([^/]+)\/characters\/batch$/)
@@ -235,6 +248,7 @@ export const apiServer = {
   storyDetail(id: string, value: Story & { current_scene: string; characters: unknown[] }) {
     storyDetails.set(id, value)
   },
+  storySetup(id: string, value: Setup) { storySetups.set(id, value) },
   failStoryListOnce() { failNextStoryList = true },
   failSaveListOnce() { failNextSaveList = true },
   startSession(value: Session) {
@@ -261,12 +275,14 @@ export const apiServer = {
   lastStartSessionRequest() {
     return lastStartRequest
   },
+  lastHeroSaveRequest() { return lastHeroSave },
   reset() {
     stories = []
     characters = []
     characterDetails = new Map()
     failNextCharacterList = false
     storyDetails = new Map()
+    storySetups = new Map()
     failNextStoryList = false
     failNextSaveList = false
     nextSession = { id: 'session-1', state_version: 1 }
@@ -276,6 +292,7 @@ export const apiServer = {
       turns = new Map()
       dialogueHistories = new Map()
     lastStartRequest = null
+    lastHeroSave = null
     saves = []
     rewinds = new Map()
     modelChanges = new Map()

@@ -16,12 +16,12 @@ function Cover({ story }: { story: StorySummary }) {
   )
 }
 
-function StoryCard({ story, pending, onStart }: { story: StorySummary; pending: boolean; onStart: () => void }) {
+function StoryCard({ story, onStart }: { story: StorySummary; onStart: () => void }) {
   return <Card className="gap-0 p-0 sm:flex-row">
     <Cover story={story} />
     <div className="flex min-w-0 flex-1 flex-col gap-3 py-4">
       <CardHeader><CardTitle><h2>{story.title}</h2></CardTitle><CardDescription>{story.description || story.premise}</CardDescription></CardHeader>
-      <CardFooter className="mt-auto"><Button disabled={pending} onClick={onStart}>{pending ? 'Начинаем…' : 'Начать новую игру'}</Button></CardFooter>
+      <CardFooter className="mt-auto"><Button onClick={onStart}>Начать новую игру</Button></CardFooter>
     </div>
   </Card>
 }
@@ -46,8 +46,6 @@ export function NovelLibraryPage() {
   const [savesLoading, setSavesLoading] = useState(true)
   const [storiesError, setStoriesError] = useState(false)
   const [savesError, setSavesError] = useState(false)
-  const [startError, setStartError] = useState(false)
-  const [startingId, setStartingId] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
@@ -71,25 +69,12 @@ export function NovelLibraryPage() {
     setRetryCount((value) => value + 1)
   }
 
-  async function startStory(story: StorySummary) {
-    setStartingId(story.id)
-    setStartError(false)
-    try {
-      const session = await api.startSession(story.id, { provider_id: story.recommended_provider_id, kind: 'player' })
-      navigate(routes.storyPlayer(session.id))
-    } catch {
-      setStartError(true)
-      setStartingId(null)
-    }
-  }
-
   return <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pb-8 pt-8 sm:px-6">
     <header className="flex flex-col gap-2"><p className="text-xs text-muted-foreground">Библиотека</p><h1 className="text-xl font-semibold tracking-tight">Визуальные новеллы</h1></header>
-    {startError && <p role="alert" className="text-destructive">Не удалось начать историю. Повторите попытку.</p>}
     <Tabs defaultValue="all" className="gap-4">
       <TabsList><TabsTrigger value="all">Все новеллы</TabsTrigger><TabsTrigger value="started">Начатые{saves.length > 0 ? ` (${saves.length})` : ''}</TabsTrigger></TabsList>
       <TabsContent value="all">
-        {storiesLoading ? <p role="status">Загружаем истории…</p> : storiesError ? <div className="flex flex-col items-start gap-2"><p role="alert" className="text-destructive">Не удалось загрузить библиотеку.</p><Button variant="outline" onClick={retryLoading}>Повторить</Button></div> : stories.length === 0 ? <p className="text-muted-foreground">Доступных историй пока нет.</p> : <section aria-label="Доступные истории" className="flex flex-col gap-4">{stories.map((story) => <StoryCard key={story.id} story={story} pending={startingId !== null} onStart={() => void startStory(story)} />)}</section>}
+        {storiesLoading ? <p role="status">Загружаем истории…</p> : storiesError ? <div className="flex flex-col items-start gap-2"><p role="alert" className="text-destructive">Не удалось загрузить библиотеку.</p><Button variant="outline" onClick={retryLoading}>Повторить</Button></div> : stories.length === 0 ? <p className="text-muted-foreground">Доступных историй пока нет.</p> : <section aria-label="Доступные истории" className="flex flex-col gap-4">{stories.map((story) => <StoryCard key={story.id} story={story} onStart={() => navigate(routes.storySetup(story.id))} />)}</section>}
       </TabsContent>
       <TabsContent value="started">
         {savesLoading ? <p role="status">Загружаем сохранения…</p> : savesError ? <div className="flex flex-col items-start gap-2"><p role="alert" className="text-destructive">Не удалось загрузить сохранения.</p><Button variant="outline" onClick={retryLoading}>Повторить</Button></div> : saves.length === 0 ? <p className="text-muted-foreground">Вы ещё не начали ни одной новеллы.</p> : <section aria-label="Начатые истории" className="flex flex-col gap-4">{saves.map((save) => <SaveCard key={save.id} save={save} onContinue={() => navigate(routes.storyPlayer(save.id))} />)}</section>}

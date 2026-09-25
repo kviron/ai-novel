@@ -12,6 +12,7 @@ import type {
   StoryDetail,
   StoryCharacterLink,
   StorySummary,
+  StorySetup,
   TurnResult,
 } from './contracts'
 
@@ -149,6 +150,11 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
         { baseUrl, method: 'POST' },
       )
     },
+    saveSessionProtagonist(sessionId: string, completion: { age: number; personality: string; appearance: string }) {
+      return request<CatalogCharacter>(`/api/sessions/${encodeURIComponent(sessionId)}/protagonist/save-to-catalog`, {
+        baseUrl, method: 'POST', body: completion,
+      })
+    },
       generateCharacterField(field: CharacterTextField, draft: CharacterWrite) {
         return request<{ text: string }>('/api/characters/generate-field', { baseUrl, method: 'POST', body: { field, draft } })
       },
@@ -181,6 +187,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     getStory(storyId: string, signal?: AbortSignal) {
       return request<StoryDetail>(`/api/stories/${encodeURIComponent(storyId)}`, { baseUrl, signal })
+    },
+    getStorySetup(storyId: string, signal?: AbortSignal) {
+      return request<StorySetup>(`/api/stories/${encodeURIComponent(storyId)}/setup`, { baseUrl, signal })
     },
     startSession(storyId: string, body: StartSessionRequest, signal?: AbortSignal) {
       return request<StorySession>(`/api/stories/${encodeURIComponent(storyId)}/sessions`, {

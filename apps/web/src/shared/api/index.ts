@@ -17,6 +17,9 @@ export type {
   StorySession,
   StoryDetail,
   StorySummary,
+  StorySetup,
+  HeroChoice,
+  Protagonist,
   TurnResult,
   VisualDirective,
 } from './contracts'

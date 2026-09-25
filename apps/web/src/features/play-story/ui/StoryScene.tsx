@@ -16,6 +16,7 @@ import { useStoryPlayer } from '../model/useStoryPlayer'
 import { CharacterSprite } from './CharacterSprite'
 import { SceneBackground } from './SceneBackground'
 import { SceneSegments } from './SceneSegments'
+import { ProtagonistCatalogSave } from './ProtagonistCatalogSave'
 
 export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlayer> }) {
   const [choicesOpen, setChoicesOpen] = useState(false)
@@ -71,7 +72,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
             <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) { setSelectedModel(player.models.includes(session.model_id) ? session.model_id : ''); setSelectedCharacter(session.characters[0]?.id ?? ''); setExtractedName(''); setExtractError('') } }}>
               <DialogTrigger asChild><Button type="button" variant="outline" size="icon-lg" aria-label="Настройки прохождения" title="Настройки прохождения" disabled={working}><Settings2 aria-hidden="true" /></Button></DialogTrigger>
-              <DialogContent style={resolveStoryTheme(session.story.slug).variables}>
+              <DialogContent className="max-h-[90dvh] overflow-y-auto" style={resolveStoryTheme(session.story.slug).variables}>
                 <DialogHeader><DialogTitle>Настройки прохождения</DialogTitle><DialogDescription>Модель можно сменить между ходами без потери истории.</DialogDescription></DialogHeader>
                 <div className="flex flex-col gap-3">
                   <FieldGroup><Field>
@@ -96,6 +97,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
                   <Button type="button" variant="outline" disabled={!selectedCharacter || extracting} onClick={() => void extractCharacter()}>{extracting ? 'Сохраняем…' : 'Сохранить персонажа в каталог'}</Button>
                   {extractedName && <p role="status">{extractedName} добавлен в каталог как новый персонаж.</p>}
                   {extractError && <p role="alert" className="text-destructive">{extractError}</p>}
+                  {session.protagonist?.source_kind === 'draft' && <><Separator /><ProtagonistCatalogSave sessionId={session.id} name={session.protagonist.name} appearance={session.protagonist.appearance} /></>}
                 </div>
                 <DialogFooter><Button type="button" disabled={!selectedModel || selectedModel === session.model_id || working} onClick={() => void player.changeModel(selectedModel)}>Применить модель</Button></DialogFooter>
               </DialogContent>

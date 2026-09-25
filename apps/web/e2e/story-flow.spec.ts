@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { startStory } from './helpers/start-story'
 
 test('смена модели в настройках сохраняет ту же сессию и используется следующим ходом', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   const sessionId = page.url().split('/').at(-1)
   await page.getByRole('button', { name: 'Настройки прохождения' }).click()
@@ -26,7 +27,7 @@ test('смена модели в настройках сохраняет ту ж
 
 test('игрок отменяет ход, выбирает другую ветку и восстанавливает её после перезагрузки', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Начать новую игру' }).click()
+  await startStory(page)
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   const sessionUrl = page.url()
   await expect(page.getByRole('heading', { name: 'Эхо неона' })).toBeVisible()
