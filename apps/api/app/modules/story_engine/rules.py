@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,12 +26,21 @@ class GenerationContext:
     provider_id: str
     model_id: str
     story: dict[str, Any]
+    protagonist: dict[str, Any]
     characters: list[dict[str, Any]]
     recent_turns: list[dict[str, Any]]
 
 
 class InvalidProposalError(Exception):
     """Contains rule identifiers only, never untrusted model content."""
+
+
+# Only unmistakable second-person voluntary actions are rejected here. A broad
+# language classifier would erase legitimate consequences and sensory narration.
+PROTAGONIST_ACTION_PATTERN = re.compile(
+    r"\b(?:ты|вы)\s+(?:решил(?:а|и)?|сказал(?:а|и)?|ответил(?:а|и)?|спросил(?:а|и)?)\b",
+    re.IGNORECASE,
+)
 
 
 def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> AcceptedTurn:
@@ -61,6 +71,8 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     dialogue_segments = [segment for segment in segments if segment.kind == "dialogue"]
     narration_segments = [segment for segment in segments if segment.kind == "narration"]
     for narration in narration_segments:
+        if PROTAGONIST_ACTION_PATTERN.search(narration.text):
+            raise InvalidProposalError("protagonist_action_forbidden")
         normalized_narration = " ".join(narration.text.casefold().split())
         for dialogue in dialogue_segments:
             normalized_dialogue = " ".join(dialogue.text.casefold().split())

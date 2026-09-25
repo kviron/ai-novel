@@ -4,7 +4,7 @@ from sqlalchemy import text, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.db.models import StorySession, Turn, utc_timestamp
+from app.db.models import SessionProtagonist, StorySession, Turn, utc_timestamp
 from app.modules.stories import repository as stories
 from app.modules.stories.service import SessionNotFoundError
 
@@ -49,6 +49,9 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
     if story_session.state_version != expected_version:
         raise StateConflictError
     story = stories.get_story_by_id(session, story_session.story_id)
+    protagonist = session.get(SessionProtagonist, session_id)
+    if protagonist is None:
+        raise StateConflictError
     characters = stories.list_session_characters(session, session_id)
     turns: list[Turn] = []
     turn_id = story_session.active_turn_id
@@ -66,6 +69,16 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,
         story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
+        protagonist={
+            "id": protagonist.source_character_id,
+            "name": protagonist.name,
+            "address": protagonist.address,
+            "gender": protagonist.gender,
+            "appearance": protagonist.appearance,
+            "biography": protagonist.biography,
+            "personality": protagonist.personality,
+            "age": protagonist.age,
+        },
         characters=[
             {
                 "id": character.id,

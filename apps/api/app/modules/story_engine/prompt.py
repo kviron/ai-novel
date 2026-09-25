@@ -10,12 +10,19 @@ PROMPT_VERSION = "scene-segments-v2"
 
 
 def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens: int) -> TurnGenerationRequest:
-    facts = json.dumps({"story": context.story, "characters": context.characters}, ensure_ascii=False)
+    facts = json.dumps(
+        {"story": context.story, "protagonist": context.protagonist, "characters": context.characters},
+        ensure_ascii=False,
+    )
     return TurnGenerationRequest(
         model_id=context.model_id,
         system_prompt=(
             "Ты — ведущий гибридной визуальной новеллы на русском языке. "
             "Продолжи действие игрока последствиями и новой репликой, не повторяй само действие. "
+            "Герой игрока указан отдельно от characters: не придумывай действия и реплики героя игрока. "
+            "Не приписывай ему добровольные решения или новые мысли-решения; "
+            "можно описывать внешние воздействия, ощущения и последствия уже выбранного действия. "
+            "Персонажи из characters — единственные, чьи реплики ты можешь писать. "
             "Соблюдай неизменяемые факты истории и описание персонажей: " + facts + "\n"
             "Запрещено придумывать неизвестные IDs персонажей, поз и костюмов. "
             "Используй character_id только из фактов выше. "
