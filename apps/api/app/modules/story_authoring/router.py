@@ -4,12 +4,14 @@ from contextlib import contextmanager
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlmodel import Session
 
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, DraftConflictResponse, DraftInvalidResponse, ErrorResponse
 from app.db.engine import get_session
+from app.db.models import StoryMaterial
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError, available_models
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.protagonist import HeroSelectionError
@@ -41,6 +43,7 @@ from app.modules.story_authoring.sessions import AuthorTestSessionRequest, creat
 
 router = APIRouter(prefix="/api/author/stories", tags=["Авторская студия"])
 version_router = APIRouter(prefix="/api/stories", tags=["Истории"])
+material_router = APIRouter(prefix="/api", tags=["Истории"])
 SessionDep = Annotated[Session, Depends(get_session)]
 SectionName = Literal["identity", "mode", "hero", "cast", "rules", "canon"]
 _SECTION_TYPES = {
@@ -223,3 +226,23 @@ async def upload_cover(
 def get_published_version(story_id: str, version_id: str, session: SessionDep) -> StoryDraft:
     with _author_errors("version_not_found"):
         return load_published_story_version(session, story_id, version_id)
+
+
+@material_router.get("/story-materials/{material_id}")
+def get_story_material(material_id: str, session: SessionDep, settings: RuntimeSettingsDep) -> Response:
+    material = session.get(StoryMaterial, material_id)
+    if material is None:
+        raise ApiError(404, "not_found", "Материал обложки не найден.")
+    asset_root = settings.asset_dir.resolve()
+    path = (asset_root / material.asset_path).resolve()
+    if path.parent != asset_root:
+        raise ApiError(404, "not_found", "Материал обложки не найден.")
+    try:
+        content = path.read_bytes()
+    except OSError as error:
+        raise ApiError(404, "not_found", "Материал обложки не найден.") from error
+    return Response(
+        content,
+        media_type=material.mime_type,
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"},
+    )

@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session
 
-from app.db.models import Story, StoryDraftSnapshot, StorySession
+from app.db.models import Story, StoryDraftSnapshot, StoryMaterial, StorySession
 from app.modules.story_authoring.definition import load_published_story_version
 from app.modules.story_authoring.schemas import (
     CanonFactDefinition,
@@ -71,7 +71,7 @@ def load_runtime_story_definition(session: Session, game: StorySession) -> Runti
             raise ValueError("Draft snapshot source does not match its session")
     else:
         raise ValueError("A story session must pin exactly one runtime source")
-    return _from_draft(story, draft, game.draft_snapshot_id)
+    return _from_draft(session, story, draft, game.draft_snapshot_id)
 
 
 def current_published_runtime(session: Session, story: Story) -> RuntimeStoryDefinition:
@@ -88,7 +88,7 @@ def current_published_runtime(session: Session, story: Story) -> RuntimeStoryDef
     return load_runtime_story_definition(session, source)
 
 
-def _from_draft(story: Story, draft: StoryDraft, snapshot_id: str | None) -> RuntimeStoryDefinition:
+def _from_draft(session: Session, story: Story, draft: StoryDraft, snapshot_id: str | None) -> RuntimeStoryDefinition:
     return RuntimeStoryDefinition(
         story_id=draft.story_id,
         version_id=draft.version_id,
@@ -98,7 +98,7 @@ def _from_draft(story: Story, draft: StoryDraft, snapshot_id: str | None) -> Run
         slug=draft.identity.slug,
         premise=draft.identity.premise,
         description=draft.identity.short_description,
-        cover_image_url=story.cover_image_url,
+        cover_image_url=_runtime_cover_url(session, story, draft),
         mode=draft.mode.mode,
         opening_situation=draft.identity.opening_situation,
         setting=draft.identity.setting,
@@ -117,3 +117,13 @@ def _from_draft(story: Story, draft: StoryDraft, snapshot_id: str | None) -> Run
         cast=draft.cast.characters,
         character_revisions=draft.character_revisions,
     )
+
+
+def _runtime_cover_url(session: Session, story: Story, draft: StoryDraft) -> str | None:
+    if draft.identity.cover_material_id is None:
+        # Migrated built-in stories predate StoryMaterial; their packaged cover is the only legacy fallback.
+        return story.cover_image_url
+    material = session.get(StoryMaterial, draft.identity.cover_material_id)
+    if material is None or material.story_id != story.id:
+        raise ValueError("Pinned story cover material is missing or belongs to another story")
+    return f"/api/story-materials/{material.id}"

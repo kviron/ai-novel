@@ -52,9 +52,9 @@ def _publishable(client):
     return _save(client, created.json(), "identity", _identity())
 
 
-def _image_bytes(mime_type):
+def _image_bytes(mime_type, color="red"):
     output = BytesIO()
-    Image.new("RGB", (2, 2), "red").save(
+    Image.new("RGB", (2, 2), color).save(
         output, format={"image/png": "PNG", "image/jpeg": "JPEG", "image/webp": "WEBP"}[mime_type]
     )
     return output.getvalue()
@@ -304,6 +304,44 @@ def test_author_session_pins_exact_canonical_snapshot_and_does_not_create_autosa
         assert session.get(SessionProtagonist, game["id"]) is not None
         assert session.exec(select(SessionCharacter).where(SessionCharacter.session_id == game["id"])).all() == []
         assert session.get(Autosave, draft["story_id"]) is None
+
+
+def test_runtime_covers_are_pinned_for_author_snapshot_and_published_versions(client):
+    draft = _publishable(client)
+    story_id = draft["story_id"]
+
+    def upload(color):
+        response = client.post(
+            f"/api/author/stories/{story_id}/draft/cover",
+            params={"filename": f"{color}.png", "creator": "Artist", "license": "own", "source": "manual"},
+            content=_image_bytes("image/png", color),
+            headers={"content-type": "image/png"},
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    red_id = upload("red")
+    draft = _save(client, draft, "identity", _identity(cover_material_id=red_id))
+    author_game = client.post(f"/api/author/stories/{story_id}/test-sessions", json={}).json()
+    version_one = client.post(f"/api/author/stories/{story_id}/publish").json()
+    player_one = client.post(f"/api/stories/{story_id}/sessions", json={}).json()
+
+    draft = client.post(f"/api/author/stories/{story_id}/draft-from/{version_one['version_id']}").json()
+    blue_id = upload("blue")
+    draft = _save(client, draft, "identity", _identity(cover_material_id=blue_id))
+    client.post(f"/api/author/stories/{story_id}/publish")
+    player_two = client.post(f"/api/stories/{story_id}/sessions", json={}).json()
+    with Session(client.app.state.engine) as session:
+        session.get(Story, story_id).cover_image_url = "/covers/mutable-legacy-change.webp"
+        session.commit()
+
+    author_url = client.get(f"/api/sessions/{author_game['id']}").json()["story"]["cover_image_url"]
+    first_url = client.get(f"/api/sessions/{player_one['id']}").json()["story"]["cover_image_url"]
+    second_url = client.get(f"/api/sessions/{player_two['id']}").json()["story"]["cover_image_url"]
+    assert author_url == first_url == f"/api/story-materials/{red_id}"
+    assert second_url == f"/api/story-materials/{blue_id}"
+    assert client.get(first_url).content == _image_bytes("image/png", "red")
+    assert client.get(second_url).content == _image_bytes("image/png", "blue")
 
 
 def test_author_session_pins_fixed_hero_and_cast_from_draft(client):

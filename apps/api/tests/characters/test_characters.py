@@ -1,4 +1,5 @@
 from sqlmodel import Session
+from versioned_story_helpers import publish_cast
 
 from app.db.models import CharacterRevision, Story, StoryCharacter
 
@@ -34,19 +35,7 @@ def test_create_and_revise_do_not_move_story_pin(client):
             "role": "cast",
         },
     )
-    assert attached.status_code == 201
-    assert (
-        client.post(
-            f"/api/stories/{story_id}/characters",
-            json={
-                "character_id": character["id"],
-                "revision_id": character["current_revision_id"],
-                "role": "cast",
-            },
-        ).status_code
-        == 409
-    )
-
+    assert (attached.status_code, attached.json()["code"]) == (409, "story_versioned")
     revised = client.post(
         f"/api/characters/{character['id']}/revisions", json={**payload, "name": "Илья после событий"}
     )
@@ -54,20 +43,9 @@ def test_create_and_revise_do_not_move_story_pin(client):
     assert revised.json()["revision_number"] == 2
     detail = client.get(f"/api/characters/{character['id']}").json()
     assert [item["revision_number"] for item in detail["revisions"]] == [1, 2]
-    assert detail["linked_stories"] == [
-        {
-            "story_id": story_id,
-            "story_title": "Эхо неона",
-            "story_slug": "akane-neon-echo",
-            "revision_id": character["current_revision_id"],
-            "revision_number": 1,
-            "role": "cast",
-            "color": "#D9A75F",
-        }
-    ]
+    assert detail["linked_stories"] == []
     with Session(client.app.state.engine) as session:
-        link = session.get(StoryCharacter, (story_id, character["id"]))
-        assert link.revision_id == character["current_revision_id"]
+        assert session.get(StoryCharacter, (story_id, character["id"])) is None
 
 
 def test_catalog_rejects_underage_profile_and_unrelated_revision(client):
@@ -93,27 +71,20 @@ def test_story_and_session_read_their_pinned_revisions(client):
     created = client.post("/api/characters", json=payload).json()
     character_id = created["id"]
     first_revision = created["current_revision_id"]
-    assert (
-        client.post(
-            f"/api/stories/{story_id}/characters",
-            json={
-                "character_id": character_id,
-                "revision_id": first_revision,
-            },
-        ).status_code
-        == 201
+    publish_cast(
+        client,
+        story_id,
+        add=[{"character_id": character_id, "revision_id": first_revision}],
     )
     old_game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     assert next(item for item in old_game["characters"] if item["id"] == character_id)["name"] == "Мира"
 
     revised = client.post(f"/api/characters/{character_id}/revisions", json={**payload, "name": "Мира новая"}).json()
-    repinned = client.put(
-        f"/api/stories/{story_id}/characters/{character_id}",
-        json={
-            "revision_id": revised["current_revision_id"],
-        },
+    publish_cast(
+        client,
+        story_id,
+        update={character_id: {"revision_id": revised["current_revision_id"]}},
     )
-    assert repinned.status_code == 200
     story = client.get(f"/api/stories/{story_id}").json()
     assert next(item for item in story["characters"] if item["id"] == character_id)["name"] == "Мира новая"
     restored = client.get(f"/api/sessions/{old_game['id']}").json()
@@ -139,16 +110,17 @@ def test_one_character_revision_can_be_used_in_two_stories(client):
             "appearance": "Синий плащ",
         },
     ).json()
-    for story_id in (first_story_id, second_story_id):
-        attached = client.post(
-            f"/api/stories/{story_id}/characters",
-            json={
-                "character_id": created["id"],
-                "revision_id": created["current_revision_id"],
-            },
-        )
-        assert attached.status_code == 201
-        story = client.get(f"/api/stories/{story_id}").json()
-        assert next(item for item in story["characters"] if item["id"] == created["id"])["name"] == "Мира"
+    publish_cast(
+        client,
+        first_story_id,
+        add=[{"character_id": created["id"], "revision_id": created["current_revision_id"]}],
+    )
+    attached = client.post(
+        f"/api/stories/{second_story_id}/characters",
+        json={"character_id": created["id"], "revision_id": created["current_revision_id"]},
+    )
+    assert attached.status_code == 201
+    first_story = client.get(f"/api/stories/{first_story_id}").json()
+    assert next(item for item in first_story["characters"] if item["id"] == created["id"])["name"] == "Мира"
     history = client.get(f"/api/characters/{created['id']}").json()
-    assert {item["story_id"] for item in history["linked_stories"]} == {first_story_id, second_story_id}
+    assert {item["story_id"] for item in history["linked_stories"]} == {second_story_id}

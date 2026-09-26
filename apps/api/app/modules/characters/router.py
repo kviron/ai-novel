@@ -41,6 +41,7 @@ from .service import (
     LastCastMemberError,
     SessionNotFoundError,
     StoryNotFoundError,
+    VersionedStoryMutationError,
     attach_character,
     attach_characters_batch,
     create_character,
@@ -54,6 +55,14 @@ from .service import (
 
 router = APIRouter(prefix="/api", tags=["Персонажи"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def _raise_versioned_story_error(error: VersionedStoryMutationError) -> None:
+    raise ApiError(
+        409,
+        "story_versioned",
+        "Состав опубликованной новеллы изменяется через новую редакцию в конструкторе.",
+    ) from error
 
 
 @router.get("/characters", response_model=list[CharacterProfile])
@@ -132,6 +141,8 @@ def add_story_characters_batch(
         raise ApiError(422, "validation_error", "У персонажа нет доступной ревизии.") from error
     except CharacterAlreadyAttachedError as error:
         raise ApiError(409, "conflict", "Персонаж уже добавлен в историю.") from error
+    except VersionedStoryMutationError as error:
+        _raise_versioned_story_error(error)
 
 
 @router.post("/characters/generate-field", response_model=GeneratedCharacterField)
@@ -229,6 +240,8 @@ def add_story_character(story_id: str, payload: AttachCharacterRequest, session:
         raise ApiError(422, "validation_error", "Ревизия не принадлежит персонажу.") from error
     except CharacterAlreadyAttachedError as error:
         raise ApiError(409, "conflict", "Персонаж уже добавлен в историю.") from error
+    except VersionedStoryMutationError as error:
+        _raise_versioned_story_error(error)
 
 
 @router.post("/stories/{story_id}/characters/generate-role", response_model=GeneratedCharacterField)
@@ -261,6 +274,8 @@ def update_story_character(
         raise ApiError(404, "not_found", "Персонаж не привязан к истории.") from error
     except InvalidRevisionError as error:
         raise ApiError(422, "validation_error", "Ревизия не принадлежит персонажу.") from error
+    except VersionedStoryMutationError as error:
+        _raise_versioned_story_error(error)
 
 
 @router.delete("/stories/{story_id}/characters/{character_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -271,3 +286,5 @@ def remove_story_character(story_id: str, character_id: str, session: SessionDep
         raise ApiError(404, "not_found", "Персонаж не привязан к истории.") from error
     except LastCastMemberError as error:
         raise ApiError(409, "conflict", "Нельзя удалить последнего персонажа новеллы.") from error
+    except VersionedStoryMutationError as error:
+        _raise_versioned_story_error(error)

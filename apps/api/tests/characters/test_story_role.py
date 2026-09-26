@@ -1,6 +1,46 @@
 from sqlmodel import Session
+from versioned_story_helpers import publish_cast
 
+from app.db.models import Character, Story, StoryCharacter
 from app.modules.story_engine.repository import load_context
+
+
+def test_versioned_story_rejects_all_legacy_cast_mutations_without_false_success(client):
+    story_id = client.get("/api/stories").json()[0]["id"]
+    character = client.post(
+        "/api/characters",
+        json={
+            "name": "Леон",
+            "gender": "male",
+            "age": 29,
+            "personality": "Наблюдательный",
+            "appearance": "Тёмные волосы",
+        },
+    ).json()
+    akane = client.get("/api/characters/akane").json()
+    requests = [
+        client.post(
+            f"/api/stories/{story_id}/characters",
+            json={"character_id": character["id"], "revision_id": character["current_revision_id"]},
+        ),
+        client.post(f"/api/stories/{story_id}/characters/batch", json={"character_ids": [character["id"]]}),
+        client.put(
+            f"/api/stories/{story_id}/characters/akane",
+            json={"revision_id": akane["current_revision_id"], "role": "Другая роль"},
+        ),
+        client.delete(f"/api/stories/{story_id}/characters/akane"),
+    ]
+
+    assert [(response.status_code, response.json()["code"]) for response in requests] == [
+        (409, "story_versioned"),
+        (409, "story_versioned"),
+        (409, "story_versioned"),
+        (409, "story_versioned"),
+    ]
+    with Session(client.app.state.engine) as session:
+        assert session.get(StoryCharacter, (story_id, character["id"])) is None
+        assert session.get(StoryCharacter, (story_id, "akane")).role == "cast"
+        assert session.get(Character, character["id"]) is not None
 
 
 def test_role_belongs_to_story_link_and_is_pinned_in_session(client):
@@ -17,26 +57,30 @@ def test_role_belongs_to_story_link_and_is_pinned_in_session(client):
     character_id = character["character_id"]
     revision_id = character["current_revision_id"]
 
-    attached = client.post(
-        f"/api/stories/{story_id}/characters",
-        json={"character_id": character_id, "revision_id": revision_id, "role": "Союзник героини"},
+    publish_cast(
+        client,
+        story_id,
+        add=[
+            {
+                "character_id": character_id,
+                "revision_id": revision_id,
+                "role": "Союзник героини",
+            }
+        ],
     )
-    assert attached.status_code == 201
-    assert attached.json()["role"] == "Союзник героини"
     history = client.get(f"/api/characters/{character_id}").json()
-    assert history["linked_stories"][0]["role"] == "Союзник героини"
+    assert history["linked_stories"] == []
 
     old_game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     with Session(client.app.state.engine) as session:
         old_context = load_context(session, old_game["id"], 1)
     assert next(item for item in old_context.characters if item["id"] == character_id)["role"] == "Союзник героини"
 
-    updated = client.put(
-        f"/api/stories/{story_id}/characters/{character_id}",
-        json={"revision_id": revision_id, "role": "Соперник героини"},
+    publish_cast(
+        client,
+        story_id,
+        update={character_id: {"revision_id": revision_id, "role": "Соперник героини"}},
     )
-    assert updated.status_code == 200
-    assert updated.json()["role"] == "Соперник героини"
     new_game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     with Session(client.app.state.engine) as session:
         old_context = load_context(session, old_game["id"], 1)
@@ -58,22 +102,18 @@ def test_story_color_is_pinned_and_catalog_excludes_attached(client):
         },
     ).json()
     character_id = character["id"]
-    assert character_id in [item["id"] for item in client.get(f"/api/characters?exclude_story_id={story_id}").json()]
-    added = client.post(f"/api/stories/{story_id}/characters/batch", json={"character_ids": [character_id]})
-    assert added.status_code == 201
-    assert character_id not in [
-        item["id"] for item in client.get(f"/api/characters?exclude_story_id={story_id}").json()
-    ]
-    updated = client.put(
-        f"/api/stories/{story_id}/characters/{character_id}",
-        json={
-            "revision_id": character["current_revision_id"],
-            "role": "Союзник",
-            "color": "#aabbcc",
-        },
+    publish_cast(
+        client,
+        story_id,
+        add=[
+            {
+                "character_id": character_id,
+                "revision_id": character["current_revision_id"],
+                "role": "Союзник",
+                "color": "#AABBCC",
+            }
+        ],
     )
-    assert updated.status_code == 200
-    assert updated.json()["color"] == "#AABBCC"
     invalid = client.put(
         f"/api/stories/{story_id}/characters/{character_id}",
         json={"revision_id": character["current_revision_id"], "color": "not-a-color"},
@@ -87,14 +127,17 @@ def test_story_color_is_pinned_and_catalog_excludes_attached(client):
     )
     game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     assert next(item for item in game["characters"] if item["id"] == character_id)["color"] == "#AABBCC"
-    assert client.delete(f"/api/stories/{story_id}/characters/{character_id}").status_code == 204
+    publish_cast(client, story_id, remove={character_id})
     restored = client.get(f"/api/sessions/{game['id']}").json()
     assert next(item for item in restored["characters"] if item["id"] == character_id)["color"] == "#AABBCC"
 
 
 def test_batch_attach_is_atomic_and_last_cast_member_cannot_be_removed(client):
-    story_id = client.get("/api/stories").json()[0]["id"]
-    before = len(client.get(f"/api/stories/{story_id}").json()["characters"])
+    with Session(client.app.state.engine) as session:
+        story = Story(slug="legacy-cast", title="Legacy", premise="Legacy", current_scene="Start")
+        session.add(story)
+        session.commit()
+        story_id = story.id
     character = client.post(
         "/api/characters",
         json={
@@ -112,11 +155,8 @@ def test_batch_attach_is_atomic_and_last_cast_member_cannot_be_removed(client):
         },
     )
     assert response.status_code == 404
-    assert len(client.get(f"/api/stories/{story_id}").json()["characters"]) == before
-    for member in client.get(f"/api/stories/{story_id}").json()["characters"][:-1]:
-        assert client.delete(f"/api/stories/{story_id}/characters/{member['id']}").status_code == 204
-    last = client.get(f"/api/stories/{story_id}").json()["characters"][0]
-    assert client.delete(f"/api/stories/{story_id}/characters/{last['id']}").status_code == 409
+    with Session(client.app.state.engine) as session:
+        assert session.get(StoryCharacter, (story_id, character["id"])) is None
 
 
 def test_global_profile_rejects_story_role(client):

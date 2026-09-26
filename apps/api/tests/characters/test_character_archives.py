@@ -3,8 +3,9 @@ from zipfile import ZipFile
 
 from PIL import Image, ImageDraw
 from sqlmodel import Session
+from versioned_story_helpers import publish_cast
 
-from app.db.models import Story, StoryCharacter
+from app.db.models import Story
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"test-avatar-bytes"
 PROFILE = {"name": "Мира", "gender": "female", "age": 26, "personality": "Смелая", "appearance": "Синий плащ"}
@@ -22,12 +23,10 @@ def test_avatar_creates_revision_without_moving_story_or_session_pin(client):
     story_id = client.get("/api/stories").json()[0]["id"]
     original = client.post("/api/characters", json=PROFILE).json()
     character_id = original["id"]
-    assert (
-        client.post(
-            f"/api/stories/{story_id}/characters",
-            json={"character_id": character_id, "revision_id": original["current_revision_id"]},
-        ).status_code
-        == 201
+    publish_cast(
+        client,
+        story_id,
+        add=[{"character_id": character_id, "revision_id": original["current_revision_id"]}],
     )
     old_game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
 
@@ -44,8 +43,6 @@ def test_avatar_creates_revision_without_moving_story_or_session_pin(client):
     detail = client.get(f"/api/characters/{character_id}").json()
     assert detail["revisions"][0]["avatar"] is None
     assert detail["revisions"][1]["avatar"]["sha256"]
-    with Session(client.app.state.engine) as session:
-        assert session.get(StoryCharacter, (story_id, character_id)).revision_id == original["current_revision_id"]
     assert (
         next(
             item
@@ -70,11 +67,11 @@ def test_sprite_is_exposed_on_catalog_and_pinned_session_character(client):
     assert sprite["material"]["kind"] == "sprite:angry:default"
     assert client.get(sprite["material"]["url"]).content == valid_sprite()
 
-    attached = client.post(
-        f"/api/stories/{story_id}/characters",
-        json={"character_id": created["id"], "revision_id": uploaded.json()["current_revision_id"]},
+    publish_cast(
+        client,
+        story_id,
+        add=[{"character_id": created["id"], "revision_id": uploaded.json()["current_revision_id"]}],
     )
-    assert attached.status_code == 201
     game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     pinned = next(item for item in game["characters"] if item["id"] == created["id"])
     assert pinned["sprites"]["angry"][0]["material"]["url"] == sprite["material"]["url"]
@@ -86,7 +83,8 @@ def test_sprite_rejects_wrong_canvas_and_nontransparent_border(client):
     Image.new("RGBA", (512, 512), (255, 0, 0, 255)).save(bad, format="PNG")
     response = client.post(
         f"/api/characters/{created['id']}/sprite:neutral:default?filename=bad.png&creator=Author&license=own&source=manual",
-        content=bad.getvalue(), headers={"Content-Type": "image/png"},
+        content=bad.getvalue(),
+        headers={"Content-Type": "image/png"},
     )
     assert response.status_code == 422
 
@@ -141,14 +139,18 @@ def test_character_with_avatar_can_join_two_stories(client):
         content=PNG,
         headers={"Content-Type": "image/png"},
     ).json()
-    for story_id in (first_story, second_story):
-        linked = client.post(
-            f"/api/stories/{story_id}/characters",
-            json={"character_id": created["id"], "revision_id": uploaded["current_revision_id"]},
-        )
-        assert linked.status_code == 201
+    denied = client.post(
+        f"/api/stories/{first_story}/characters",
+        json={"character_id": created["id"], "revision_id": uploaded["current_revision_id"]},
+    )
+    assert (denied.status_code, denied.json()["code"]) == (409, "story_versioned")
+    linked = client.post(
+        f"/api/stories/{second_story}/characters",
+        json={"character_id": created["id"], "revision_id": uploaded["current_revision_id"]},
+    )
+    assert linked.status_code == 201
     detail = client.get(f"/api/characters/{created['id']}").json()
-    assert {item["story_id"] for item in detail["linked_stories"]} == {first_story, second_story}
+    assert {item["story_id"] for item in detail["linked_stories"]} == {second_story}
 
 
 def test_cover_and_avatar_survive_text_revision_and_archive(client):
@@ -184,9 +186,10 @@ def test_extract_from_playthrough_copies_pinned_revision_as_independent_profile(
         content=PNG,
         headers={"Content-Type": "image/png"},
     ).json()
-    client.post(
-        f"/api/stories/{story_id}/characters",
-        json={"character_id": character_id, "revision_id": uploaded["current_revision_id"]},
+    publish_cast(
+        client,
+        story_id,
+        add=[{"character_id": character_id, "revision_id": uploaded["current_revision_id"]}],
     )
     old_game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     client.post(f"/api/characters/{character_id}/revisions", json={**PROFILE, "name": "Новая Мира"})

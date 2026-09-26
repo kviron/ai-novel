@@ -3,7 +3,7 @@ import json
 import pytest
 from sqlmodel import Session
 
-from app.db.models import Character, Story
+from app.db.models import Character, Story, StoryVersion
 from app.modules.providers.contracts import TurnProposal
 from app.modules.story_engine.contracts import TurnCreate
 from app.modules.story_engine.prompt import build_prompt
@@ -15,9 +15,9 @@ def playable_akane_game(client):
     story = client.get("/api/stories").json()[0]
     with Session(client.app.state.engine) as session:
         row = session.get(Story, story["id"])
-        row.hero_policy = "fixed"
-        row.fixed_hero_revision_id = session.get(Character, "akane").current_revision_id
-        row.playable_character_ids = json.dumps(["akane"])
+        version = session.get(StoryVersion, row.current_published_version_id)
+        version.hero_policy = "fixed"
+        version.fixed_hero_revision_id = session.get(Character, "akane").current_revision_id
         session.commit()
     result = client.post(
         f"/api/stories/{story['id']}/sessions",

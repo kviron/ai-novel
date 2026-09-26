@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+from versioned_story_helpers import publish_cast
 
 from app.core.config import Settings
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
@@ -302,15 +303,10 @@ def test_newly_attached_character_can_speak_without_borrowing_demo_assets(client
             "appearance": "Синий плащ",
         },
     ).json()
-    assert (
-        client.post(
-            f"/api/stories/{story_id}/characters",
-            json={
-                "character_id": created["id"],
-                "revision_id": created["current_revision_id"],
-            },
-        ).status_code
-        == 201
+    publish_cast(
+        client,
+        story_id,
+        add=[{"character_id": created["id"], "revision_id": created["current_revision_id"]}],
     )
     game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
     fake_provider.responses = [

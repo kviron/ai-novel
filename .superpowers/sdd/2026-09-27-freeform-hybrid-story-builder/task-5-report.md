@@ -30,3 +30,18 @@ The complete API suite still contains legacy character/archive tests that add or
 ## Preservation note
 
 Pre-existing sprite/player UI work and concurrent story-engine work were left untouched and are not included in the Task 5 commit. Pre-existing sprite hunks in `stories/schemas.py`, `stories/service.py`, and `test_protagonist.py` remain in the working tree and are excluded from staging.
+
+## Fix round 1
+
+Review identified two truthful-boundary gaps.
+
+1. Legacy cast attach/batch/update/delete endpoints returned success for versioned stories even though runtime ignored `StoryCharacter`. All four now return structured `409 story_versioned` before mutation. Truly pre-version stories without any `StoryVersion` retain their legacy behavior. Regression tests assert the response code and unchanged rows; obsolete character tests now either assert this contract or publish cast changes through a cloned draft.
+2. Runtime covers no longer read mutable `Story.cover_image_url` when a version/snapshot pins `identity.cover_material_id`. The loader validates the immutable `StoryMaterial`, exposes `/api/story-materials/{id}`, and the retrieval route serves its content-addressed blob with immutable caching. A regression covers an author snapshot, published v1, published v2, and a later mutation of the legacy story projection.
+
+The three fixed-hero story-engine fixtures now modify the pinned `StoryVersion` policy rather than the unused story projection. The newly-added-character engine test and affected archive/catalog tests now use draft cloning and publication.
+
+Verification after the fix:
+
+- Focused authoring/stories/characters/story-engine selection: 133 passed.
+- Complete API suite: 262 passed, 17 existing dependency/migration warnings.
+- Ruff on every touched production and test file: passed.

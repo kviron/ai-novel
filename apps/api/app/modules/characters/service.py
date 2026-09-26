@@ -1,4 +1,4 @@
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db.models import (
     Character,
@@ -8,6 +8,7 @@ from app.db.models import (
     Story,
     StoryCharacter,
     StorySession,
+    StoryVersion,
 )
 
 from . import repository
@@ -48,6 +49,19 @@ class SessionNotFoundError(Exception):
     pass
 
 
+class VersionedStoryMutationError(Exception):
+    pass
+
+
+def _require_legacy_story_mutation(session: Session, story_id: str) -> None:
+    """Reject writes whose source of truth moved to immutable authoring versions."""
+    if session.get(Story, story_id) is None:
+        raise StoryNotFoundError
+    version_id = session.exec(select(StoryVersion.id).where(StoryVersion.story_id == story_id)).first()
+    if version_id is not None:
+        raise VersionedStoryMutationError
+
+
 def _material_profile(material: CharacterMaterial | None) -> MaterialProfile | None:
     if material is None:
         return None
@@ -66,9 +80,7 @@ def _revision_profile(session: Session, revision: CharacterRevision) -> Revision
         if not material.kind.startswith("sprite:"):
             continue
         _, emotion, variant = material.kind.split(":", 2)
-        sprites.setdefault(emotion, []).append(
-            SpriteVariant(variant=variant, material=_material_profile(material))
-        )
+        sprites.setdefault(emotion, []).append(SpriteVariant(variant=variant, material=_material_profile(material)))
     return RevisionProfile.model_validate(
         {
             **RevisionProfile.model_validate(revision, from_attributes=True).model_dump(
@@ -235,8 +247,7 @@ def extract_session_character(session: Session, session_id: str, character_id: s
 
 
 def attach_character(session: Session, story_id: str, payload: AttachCharacterRequest) -> StoryCharacterProfile:
-    if session.get(Story, story_id) is None:
-        raise StoryNotFoundError
+    _require_legacy_story_mutation(session, story_id)
     if session.get(Character, payload.character_id) is None:
         raise CharacterNotFoundError
     if repository.get_story_link(session, story_id, payload.character_id) is not None:
@@ -251,8 +262,7 @@ def attach_character(session: Session, story_id: str, payload: AttachCharacterRe
 
 
 def attach_characters_batch(session: Session, story_id: str, character_ids: list[str]) -> list[StoryCharacterProfile]:
-    if session.get(Story, story_id) is None:
-        raise StoryNotFoundError
+    _require_legacy_story_mutation(session, story_id)
     if len(set(character_ids)) != len(character_ids):
         raise CharacterAlreadyAttachedError
     # Validate the complete selection before staging any link so one invalid ID cannot partially add a cast.
@@ -281,6 +291,7 @@ def pin_revision(
     role: str | None = None,
     color: str | None = None,
 ) -> StoryCharacterProfile:
+    _require_legacy_story_mutation(session, story_id)
     link = repository.get_story_link(session, story_id, character_id)
     if link is None:
         raise CharacterNotFoundError
@@ -297,6 +308,7 @@ def pin_revision(
 
 
 def detach_character(session: Session, story_id: str, character_id: str) -> None:
+    _require_legacy_story_mutation(session, story_id)
     link = repository.get_story_link(session, story_id, character_id)
     if link is None:
         raise CharacterNotFoundError
