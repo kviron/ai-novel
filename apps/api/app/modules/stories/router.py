@@ -23,7 +23,6 @@ from .protagonist import HeroSelectionError, save_protagonist_to_catalog
 from .service import (
     SessionNotFoundError,
     StoryNotFoundError,
-    get_session_detail,
     get_story,
     get_story_setup,
     list_autosaves,
@@ -112,7 +111,9 @@ def read_autosaves(session: SessionDep) -> list[SessionSummary]:
 @router.get("/sessions/{session_id}", response_model=SessionDetail, responses={404: {"model": ErrorResponse}})
 def read_session(session_id: str, session: SessionDep) -> SessionDetail:
     try:
-        return get_session_detail(session, session_id)
+        from app.modules.story_authoring.sessions import snapshot_aware_session_detail
+
+        return snapshot_aware_session_detail(session, session_id)
     except SessionNotFoundError as error:
         raise ApiError(
             status.HTTP_404_NOT_FOUND,

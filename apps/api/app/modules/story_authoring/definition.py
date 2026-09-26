@@ -47,6 +47,18 @@ def load_story_draft(session: Session, story_id: str) -> StoryDraft:
     ).first()
     if version is None:
         raise LookupError(f"Draft not found for story {story_id}")
+    return _load_version(session, version)
+
+
+def load_published_story_version(session: Session, story_id: str, version_id: str) -> StoryDraft:
+    """Read an immutable published aggregate through the same DTO as the editor."""
+    version = session.get(StoryVersion, version_id)
+    if version is None or version.story_id != story_id or version.status != "published":
+        raise LookupError(f"Published version not found: {version_id}")
+    return _load_version(session, version)
+
+
+def _load_version(session: Session, version: StoryVersion) -> StoryDraft:
 
     cast_rows = sorted(
         session.exec(select(StoryVersionCharacter).where(StoryVersionCharacter.version_id == version.id)),

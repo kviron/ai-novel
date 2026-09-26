@@ -13,6 +13,7 @@ from app.db.models import (
     CanonFact,
     Story,
     StoryBeat,
+    StoryMaterial,
     StoryVersion,
     StoryVersionCharacter,
     new_public_id,
@@ -63,6 +64,18 @@ _SECTION_TYPES = {
 
 def _validation(session: Session, draft: StoryDraft, available_models: Collection[str]) -> list[DraftDiagnostic]:
     diagnostics = validate_draft(draft, available_models).diagnostics
+    if draft.identity.cover_material_id:
+        material = session.get(StoryMaterial, draft.identity.cover_material_id)
+        if material is None or material.story_id != draft.story_id:
+            diagnostics.append(
+                DraftDiagnostic(
+                    code="cover_material_invalid",
+                    severity="error",
+                    step="identity",
+                    field="cover_material_id",
+                    message="Cover material does not belong to this story",
+                )
+            )
     if draft.identity.slug:
         owner = repository.slug_owner(session, draft.identity.slug)
         if owner is not None and owner.id != draft.story_id:
@@ -122,6 +135,18 @@ def validate_story_draft(
 def create_story_draft(session: Session, identity: StoryIdentitySection | None = None) -> StoryDraft:
     """Atomically create a stable catalog identity and its first editable version."""
     identity = identity or StoryIdentitySection()
+    if identity.cover_material_id is not None:
+        raise DraftInvalidError(
+            [
+                DraftDiagnostic(
+                    code="cover_material_invalid",
+                    severity="error",
+                    step="identity",
+                    field="cover_material_id",
+                    message="Upload a cover after creating the story",
+                )
+            ]
+        )
     story_id = new_public_id()
     story = Story(
         id=story_id,
@@ -179,6 +204,20 @@ def replace_draft_section(
         raise TypeError(f"{section} requires {section_type.__name__}")
     # Revalidate mutated model instances as well as ordinary request DTOs.
     payload = section_type.model_validate(payload.model_dump())
+    if section == "identity" and payload.cover_material_id is not None:
+        material = session.get(StoryMaterial, payload.cover_material_id)
+        if material is None or material.story_id != story_id:
+            raise DraftInvalidError(
+                [
+                    DraftDiagnostic(
+                        code="cover_material_invalid",
+                        severity="error",
+                        step="identity",
+                        field="cover_material_id",
+                        message="Cover material does not belong to this story",
+                    )
+                ]
+            )
     version = repository.draft_version(session, story_id)
     if version.draft_revision != expected_revision:
         raise DraftConflictError(version.draft_revision)
@@ -242,7 +281,7 @@ def replace_draft_section(
             version.ending_policy = payload.ending_policy
             version.recommended_provider_id = payload.recommended_provider_id
             version.recommended_model_id = payload.recommended_model_id
-            for field in payload.generation_policy.model_fields:
+            for field in type(payload.generation_policy).model_fields:
                 setattr(version, field, getattr(payload.generation_policy, field))
         elif section == "canon":
             version.creative_goals = payload.creative_goals

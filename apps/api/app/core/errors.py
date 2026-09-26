@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.modules.story_authoring.schemas import DraftDiagnostic
+
 
 class ErrorResponse(BaseModel):
     """Stable, safe error body shared by every public API failure."""
@@ -17,13 +19,38 @@ class ErrorResponse(BaseModel):
     retryable: bool = False
 
 
+class DraftInvalidResponse(ErrorResponse):
+    """Actionable draft diagnostics remain structured on the wire."""
+
+    diagnostics: list[DraftDiagnostic]
+
+
+class DraftConflictResponse(ErrorResponse):
+    latest_revision: int
+
+
 class ApiError(Exception):
     """Public error metadata separated from internal exception diagnostics."""
 
-    def __init__(self, status_code: int, code: str, detail: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        detail: str,
+        *,
+        retryable: bool = False,
+        diagnostics: list[dict] | None = None,
+        latest_revision: int | None = None,
+    ) -> None:
         super().__init__(code)
         self.status_code = status_code
-        self.response = ErrorResponse(code=code, detail=detail, retryable=retryable)
+        base = dict(code=code, detail=detail, retryable=retryable)
+        if diagnostics is not None:
+            self.response = DraftInvalidResponse(**base, diagnostics=diagnostics)
+        elif latest_revision is not None:
+            self.response = DraftConflictResponse(**base, latest_revision=latest_revision)
+        else:
+            self.response = ErrorResponse(**base)
 
 
 def install_exception_handlers(app: FastAPI) -> None:

@@ -12,6 +12,8 @@ from app.modules.characters.router import router as characters_router
 from app.modules.providers.router import router as providers_router
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.router import router as stories_router
+from app.modules.story_authoring.router import router as authoring_router
+from app.modules.story_authoring.router import version_router
 from app.modules.story_engine.router import router as story_engine_router
 
 
@@ -49,6 +51,8 @@ def create_app(
     app.include_router(health_router)
     app.include_router(providers_router)
     app.include_router(stories_router)
+    app.include_router(authoring_router)
+    app.include_router(version_router)
     app.include_router(characters_router)
     app.include_router(story_engine_router)
     return app
