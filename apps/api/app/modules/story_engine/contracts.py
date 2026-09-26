@@ -31,6 +31,7 @@ class CanonicalVisualDirective(VisualDirective):
     present_character_ids: list[str]
     # A default keeps pre-background saves replayable without rewriting their turns.
     background: str = "neon_crossroads"
+    protagonist_emotion: str = "neutral"
 
 
 class AcceptedTurn(BaseModel):
@@ -42,6 +43,7 @@ class AcceptedTurn(BaseModel):
     segments: list[SceneSegment]
     choices: list[str]
     visual_directive: CanonicalVisualDirective
+    completed_beat_ids: list[str] = Field(default_factory=list, exclude=True)
 
 
 class TurnResult(AcceptedTurn):

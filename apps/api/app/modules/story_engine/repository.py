@@ -4,9 +4,11 @@ from sqlalchemy import text, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.db.models import SessionProtagonist, StorySession, Turn, utc_timestamp
+from app.db.models import SessionBeat, SessionProtagonist, StorySession, Turn, utc_timestamp
+from app.modules.characters import repository as character_repository
 from app.modules.stories import repository as stories
 from app.modules.stories.service import SessionNotFoundError
+from app.modules.story_authoring.runtime import load_runtime_story_definition
 
 from .contracts import AcceptedTurn, TurnCreate, TurnResult
 from .prompt import PROMPT_VERSION
@@ -48,19 +50,52 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         raise SessionNotFoundError
     if story_session.state_version != expected_version:
         raise StateConflictError
-    story = stories.get_story_by_id(session, story_session.story_id)
+    story = load_runtime_story_definition(session, story_session)
     protagonist = session.get(SessionProtagonist, session_id)
     if protagonist is None:
         raise StateConflictError
+    materials = (
+        character_repository.materials_for_revision(session, protagonist.source_revision_id)
+        if protagonist.source_revision_id
+        else []
+    )
+    protagonist_emotions = sorted(
+        {material.kind.split(":", 2)[1] for material in materials if material.kind.startswith("sprite:")}
+    )
     characters = stories.list_session_characters(session, session_id)
     turns: list[Turn] = []
+    active_turn_count = 0
     turn_id = story_session.active_turn_id
-    while turn_id is not None and len(turns) < 8:
+    while turn_id is not None:
         turn = session.get(Turn, turn_id)
         if turn is None or turn.session_id != session_id:
             raise StateConflictError
-        turns.append(turn)
+        active_turn_count += 1
+        if len(turns) < 8:
+            turns.append(turn)
         turn_id = turn.parent_turn_id
+    completed_beat_ids = frozenset(
+        row.beat_id
+        for row in session.exec(
+            select(SessionBeat).where(SessionBeat.session_id == session_id, SessionBeat.status == "completed")
+        )
+    )
+    available_beat_ids = frozenset(
+        beat.id
+        for beat in story.beats
+        if beat.id not in completed_beat_ids
+        and (
+            beat.activation_condition.kind == "always"
+            or (
+                beat.activation_condition.kind == "after_turn_count"
+                and active_turn_count >= beat.activation_condition.turn_count
+            )
+            or (
+                beat.activation_condition.kind == "after_beat"
+                and beat.activation_condition.beat_id in completed_beat_ids
+            )
+        )
+    )
     return GenerationContext(
         session_id=session_id,
         active_turn_id=story_session.active_turn_id,
@@ -68,7 +103,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         current_scene=story_session.current_scene,
         provider_id=story_session.provider_id,
         model_id=story_session.model_id,
-        story={"title": story.title, "premise": story.premise, "story_mode": story.story_mode},
+        story=story,
         protagonist={
             "id": protagonist.source_character_id,
             "name": protagonist.name,
@@ -78,6 +113,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
             "biography": protagonist.biography,
             "personality": protagonist.personality,
             "age": protagonist.age,
+            "available_emotions": protagonist_emotions,
         },
         characters=[
             {
@@ -101,6 +137,8 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
             )
             for turn in reversed(turns)
         ],
+        completed_beat_ids=completed_beat_ids,
+        available_beat_ids=available_beat_ids,
     )
 
 
@@ -146,6 +184,17 @@ def commit_turn(
                 prompt_version=PROMPT_VERSION,
             )
             session.add(turn)
+            session.flush()
+            for beat_id in accepted.completed_beat_ids:
+                beat_state = session.get(SessionBeat, (context.session_id, beat_id))
+                if beat_state is None:
+                    beat_state = SessionBeat(
+                        session_id=context.session_id,
+                        beat_id=beat_id,
+                    )
+                    session.add(beat_state)
+                beat_state.status = "completed"
+                beat_state.completed_turn_id = turn.id
             session.flush()
             updated = session.execute(
                 update(StorySession)
@@ -236,10 +285,13 @@ def _turn_result(session: Session, turn: Turn) -> TurnResult:
     # Historical turns stored only the active sprite. Keep replay read-only.
     if "present_character_ids" not in directive:
         saved_segments = json.loads(turn.segments) if turn.segments else []
-        directive["present_character_ids"] = list(dict.fromkeys(
-            part["character_id"] for part in saved_segments
-            if part.get("kind") == "dialogue" and part.get("character_id")
-        )) or [directive["character_id"]]
+        directive["present_character_ids"] = list(
+            dict.fromkeys(
+                part["character_id"]
+                for part in saved_segments
+                if part.get("kind") == "dialogue" and part.get("character_id")
+            )
+        ) or [directive["character_id"]]
     return TurnResult(
         id=turn.id,
         session_id=turn.session_id,

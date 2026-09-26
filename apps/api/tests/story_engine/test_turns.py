@@ -72,6 +72,7 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
         "outfit": "red_dress",
         "background": "neon_crossroads",
         "present_character_ids": ["akane"],
+        "protagonist_emotion": "neutral",
     }
     assert result["speaker"] == "Аканэ Куроха"
     assert result["choices"] == ["Осмотреть след", "Спросить о веере"]
@@ -721,12 +722,13 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
         assert response.status_code == 201
     request = requests[-1]
     assert request.model_id == akane_session.model_id
-    assert "Аканэ Куроха" in request.system_prompt
-    assert "чужое воспоминание" in request.system_prompt
-    assert "fan" in request.system_prompt
+    assert "Аканэ Куроха" not in request.system_prompt
+    assert "чужое воспоминание" not in request.system_prompt
     assert "2–4" in request.system_prompt
     assert "suggested_choices" in request.response_schema["properties"]
     context = json.loads(request.user_prompt)
+    assert context["story"]["premise"] == "В дождливом неоновом городе Аканэ помогает распутать чужое воспоминание."
+    assert any(character["name"] == "Аканэ Куроха" for character in context["characters"])
     assert context["action"] == "Действие 9"
     assert context["state"]["state_version"] == 10
     assert len(context["recent_turns"]) == 8

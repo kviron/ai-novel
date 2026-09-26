@@ -11,6 +11,7 @@ from app.modules.stories.content import (
     AKANE_POSES,
     MARK_OUTFIT,
 )
+from app.modules.story_authoring.runtime import RuntimeStoryDefinition
 
 from .contracts import AcceptedTurn, CanonicalVisualDirective, TurnProposal
 
@@ -25,10 +26,12 @@ class GenerationContext:
     current_scene: str
     provider_id: str
     model_id: str
-    story: dict[str, Any]
+    story: RuntimeStoryDefinition
     protagonist: dict[str, Any]
     characters: list[dict[str, Any]]
     recent_turns: list[dict[str, Any]]
+    completed_beat_ids: frozenset[str] = frozenset()
+    available_beat_ids: frozenset[str] = frozenset()
 
 
 class InvalidProposalError(Exception):
@@ -45,6 +48,35 @@ PROTAGONIST_ACTION_PATTERN = re.compile(
 
 def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> AcceptedTurn:
     """Accept only known identifiers and meaningful choices; normalize missing emotion assets."""
+    completed_beat_ids: list[str] = []
+    if context.story.mode == "hybrid":
+        hard_fact_ids = {fact.id for fact in context.story.facts if fact.severity == "hard"}
+        assessment_ids = [assessment.fact_id for assessment in proposal.canon_assessments]
+        unknown = set(assessment_ids) - hard_fact_ids
+        if unknown:
+            raise InvalidProposalError("unknown_hard_fact_assessment")
+        if len(assessment_ids) != len(set(assessment_ids)):
+            raise InvalidProposalError("duplicate_hard_fact_assessment")
+        if set(assessment_ids) != hard_fact_ids:
+            raise InvalidProposalError("missing_hard_fact_assessment")
+        if any(assessment.status == "violated" for assessment in proposal.canon_assessments):
+            raise InvalidProposalError("hard_fact_violated")
+        known_beat_ids = {beat.id for beat in context.story.beats}
+        if len(proposal.completed_beat_ids) != len(set(proposal.completed_beat_ids)):
+            raise InvalidProposalError("duplicate_beat_completion")
+        for beat_id in proposal.completed_beat_ids:
+            if beat_id not in known_beat_ids:
+                raise InvalidProposalError("unknown_beat")
+            if beat_id in context.completed_beat_ids:
+                raise InvalidProposalError("duplicate_beat_completion")
+            if beat_id not in context.available_beat_ids:
+                raise InvalidProposalError("locked_beat")
+        completed_beat_ids = proposal.completed_beat_ids
+        if proposal.requests_ending and context.story.ending_policy == "required_beats_then_end":
+            completed_after = context.completed_beat_ids | set(completed_beat_ids)
+            required = {beat.id for beat in context.story.beats if beat.required or beat.ending_gate}
+            if not required.issubset(completed_after):
+                raise InvalidProposalError("ending_gate_not_satisfied")
     characters = {character["id"]: character for character in context.characters}
     if proposal.segments is not None:
         segments = proposal.segments
@@ -133,5 +165,11 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
             outfit=directive.outfit,
             background=background,
             present_character_ids=present_ids,
+            protagonist_emotion=(
+                directive.protagonist_emotion
+                if directive.protagonist_emotion in context.protagonist.get("available_emotions", [])
+                else "neutral"
+            ),
         ),
+        completed_beat_ids=completed_beat_ids,
     )

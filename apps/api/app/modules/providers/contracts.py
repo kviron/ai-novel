@@ -29,6 +29,7 @@ class VisualDirective(BaseModel):
     outfit: str = "red_dress"
     background: str | None = None
     present_character_ids: list[str] | None = Field(default=None, max_length=12)
+    protagonist_emotion: str | None = None
 
 
 class ProposedEffect(BaseModel):
@@ -36,6 +37,14 @@ class ProposedEffect(BaseModel):
 
     key: str
     value: str | int | float | bool
+
+
+class CanonAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fact_id: str = Field(min_length=1, max_length=120)
+    status: Literal["upheld", "violated"]
+    evidence: str = Field(min_length=1, max_length=4000)
 
 
 class TurnProposal(BaseModel):
@@ -53,6 +62,9 @@ class TurnProposal(BaseModel):
     visual_directive: VisualDirective
     suggested_choices: list[str] = Field(min_length=2, max_length=4)
     proposed_effects: list[ProposedEffect] = Field(default_factory=list, max_length=20)
+    canon_assessments: list[CanonAssessment] = Field(default_factory=list, max_length=100)
+    completed_beat_ids: list[str] = Field(default_factory=list, max_length=100)
+    requests_ending: bool = False
 
 
 class ProviderStatus(BaseModel):

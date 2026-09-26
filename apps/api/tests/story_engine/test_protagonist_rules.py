@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 from sqlmodel import Session
@@ -39,12 +40,90 @@ def test_generation_context_separates_player_hero_from_npcs(client):
         TurnCreate(request_id="scene-1", expected_state_version=1, action="Спросить Марка о сигнале"),
         8192,
     )
-    assert '"protagonist"' in prompt.system_prompt
+    payload = json.loads(prompt.user_prompt)
+    assert payload["protagonist"]["name"] == "Аканэ Куроха"
+    assert [character["id"] for character in payload["characters"]] == ["mark"]
     assert "не придумывай действия и реплики героя игрока" in prompt.system_prompt
-    assert '"id": "mark"' in prompt.system_prompt
+    assert '"id": "mark"' not in prompt.system_prompt
     assert "character_id: 'akane'" not in prompt.system_prompt
     assert "Для Аканэ используй" not in prompt.system_prompt
-    assert '"character_id": "mark"' in prompt.system_prompt
+    assert '"character_id": "mark"' not in prompt.system_prompt
+
+
+def test_player_thought_is_structured_and_hero_emotion_is_limited_to_saved_sprites(client, akane_session):
+    with Session(client.app.state.engine) as session:
+        loaded = load_context(session, akane_session.id, 1)
+    context = replace(loaded, protagonist={**loaded.protagonist, "available_emotions": ["neutral", "surprised"]})
+    prompt = build_prompt(
+        context,
+        TurnCreate(request_id="scene-2", expected_state_version=1, action="Я смутилась. «Всё хорошо» (Она заметила?)"),
+        8192,
+    )
+    payload = json.loads(prompt.user_prompt)
+    assert payload["player_parts"] == [
+        {"kind": "action", "text": "Я смутилась."},
+        {"kind": "speech", "text": "Всё хорошо"},
+        {"kind": "thought", "text": "Она заметила?"},
+    ]
+    assert "NPC не слышат и не знают thought" in prompt.system_prompt
+    hero_emotions = prompt.response_schema["$defs"]["VisualDirective"]["properties"]["protagonist_emotion"]["enum"]
+    assert hero_emotions == ("neutral", "surprised")
+
+    base = {
+        "segments": [
+            {"kind": "narration", "text": "Марк отвёл взгляд."},
+            {"kind": "dialogue", "character_id": "mark", "text": "Вы в порядке?"},
+        ],
+        "suggested_choices": ["Ответить", "Промолчать"],
+        "proposed_effects": [],
+    }
+    allowed = context.protagonist["available_emotions"]
+    assert allowed == ["neutral", "surprised"]
+    accepted = validate_proposal(
+        TurnProposal.model_validate(
+            {
+                **base,
+                "visual_directive": {
+                    "emotion": "neutral",
+                    "pose": "default",
+                    "outfit": "dark_coat",
+                    "protagonist_emotion": "neutral",
+                },
+            }
+        ),
+        context,
+    )
+    assert accepted.visual_directive.protagonist_emotion == "neutral"
+    emotional = validate_proposal(
+        TurnProposal.model_validate(
+            {
+                **base,
+                "visual_directive": {
+                    "emotion": "neutral",
+                    "pose": "default",
+                    "outfit": "dark_coat",
+                    "protagonist_emotion": "surprised",
+                },
+            }
+        ),
+        context,
+    )
+    assert emotional.visual_directive.protagonist_emotion == "surprised"
+    unsupported = validate_proposal(
+        TurnProposal.model_validate(
+            {
+                **base,
+                "visual_directive": {
+                    "emotion": "neutral",
+                    "pose": "default",
+                    "outfit": "dark_coat",
+                    "protagonist_emotion": "not_uploaded",
+                },
+            }
+        ),
+        context,
+    )
+    assert unsupported.visual_directive.protagonist_emotion == "neutral"
 
 
 def test_model_cannot_give_player_hero_a_dialogue_segment(client):
