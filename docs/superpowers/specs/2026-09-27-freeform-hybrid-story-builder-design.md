@@ -76,7 +76,7 @@ Add `StoryVersion` with:
 - `draft_revision`: monotonically increasing optimistic-concurrency token, frozen at publication;
 - `based_on_version_id`: nullable provenance link;
 - `mode`: `freeform` or `hybrid`;
-- `title`, `slug`, `short_description`, `premise`;
+- `title`, `slug`, `short_description`, `premise`, and nullable `cover_material_id`;
 - `genres`: ordered normalized string list;
 - `tone`: ordered normalized string list;
 - `setting` and `opening_situation`;
@@ -90,6 +90,8 @@ Add `StoryVersion` with:
 - `created_at` and nullable `published_at`.
 
 The database enforces one mutable draft per story and unique `(story_id, version_number)`. Publishing is an atomic operation that validates the draft, changes it to `published`, and updates the story's current pointer. Editing a published version creates a new draft copy with new child IDs and provenance links to the copied items.
+
+`StoryMaterial` stores the cover's SHA-256, MIME type, filename, creator, license, source, and immutable local asset location. Cover upload accepts PNG, JPEG, or WebP through a dedicated endpoint and returns a material ID; author input never sets a filesystem path or arbitrary URL. Cloned versions may reference the same immutable material.
 
 ### Draft test snapshots
 
@@ -192,6 +194,7 @@ Add an author-only local API namespace; “author-only” describes purpose, not
 
 - `POST /api/author/stories` creates story identity plus draft;
 - `GET /api/author/stories/{story_id}/draft` returns the complete editable draft and diagnostics;
+- `POST /api/author/stories/{story_id}/draft/cover` validates and stores an immutable cover material;
 - `PUT /api/author/stories/{story_id}/draft/{section}` replaces one typed section using `expected_revision`;
 - `POST /api/author/stories/{story_id}/validate` returns diagnostics without mutation;
 - `POST /api/author/stories/{story_id}/test-sessions` freezes the draft as a test snapshot and starts an author session;
@@ -215,9 +218,9 @@ The story engine receives one `RuntimeStoryDefinition` assembled server-side fro
 - allowed stable visual-state IDs;
 - recent active-branch history.
 
-Freeform mode asks the model to advance coherently inside the creative policy without inventing a hidden authored graph. Hybrid mode additionally requires preservation of hard facts and controlled beat advancement. Provider output adds optional `completed_beat_ids` and `requests_ending`; neither is trusted until server validation.
+Freeform mode asks the model to advance coherently inside the creative policy without inventing a hidden authored graph. Hybrid mode additionally requires preservation of hard facts and controlled beat advancement. Provider output adds `canon_assessments` for every active hard fact, optional `completed_beat_ids`, and `requests_ending`; none is trusted until server validation. Each assessment contains the stable fact ID, `upheld` or `violated`, and short evidence tied to the proposed scene.
 
-The server rejects unknown beat IDs, unavailable beat completion, endings before an ending gate, protagonist speech/action violations, invalid cast IDs, and existing visual-contract violations. A rejected proposal follows the current single repair attempt and atomic no-mutation guarantee.
+The server deterministically rejects missing/duplicate hard-fact assessments, any assessment marked `violated`, unknown beat IDs, unavailable beat completion, endings before an ending gate, protagonist speech/action violations, invalid cast IDs, and existing visual-contract violations. Semantic assessment of natural-language canon remains a model capability rather than something the server can prove from prose alone; the structural assessment and repair contract makes that limitation visible and testable. A rejected proposal follows the current single repair attempt and atomic no-mutation guarantee.
 
 ## Migration and compatibility
 
@@ -263,4 +266,4 @@ The seeded “Эхо неона” becomes hybrid version 1. Its existing premis
 
 ## Acceptance criteria
 
-The slice is complete when an author can create both modes entirely in the UI, attach pinned character revisions, receive precise validation, test a frozen draft, publish an immutable version, and start a player session from it. A hybrid turn cannot contradict a hard fact, complete an unavailable beat, or end before its required ending gate. A freeform session remains bounded by its authored policy without pretending to follow a plot graph. Editing and republishing a story creates a new version while an older active session reproduces its original version.
+The slice is complete when an author can create both modes entirely in the UI, attach pinned character revisions, receive precise validation, test a frozen draft, publish an immutable version, and start a player session from it. A hybrid proposal must explicitly assess every active hard fact; missing or reported violations are rejected, unavailable beats cannot be completed, and an ending cannot occur before its required ending gate. A freeform session remains bounded by its authored policy without pretending to follow a plot graph. Editing and republishing a story creates a new version while an older active session reproduces its original version.
