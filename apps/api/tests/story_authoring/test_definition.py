@@ -48,8 +48,10 @@ def test_cast_section_limits_author_lists_to_24_entries():
     ("schema", "payload"),
     [
         (StoryIdentitySection, {"premise": "<script>alert(1)</script>"}),
+        (StoryIdentitySection, {"premise": "<svg/onload=alert(1)>"}),
         (StoryIdentitySection, {"genres": ["mystery", "<b>noir</b>"]}),
         (StoryIdentitySection, {"title": "Hidden\x00title"}),
+        (StoryIdentitySection, {"premise": "First\rSecond"}),
         (StoryRulesSection, {"generation_policy": {"forbidden_outcomes": "<img src=x onerror=alert(1)>"}}),
         (
             StoryCanonSection,
@@ -75,6 +77,13 @@ def test_narrative_punctuation_and_path_mentions_remain_valid():
 
     assert section.slug == "neon-echo-2"
     assert section.premise == "At /tmp/story, Alice asks: is x < y > z? Yes!"
+
+
+def test_multiline_prose_accepts_lf_and_normalizes_crlf():
+    section = StoryIdentitySection.model_validate({"premise": "First line\nSecond line", "setting": "North\r\nSouth"})
+
+    assert section.premise == "First line\nSecond line"
+    assert section.setting == "North\nSouth"
 
 
 def _loaded_draft(*, reverse_insert_order: bool):

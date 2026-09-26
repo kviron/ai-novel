@@ -5,22 +5,24 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-_ASCII_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
-_HTML_LIKE_MARKUP = re.compile(r"<(?:/?[A-Za-z][A-Za-z0-9:-]*(?:\s+[^<>]*)?\s*/?|![^<>]*|\?[^<>]*)>")
+_UNSAFE_ASCII_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
+_HTML_LIKE_MARKUP = re.compile(r"<(?:/?[A-Za-z]|!|\?)")
 
 
 def _reject_unsafe_text(value: object) -> object:
     if isinstance(value, str):
-        if _ASCII_CONTROL.search(value):
+        normalized = value.replace("\r\n", "\n")
+        if _UNSAFE_ASCII_CONTROL.search(normalized):
             raise ValueError("ASCII control characters are not allowed in author text")
-        if _HTML_LIKE_MARKUP.search(value):
+        if _HTML_LIKE_MARKUP.search(normalized):
             raise ValueError("HTML-like markup is not allowed in author text")
-    elif isinstance(value, dict):
-        for item in value.values():
-            _reject_unsafe_text(item)
-    elif isinstance(value, (list, tuple)):
-        for item in value:
-            _reject_unsafe_text(item)
+        return normalized
+    if isinstance(value, dict):
+        return {key: _reject_unsafe_text(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_reject_unsafe_text(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_reject_unsafe_text(item) for item in value)
     return value
 
 
