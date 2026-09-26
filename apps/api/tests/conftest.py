@@ -3,6 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fakes import FakeLLMProvider
 from fastapi.testclient import TestClient
 
@@ -74,6 +76,21 @@ def create_v01_database_with_duplicate_turn_versions(database_path: Path) -> Non
                 "2026-09-18T00:01:00+00:00",
             ),
         )
+
+
+def create_pre_version_database(database_path: Path) -> None:
+    """Create an occupied revision-12 database for story-version migration tests."""
+    create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
+    with sqlite3.connect(database_path) as db:
+        db.execute(
+            "INSERT INTO characters (id, story_id, name, age, personality, appearance, visual_profile_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-hero", "legacy-story", "Старый герой", 32, "Осторожный", "Серый плащ", 1),
+        )
+
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    command.upgrade(config, "20260926_12")
 
 
 @pytest.fixture()

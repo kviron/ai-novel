@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from conftest import create_v01_database, create_v01_database_with_duplicate_turn_versions
+from conftest import create_pre_version_database, create_v01_database, create_v01_database_with_duplicate_turn_versions
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +13,7 @@ from sqlmodel import Session
 from app.core.config import Settings
 from app.db.engine import create_engine_from_settings
 from app.db.migrate import run_migrations
-from app.db.models import Story, StorySession, Turn
+from app.db.models import Story, StorySession, StoryVersion, Turn
 
 
 def test_upgrade_creates_playable_story_tables(tmp_path, monkeypatch):
@@ -44,7 +44,96 @@ def test_upgrade_repairs_early_character_materials_schema(tmp_path):
         columns = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
         version = db.execute("SELECT version_num FROM alembic_version").fetchone()
     assert "origin_character_id" in columns
-    assert version == ("20260926_12",)
+    assert version == ("20260927_13",)
+
+
+def test_story_version_upgrade_preserves_occupied_database(tmp_path):
+    database_path = tmp_path / "pre-version.db"
+    create_pre_version_database(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        revision_id = db.execute(
+            "SELECT revision_id FROM story_characters WHERE story_id='legacy-story' AND character_id='legacy-hero'"
+        ).fetchone()[0]
+        session_id = db.execute("SELECT id FROM story_sessions WHERE story_id='legacy-story'").fetchone()[0]
+
+    run_migrations(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        version = db.execute("SELECT version_num FROM alembic_version").fetchone()
+        published = db.execute(
+            "SELECT id, story_id, version_number, status, mode, draft_revision FROM story_versions"
+        ).fetchone()
+        current = db.execute(
+            "SELECT current_published_version_id, premise, current_scene FROM stories WHERE id='legacy-story'"
+        ).fetchone()
+        version_content = db.execute(
+            "SELECT premise, opening_situation, hero_policy, recommended_provider_id, recommended_model_id "
+            "FROM story_versions WHERE id='legacy-story:v1'"
+        ).fetchone()
+        session = db.execute(
+            "SELECT story_version_id, draft_snapshot_id, current_scene, active_turn_id FROM story_sessions WHERE id=?",
+            (session_id,),
+        ).fetchone()
+        migrated_cast = db.execute(
+            "SELECT version_id, character_id, revision_id FROM story_version_characters"
+        ).fetchall()
+        session_cast = db.execute(
+            "SELECT character_id, revision_id FROM session_characters WHERE session_id=?", (session_id,)
+        ).fetchall()
+        protagonist = db.execute(
+            "SELECT source_kind, name, address FROM session_protagonists WHERE session_id=?", (session_id,)
+        ).fetchone()
+        turn = db.execute(
+            "SELECT id, session_id, narration FROM turns WHERE id='legacy-turn'"
+        ).fetchone()
+        autosave = db.execute("SELECT story_id, session_id FROM autosaves").fetchone()
+        broken_foreign_keys = db.execute("PRAGMA foreign_key_check").fetchall()
+
+    assert version == ("20260927_13",)
+    assert published == ("legacy-story:v1", "legacy-story", 1, "published", "hybrid", 1)
+    assert current == ("legacy-story:v1", "Legacy premise", "Arrival")
+    assert version_content == ("Legacy premise", "Arrival", "choice", "ollama", "qwen3:14b-q4_K_M")
+    assert session == ("legacy-story:v1", None, "Arrival", "legacy-turn")
+    assert migrated_cast == [("legacy-story:v1", "legacy-hero", revision_id)]
+    assert session_cast == [("legacy-hero", revision_id)]
+    assert protagonist == ("legacy", "Игрок", "Игрок")
+    assert turn == ("legacy-turn", session_id, "Legacy narration")
+    assert autosave == ("legacy-story", session_id)
+    assert broken_foreign_keys == []
+
+
+def test_story_versions_reject_two_drafts_for_one_story(tmp_path):
+    database_path = tmp_path / "drafts.db"
+    create_pre_version_database(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        db.execute(
+            "INSERT INTO story_versions (id, story_id, version_number, status, mode, title, slug, created_at) "
+            "VALUES ('draft-2', 'legacy-story', 2, 'draft', 'hybrid', 'Draft', 'draft', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE constraint failed"):
+            db.execute(
+                "INSERT INTO story_versions (id, story_id, version_number, status, mode, title, slug, created_at) "
+                "VALUES ('draft-3', 'legacy-story', 3, 'draft', 'hybrid', 'Draft', 'draft-3', 'now')"
+            )
+
+
+def test_story_session_requires_exactly_one_version_source(tmp_path):
+    database_path = tmp_path / "session-source.db"
+    create_pre_version_database(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        session_id = db.execute("SELECT id FROM story_sessions").fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            db.execute("UPDATE story_sessions SET story_version_id=NULL WHERE id=?", (session_id,))
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            db.execute(
+                "UPDATE story_sessions SET draft_snapshot_id='snapshot' WHERE id=?", (session_id,)
+            )
 
 
 def test_protagonist_migration_preserves_existing_playthrough(tmp_path):
@@ -264,10 +353,24 @@ def test_turn_state_version_is_unique_within_a_session(tmp_path):
                 created_at="2026-09-18T00:00:00+00:00",
             )
         )
+        session.flush()
+        session.add(
+            StoryVersion(
+                id="story:v1",
+                story_id="story",
+                version_number=1,
+                status="published",
+                mode="hybrid",
+                title="Story",
+                slug="story",
+            )
+        )
+        session.flush()
         session.add(
             StorySession(
                 id="session",
                 story_id="story",
+                story_version_id="story:v1",
                 current_scene="Arrival",
                 provider_id="ollama",
                 model_id="qwen3:14b-q4_K_M",
