@@ -101,14 +101,37 @@ def _mismatched_revision(draft):
             "hero_fixed_revision_required",
         ),
         (
+            lambda d: (setattr(d.hero, "hero_policy", "fixed"), setattr(d.hero, "fixed_hero_revision_id", "missing")),
+            "hero_fixed_revision_missing",
+        ),
+        (
             lambda d: (setattr(d.hero, "hero_policy", "fixed"), setattr(d.hero, "fixed_hero_revision_id", "alice-r1")),
             "hero_fixed_cast_conflict",
+        ),
+        (
+            lambda d: (
+                setattr(d.hero, "hero_policy", "fixed"),
+                setattr(d.hero, "fixed_hero_revision_id", "alice-r1"),
+                setattr(d.character_revisions[0], "age", 17),
+            ),
+            "hero_character_underage",
         ),
         (lambda d: setattr(d.cast.characters[0], "revision_id", "missing"), "cast_revision_missing"),
         (_mismatched_revision, "cast_revision_character_mismatch"),
         (lambda d: setattr(d.character_revisions[0], "age", 17), "cast_character_underage"),
+        (
+            lambda d: d.cast.characters.append(d.cast.characters[0].model_copy(update={"order_index": 1})),
+            "cast_id_duplicate",
+        ),
+        (
+            lambda d: d.cast.characters.append(
+                d.cast.characters[0].model_copy(update={"id": "other", "order_index": 1})
+            ),
+            "cast_character_duplicate",
+        ),
         (lambda d: (setattr(d.canon, "facts", []), setattr(d.canon, "beats", [])), "hybrid_structure_required"),
         (lambda d: d.canon.facts.append(d.canon.facts[0].model_copy()), "fact_id_duplicate"),
+        (lambda d: d.canon.facts.append(d.canon.facts[0].model_copy(update={"id": "other"})), "fact_order_duplicate"),
         (lambda d: d.canon.beats.append(d.canon.beats[0].model_copy(update={"id": "beat-2"})), "beat_order_duplicate"),
         (lambda d: d.canon.beats.append(d.canon.beats[0].model_copy()), "beat_id_duplicate"),
         (_forward_beat, "beat_dependency_not_prior"),
@@ -184,3 +207,32 @@ def test_non_ai_playable_fixed_protagonist_is_permitted(valid_hybrid_draft):
     valid_hybrid_draft.cast.characters[0].role = "protagonist"
     result = validate_draft(valid_hybrid_draft, ["qwen3:14b-q4_K_M"])
     assert result.valid
+
+
+def test_fixed_hero_conflicts_with_ai_cast_of_same_character_at_older_revision(valid_hybrid_draft):
+    valid_hybrid_draft.character_revisions.append(
+        valid_hybrid_draft.character_revisions[0].model_copy(update={"id": "alice-r2", "revision_number": 2})
+    )
+    valid_hybrid_draft.hero.hero_policy = "fixed"
+    valid_hybrid_draft.hero.fixed_hero_revision_id = "alice-r2"
+    result = validate_draft(valid_hybrid_draft, ["qwen3:14b-q4_K_M"])
+    assert "hero_fixed_cast_conflict" in {item.code for item in result.diagnostics}
+
+
+def test_mixed_diagnostics_follow_step_field_item_code_order(valid_hybrid_draft):
+    valid_hybrid_draft.identity.title = ""
+    valid_hybrid_draft.hero.hero_policy = "fixed"
+    valid_hybrid_draft.hero.fixed_hero_revision_id = "missing"
+    valid_hybrid_draft.character_revisions[0].age = 17
+    valid_hybrid_draft.canon.beats[0].activation_condition = AfterBeatCondition(kind="after_beat", beat_id="beat-1")
+    result = validate_draft(valid_hybrid_draft, [])
+    assert [(item.step, item.field, item.item_id, item.code) for item in result.diagnostics] == [
+        ("identity", "cover_material_id", None, "cover_missing"),
+        ("identity", "title", None, "identity_title_required"),
+        ("hero", "fixed_hero_revision_id", None, "hero_fixed_revision_missing"),
+        ("cast", "revision_id", "pin", "cast_character_underage"),
+        ("rules", "recommended_model_id", None, "model_unavailable"),
+        ("canon", "activation_condition", "beat-1", "beat_dependency_cycle"),
+        ("canon", "activation_condition", "beat-1", "beat_dependency_not_prior"),
+        ("canon", "creative_goals", None, "soft_guidance_missing"),
+    ]

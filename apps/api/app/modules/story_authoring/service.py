@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Collection
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -19,7 +20,7 @@ from app.db.models import (
 )
 from app.modules.story_authoring import repository
 from app.modules.story_authoring.definition import load_story_draft
-from app.modules.story_authoring.lint import validate_draft
+from app.modules.story_authoring.lint import order_diagnostics, validate_draft
 from app.modules.story_authoring.schemas import (
     DraftDiagnostic,
     DraftValidationResult,
@@ -74,12 +75,38 @@ def _validation(session: Session, draft: StoryDraft, available_models: Collectio
                     message="Slug is already used by another story",
                 )
             )
-    return diagnostics
+    return order_diagnostics(diagnostics)
 
 
 def _with_diagnostics(session: Session, draft: StoryDraft, available_models: Collection[str]) -> StoryDraft:
     draft.diagnostics = _validation(session, draft, available_models)
     return draft
+
+
+def _raise_current_conflict(session: Session, version_id: str) -> None:
+    session.rollback()
+    latest = session.get(StoryVersion, version_id)
+    if latest is None:
+        raise LookupError(f"Version not found: {version_id}")
+    raise DraftConflictError(latest.draft_revision)
+
+
+def _claim_draft_revision(
+    session: Session, version: StoryVersion, expected_revision: int, *, increment: bool = True
+) -> None:
+    result = session.execute(
+        update(StoryVersion)
+        .where(
+            StoryVersion.id == version.id,
+            StoryVersion.draft_revision == expected_revision,
+            StoryVersion.status == "draft",
+        )
+        .values(draft_revision=expected_revision + int(increment))
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        _raise_current_conflict(session, version.id)
+    session.refresh(version)
 
 
 def validate_story_draft(
@@ -157,7 +184,14 @@ def replace_draft_section(
         raise DraftConflictError(version.draft_revision)
     current = load_story_draft(session, story_id)
     if getattr(current, section).model_dump() == payload.model_dump():
-        return _with_diagnostics(session, current, available_models)
+        try:
+            _claim_draft_revision(session, version, expected_revision, increment=False)
+            result = _with_diagnostics(session, current, available_models)
+            session.commit()
+            return result
+        except Exception:
+            session.rollback()
+            raise
 
     if section in {"cast", "canon"}:
         candidate = current.model_copy(update={section: payload})
@@ -183,6 +217,7 @@ def replace_draft_section(
             raise ModeChangeConflictError
 
     try:
+        _claim_draft_revision(session, version, expected_revision)
         if section == "identity":
             for field in StoryIdentitySection.model_fields:
                 value = getattr(payload, field)
@@ -212,7 +247,6 @@ def replace_draft_section(
         elif section == "canon":
             version.creative_goals = payload.creative_goals
             repository.replace_canon(session, version.id, payload)
-        version.draft_revision += 1
         session.flush()
         updated = _with_diagnostics(session, load_story_draft(session, story_id), available_models)
         session.commit()
@@ -232,8 +266,19 @@ def publish_draft(session: Session, story_id: str, *, available_models: Collecti
         raise DraftInvalidError(diagnostics)
     try:
         published_at = utc_timestamp()
-        version.status = "published"
-        version.published_at = published_at
+        claimed = session.execute(
+            update(StoryVersion)
+            .where(
+                StoryVersion.id == version.id,
+                StoryVersion.draft_revision == draft.draft_revision,
+                StoryVersion.status == "draft",
+            )
+            .values(status="published", published_at=published_at)
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            _raise_current_conflict(session, version.id)
+        session.refresh(version)
         story.current_published_version_id = version.id
         story.slug = version.slug
         story.title = version.title

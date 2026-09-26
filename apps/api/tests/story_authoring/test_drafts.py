@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.engine import URL
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.db.models import CanonFact, Character, CharacterRevision, Story, StoryVersion
+from app.modules.story_authoring import service as lifecycle_service
 from app.modules.story_authoring.schemas import (
     CanonFactDefinition,
     StoryBeatDefinition,
@@ -32,6 +34,15 @@ def session():
     SQLModel.metadata.create_all(engine)
     with Session(engine) as db:
         yield db
+    engine.dispose()
+
+
+@pytest.fixture
+def two_sessions(tmp_path):
+    engine = create_engine(URL.create("sqlite", database=str(tmp_path / "draft-race.db")))
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as first, Session(engine) as second:
+        yield first, second
     engine.dispose()
 
 
@@ -74,6 +85,54 @@ def test_stale_revision_conflicts_with_latest_revision(session):
         replace_draft_section(session, draft.story_id, "identity", _valid_identity("two"), draft.draft_revision)
     assert raised.value.latest_revision == current.draft_revision
     assert session.get(StoryVersion, draft.version_id).slug == "one"
+
+
+def test_interleaved_two_session_save_cannot_overwrite_new_revision(two_sessions, monkeypatch):
+    first, second = two_sessions
+    draft = _publishable(first)
+    first.rollback()
+    real_load = lifecycle_service.load_story_draft
+    intervened = False
+
+    def load_then_interleave(session, story_id):
+        nonlocal intervened
+        result = real_load(session, story_id)
+        if session is first and not intervened:
+            intervened = True
+            replace_draft_section(second, story_id, "identity", _valid_identity("winner"), draft.draft_revision)
+        return result
+
+    monkeypatch.setattr(lifecycle_service, "load_story_draft", load_then_interleave)
+    with pytest.raises(DraftConflictError) as raised:
+        replace_draft_section(first, draft.story_id, "identity", _valid_identity("loser"), draft.draft_revision)
+    assert intervened
+    assert raised.value.latest_revision == draft.draft_revision + 1
+    first.expire_all()
+    assert first.get(StoryVersion, draft.version_id).slug == "winner"
+    assert first.get(StoryVersion, draft.version_id).draft_revision == draft.draft_revision + 1
+
+
+def test_interleaved_identical_save_cannot_report_success_after_publication(two_sessions, monkeypatch):
+    first, second = two_sessions
+    draft = _publishable(first)
+    first.rollback()
+    real_load = lifecycle_service.load_story_draft
+    intervened = False
+
+    def load_then_publish(session, story_id):
+        nonlocal intervened
+        result = real_load(session, story_id)
+        if session is first and not intervened:
+            intervened = True
+            publish_draft(second, story_id)
+        return result
+
+    monkeypatch.setattr(lifecycle_service, "load_story_draft", load_then_publish)
+    with pytest.raises(DraftConflictError):
+        replace_draft_section(first, draft.story_id, "identity", _valid_identity(), draft.draft_revision)
+    assert intervened
+    first.expire_all()
+    assert first.get(StoryVersion, draft.version_id).status == "published"
 
 
 def test_mode_change_requires_confirmation_before_dropping_canon(session):
@@ -123,6 +182,34 @@ def test_publish_failure_rolls_back_status_and_pointer(session):
     assert session.get(Story, draft.story_id).current_published_version_id is None
 
 
+def test_interleaved_two_session_publish_never_uses_stale_lint(two_sessions, monkeypatch):
+    first, second = two_sessions
+    draft = _publishable(first)
+    first.rollback()
+    real_validation = lifecycle_service._validation
+    intervened = False
+
+    def validate_then_interleave(session, aggregate, available_models):
+        nonlocal intervened
+        diagnostics = real_validation(session, aggregate, available_models)
+        if session is first and not intervened:
+            intervened = True
+            invalid = _valid_identity()
+            invalid.premise = ""
+            replace_draft_section(second, draft.story_id, "identity", invalid, draft.draft_revision)
+        return diagnostics
+
+    monkeypatch.setattr(lifecycle_service, "_validation", validate_then_interleave)
+    with pytest.raises(DraftConflictError) as raised:
+        publish_draft(first, draft.story_id)
+    assert intervened
+    assert raised.value.latest_revision == draft.draft_revision + 1
+    first.expire_all()
+    assert first.get(StoryVersion, draft.version_id).status == "draft"
+    assert first.get(StoryVersion, draft.version_id).premise == ""
+    assert first.get(Story, draft.story_id).current_published_version_id is None
+
+
 def test_duplicate_slug_rejected_at_publication_without_changing_pointer(session):
     first = _publishable(session)
     publish_draft(session, first.story_id)
@@ -141,7 +228,13 @@ def test_validate_endpoint_service_reports_duplicate_slug_without_mutation(sessi
     second = _save(session, second, "identity", _valid_identity())
     result = validate_story_draft(session, second.story_id)
     assert not result.valid
-    assert "identity_slug_duplicate" in {item.code for item in result.diagnostics}
+    assert [(item.step, item.field, item.code) for item in result.diagnostics] == [
+        ("identity", "cover_material_id", "cover_missing"),
+        ("identity", "slug", "identity_slug_duplicate"),
+        ("cast", "characters", "cast_optional_empty"),
+        ("rules", "recommended_model_id", "model_unavailable"),
+        ("canon", "creative_goals", "soft_guidance_missing"),
+    ]
     assert session.get(StoryVersion, second.version_id).draft_revision == second.draft_revision
 
 

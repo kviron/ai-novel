@@ -8,6 +8,17 @@ from collections.abc import Collection
 from app.modules.story_authoring.schemas import DraftDiagnostic, DraftValidationResult, StoryDraft
 
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]*$")
+_STEP_ORDER = {
+    step: index for index, step in enumerate(("identity", "mode", "hero", "cast", "rules", "canon", "review"))
+}
+
+
+def order_diagnostics(diagnostics: list[DraftDiagnostic]) -> list[DraftDiagnostic]:
+    """Apply one stable wizard-step, field, item, and code order to every diagnostic source."""
+    return sorted(
+        diagnostics,
+        key=lambda item: (_STEP_ORDER[item.step], item.field, item.item_id or "", item.code),
+    )
 
 
 def validate_draft(draft: StoryDraft, available_models: Collection[str]) -> DraftValidationResult:
@@ -50,6 +61,7 @@ def validate_draft(draft: StoryDraft, available_models: Collection[str]) -> Draf
     seen_cast_ids: set[str] = set()
     seen_cast_characters: set[str] = set()
     seen_cast_order: set[int] = set()
+    fixed_revision = revisions.get(hero.fixed_hero_revision_id) if hero.fixed_hero_revision_id else None
     for member in cast:
         if member.id in seen_cast_ids:
             add("cast_id_duplicate", "error", "cast", "characters", item_id=member.id)
@@ -68,8 +80,8 @@ def validate_draft(draft: StoryDraft, available_models: Collection[str]) -> Draf
                 add("cast_revision_character_mismatch", "error", "cast", "revision_id", item_id=member.id)
             if revision.age < 18:
                 add("cast_character_underage", "error", "cast", "revision_id", item_id=member.id)
-        if hero.hero_policy == "fixed" and hero.fixed_hero_revision_id == member.revision_id:
-            if member.role != "protagonist":
+        if hero.hero_policy == "fixed" and fixed_revision is not None:
+            if fixed_revision.character_id == member.character_id and member.role != "protagonist":
                 add("hero_fixed_cast_conflict", "error", "hero", "fixed_hero_revision_id", item_id=member.id)
 
     rules = draft.rules
@@ -162,5 +174,5 @@ def validate_draft(draft: StoryDraft, available_models: Collection[str]) -> Draf
         visited.update(path)
 
     return DraftValidationResult(
-        valid=not any(item.severity == "error" for item in diagnostics), diagnostics=diagnostics
+        valid=not any(item.severity == "error" for item in diagnostics), diagnostics=order_diagnostics(diagnostics)
     )
