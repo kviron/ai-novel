@@ -121,6 +121,23 @@ def test_story_versions_reject_two_drafts_for_one_story(tmp_path):
             )
 
 
+def test_story_version_rejects_unknown_mode(tmp_path):
+    database_path = tmp_path / "version-mode.db"
+    create_pre_version_database(database_path)
+    run_migrations(database_path)
+
+    with sqlite3.connect(database_path) as db:
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            db.execute(
+                "INSERT INTO story_versions (id, story_id, version_number, status, mode, title, slug, created_at) "
+                "VALUES ('bad-mode', 'legacy-story', 2, 'draft', 'graph', 'Graph', 'graph', 'now')"
+            )
+        db.execute(
+            "INSERT INTO story_versions (id, story_id, version_number, status, mode, title, slug, created_at) "
+            "VALUES ('freeform-mode', 'legacy-story', 2, 'draft', 'freeform', 'Freeform', 'freeform', 'now')"
+        )
+
+
 def test_story_session_requires_exactly_one_version_source(tmp_path):
     database_path = tmp_path / "session-source.db"
     create_pre_version_database(database_path)

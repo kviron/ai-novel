@@ -3,7 +3,7 @@
 import json
 
 from alembic import op
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, UniqueConstraint, text
 
 revision = "20260927_13"
 down_revision = "20260926_12"
@@ -81,6 +81,7 @@ def upgrade() -> None:
         _required_text("created_at"),
         Column("published_at", String(), nullable=True),
         UniqueConstraint("story_id", "version_number", name="uq_story_versions_number"),
+        CheckConstraint("mode IN ('freeform', 'hybrid')", name="ck_story_versions_mode"),
     )
     op.create_index("ix_story_versions_story_id", "story_versions", ["story_id"])
     op.create_index(

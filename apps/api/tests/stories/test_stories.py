@@ -7,7 +7,16 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import Settings
-from app.db.models import Character, CharacterMaterial, CharacterRevision, StoryCharacter, StorySession, Turn
+from app.db.models import (
+    Character,
+    CharacterRevision,
+    Story,
+    StoryCharacter,
+    StorySession,
+    StoryVersion,
+    StoryVersionCharacter,
+    Turn,
+)
 from app.main import create_app
 from app.modules.providers.service import ProviderRegistry
 
@@ -68,6 +77,10 @@ def test_seeded_akane_story_can_start_and_restore(client):
     restored = client.get(f"/api/sessions/{game['id']}")
     assert restored.status_code == 200
     assert restored.json()["id"] == game["id"]
+    with Session(client.app.state.engine) as session:
+        saved = session.get(StorySession, game["id"])
+        assert saved.story_version_id == f"{akane['id']}:v1"
+        assert saved.draft_snapshot_id is None
 
 
 def test_seeded_story_contains_distinct_female_and_male_profiles(client):
@@ -88,6 +101,16 @@ def test_seeded_story_contains_distinct_female_and_male_profiles(client):
 def test_fresh_seed_creates_canonical_character_revisions_and_story_links(client):
     story = akane_story(client)
     with Session(client.app.state.engine) as session:
+        record = session.get(Story, story["id"])
+        version = session.get(StoryVersion, f"{story['id']}:v1")
+        assert record.current_published_version_id == version.id
+        assert (version.version_number, version.status, version.mode) == (1, "published", "hybrid")
+        assert version.premise == record.premise
+        assert version.opening_situation == record.current_scene
+        version_cast = session.exec(
+            select(StoryVersionCharacter).where(StoryVersionCharacter.version_id == version.id)
+        ).all()
+        assert [(item.character_id, item.order_index) for item in version_cast] == [("akane", 0), ("mark", 1)]
         for character_id in ("akane", "mark"):
             character = session.get(Character, character_id)
             link = session.get(StoryCharacter, (story["id"], character_id))
@@ -96,21 +119,21 @@ def test_fresh_seed_creates_canonical_character_revisions_and_story_links(client
             assert revision.character_id == character_id
             assert revision.revision_number == 1
             assert link.revision_id == revision.id
+            assert next(item for item in version_cast if item.character_id == character_id).revision_id == revision.id
 
 
-def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
+def test_existing_seed_story_restores_missing_mark_link_without_changing_published_pin(client):
     akane = akane_story(client)
     with Session(client.app.state.engine) as session:
-        character = session.get(Character, "mark")
+        published_pin = session.exec(
+            select(StoryVersionCharacter).where(
+                StoryVersionCharacter.version_id == f"{akane['id']}:v1",
+                StoryVersionCharacter.character_id == "mark",
+            )
+        ).one()
+        published_pin_id = published_pin.id
+        pinned_revision_id = published_pin.revision_id
         session.delete(session.get(StoryCharacter, (akane["id"], "mark")))
-        for material in session.exec(
-            select(CharacterMaterial).where(CharacterMaterial.revision_id == character.current_revision_id)
-        ):
-            session.delete(material)
-        session.flush()
-        session.delete(session.get(CharacterRevision, character.current_revision_id))
-        session.flush()
-        session.delete(session.get(Character, "mark"))
         session.commit()
 
     with TestClient(create_app(client.app.state.settings, client.app.state.providers)) as restarted:
@@ -120,6 +143,10 @@ def test_existing_seed_story_receives_missing_mark_without_duplicate(client):
 
     assert [item["id"] for item in first].count("mark") == 1
     assert [item["id"] for item in second].count("mark") == 1
+    with Session(client.app.state.engine) as session:
+        restored_link = session.get(StoryCharacter, (akane["id"], "mark"))
+        assert restored_link.revision_id == pinned_revision_id
+        assert session.get(StoryVersionCharacter, published_pin_id).revision_id == pinned_revision_id
 
 
 def test_session_library_lists_only_requested_kind_with_lightweight_data(client):
@@ -182,10 +209,14 @@ def test_seed_is_idempotent_across_lifespan_startups(client):
             0
         ]
         character_count = database.execute("SELECT COUNT(*) FROM characters WHERE id = ?", ("akane",)).fetchone()[0]
+        version_count = database.execute(
+            "SELECT COUNT(*) FROM story_versions WHERE story_id = ?", (akane["id"],)
+        ).fetchone()[0]
 
     assert restarted["id"] == akane["id"]
     assert story_count == 1
     assert character_count == 1
+    assert version_count == 1
 
 
 def test_each_story_start_creates_an_independent_initial_session(client):

@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app.db.models import Character, CharacterRevision, Story, StoryCharacter
+from app.db.models import Character, CharacterRevision, Story, StoryCharacter, StoryVersion, StoryVersionCharacter
 
 from .content import AKANE_EMOTIONS, AKANE_SLUG
 from .repository import get_story_by_slug
@@ -75,3 +75,50 @@ def seed_akane_story(session: Session) -> None:
                     revision_id=character.current_revision_id,
                 )
             )
+
+    if story.current_published_version_id is None:
+        version_id = f"{story.id}:v1"
+        version = session.get(StoryVersion, version_id)
+        if version is None:
+            version = StoryVersion(
+                id=version_id,
+                story_id=story.id,
+                version_number=1,
+                status="published",
+                mode="freeform" if story.story_mode == "free" else story.story_mode,
+                title=story.title,
+                slug=story.slug,
+                short_description=story.description,
+                premise=story.premise,
+                tone=json.dumps(json.loads(story.theme_labels), ensure_ascii=False, separators=(",", ":")),
+                opening_situation=story.current_scene,
+                hero_policy=story.hero_policy,
+                hero_allowed_sources=story.hero_allowed_sources,
+                fixed_hero_revision_id=story.fixed_hero_revision_id,
+                recommended_provider_id=story.recommended_provider_id,
+                recommended_model_id=story.recommended_model_id,
+                created_at=story.created_at,
+                published_at=story.created_at,
+            )
+            session.add(version)
+            session.flush()
+            playable_ids = set(json.loads(story.playable_character_ids))
+            links = session.exec(
+                select(StoryCharacter)
+                .where(StoryCharacter.story_id == story.id)
+                .order_by(StoryCharacter.character_id)
+            ).all()
+            for order_index, link in enumerate(links):
+                session.add(
+                    StoryVersionCharacter(
+                        id=f"{version_id}:character:{link.character_id}",
+                        version_id=version_id,
+                        character_id=link.character_id,
+                        revision_id=link.revision_id,
+                        order_index=order_index,
+                        role=link.role,
+                        color=link.color,
+                        playable=link.character_id in playable_ids,
+                    )
+                )
+        story.current_published_version_id = version_id

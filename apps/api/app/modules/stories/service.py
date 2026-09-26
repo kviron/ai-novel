@@ -65,6 +65,7 @@ def start_story_session(
 
     story_session = StorySession(
         story_id=story.id,
+        story_version_id=story.current_published_version_id,
         current_scene=story.current_scene,
         provider_id=request.provider_id,
         model_id=model_id,

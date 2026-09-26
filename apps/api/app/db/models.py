@@ -58,6 +58,7 @@ class StoryVersion(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("story_id", "version_number"),
         Index("uq_story_versions_one_draft", "story_id", unique=True, sqlite_where=text("status = 'draft'")),
+        CheckConstraint("mode IN ('freeform', 'hybrid')", name="ck_story_versions_mode"),
     )
 
     id: str = Field(default_factory=new_public_id, primary_key=True)
