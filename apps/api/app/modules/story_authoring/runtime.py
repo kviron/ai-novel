@@ -121,8 +121,7 @@ def _from_draft(session: Session, story: Story, draft: StoryDraft, snapshot_id: 
 
 def _runtime_cover_url(session: Session, story: Story, draft: StoryDraft) -> str | None:
     if draft.identity.cover_material_id is None:
-        # Migrated built-in stories predate StoryMaterial; their packaged cover is the only legacy fallback.
-        return story.cover_image_url
+        return None
     material = session.get(StoryMaterial, draft.identity.cover_material_id)
     if material is None or material.story_id != story.id:
         raise ValueError("Pinned story cover material is missing or belongs to another story")

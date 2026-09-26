@@ -45,3 +45,21 @@ Verification after the fix:
 - Focused authoring/stories/characters/story-engine selection: 133 passed.
 - Complete API suite: 262 passed, 17 existing dependency/migration warnings.
 - Ruff on every touched production and test file: passed.
+
+## Fix round 2
+
+The remaining mutable-cover fallback was removed completely. A pinned version or author snapshot whose
+`identity.cover_material_id` is null now exposes no runtime cover instead of consulting
+`Story.cover_image_url`. The migrated built-in Akane v1 expectation was updated accordingly because that
+version predates immutable `StoryMaterial` ownership. A regression creates both author and player pins,
+mutates the legacy story projection, and proves both remain unchanged at null.
+
+The retained legacy path now has an explicit invariant regression: a genuinely pre-version story can still
+attach through `StoryCharacter`, but deleting its sole cast member returns `409 conflict` and preserves the
+row. This distinguishes truthful legacy compatibility from the versioned-story deprecation response.
+
+Verification after fix round 2:
+
+- Focused null-cover and legacy last-cast regressions: 2 passed.
+- Complete API suite: 264 passed, 17 existing dependency/migration warnings.
+- Ruff check and format check on all round-2 production and test files: passed.

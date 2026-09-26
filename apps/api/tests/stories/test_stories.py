@@ -77,7 +77,8 @@ def test_seeded_akane_story_can_start_and_restore(client):
     akane = akane_story(client)
     assert akane["recommended_model_id"] == "qwen3:14b-q4_K_M"
     assert "Аканэ" in akane["description"]
-    assert akane["cover_image_url"] == "/covers/akane-neon-echo.webp"
+    # The migrated v1 definition predates immutable StoryMaterial ownership.
+    assert akane["cover_image_url"] is None
 
     created = client.post(
         f"/api/stories/{akane['id']}/sessions",

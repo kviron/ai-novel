@@ -344,6 +344,23 @@ def test_runtime_covers_are_pinned_for_author_snapshot_and_published_versions(cl
     assert client.get(second_url).content == _image_bytes("image/png", "blue")
 
 
+def test_runtime_without_pinned_cover_never_reads_mutable_story_projection(client):
+    draft = _publishable(client)
+    story_id = draft["story_id"]
+    author_game = client.post(f"/api/author/stories/{story_id}/test-sessions", json={}).json()
+    client.post(f"/api/author/stories/{story_id}/publish")
+    player_game = client.post(f"/api/stories/{story_id}/sessions", json={}).json()
+
+    with Session(client.app.state.engine) as session:
+        session.get(Story, story_id).cover_image_url = "/covers/mutable-after-pin.webp"
+        session.commit()
+
+    author_story = client.get(f"/api/sessions/{author_game['id']}").json()["story"]
+    player_story = client.get(f"/api/sessions/{player_game['id']}").json()["story"]
+    assert author_story["cover_image_url"] is None
+    assert player_story["cover_image_url"] is None
+
+
 def test_author_session_pins_fixed_hero_and_cast_from_draft(client):
     with Session(client.app.state.engine) as session:
         akane_revision = session.get(Character, "akane").current_revision_id

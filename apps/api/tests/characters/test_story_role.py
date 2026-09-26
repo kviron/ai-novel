@@ -159,6 +159,36 @@ def test_batch_attach_is_atomic_and_last_cast_member_cannot_be_removed(client):
         assert session.get(StoryCharacter, (story_id, character["id"])) is None
 
 
+def test_pre_version_story_cannot_remove_its_last_cast_member(client):
+    with Session(client.app.state.engine) as session:
+        story = Story(slug="legacy-last-cast", title="Legacy", premise="Legacy", current_scene="Start")
+        session.add(story)
+        session.commit()
+        story_id = story.id
+    character = client.post(
+        "/api/characters",
+        json={
+            "name": "Леон",
+            "gender": "male",
+            "age": 29,
+            "personality": "Наблюдательный",
+            "appearance": "Тёмные волосы",
+        },
+    ).json()
+    attached = client.post(
+        f"/api/stories/{story_id}/characters",
+        json={"character_id": character["id"], "revision_id": character["current_revision_id"]},
+    )
+    assert attached.status_code == 201
+
+    response = client.delete(f"/api/stories/{story_id}/characters/{character['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "conflict"
+    with Session(client.app.state.engine) as session:
+        assert session.get(StoryCharacter, (story_id, character["id"])) is not None
+
+
 def test_global_profile_rejects_story_role(client):
     response = client.post(
         "/api/characters",
