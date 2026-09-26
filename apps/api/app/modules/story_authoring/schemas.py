@@ -1,12 +1,36 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+_ASCII_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_HTML_LIKE_MARKUP = re.compile(r"<(?:/?[A-Za-z][A-Za-z0-9:-]*(?:\s+[^<>]*)?\s*/?|![^<>]*|\?[^<>]*)>")
+
+
+def _reject_unsafe_text(value: object) -> object:
+    if isinstance(value, str):
+        if _ASCII_CONTROL.search(value):
+            raise ValueError("ASCII control characters are not allowed in author text")
+        if _HTML_LIKE_MARKUP.search(value):
+            raise ValueError("HTML-like markup is not allowed in author text")
+    elif isinstance(value, dict):
+        for item in value.values():
+            _reject_unsafe_text(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _reject_unsafe_text(item)
+    return value
 
 
 class StrictAuthorModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_unsafe_author_text(cls, value: object) -> object:
+        return _reject_unsafe_text(value)
 
 
 ShortText = Annotated[str, Field(max_length=120)]
@@ -16,7 +40,7 @@ ShortList = Annotated[list[ShortText], Field(max_length=24)]
 
 class StoryIdentitySection(StrictAuthorModel):
     title: ShortText = ""
-    slug: ShortText = ""
+    slug: str = Field(default="", max_length=120, pattern=r"^(?:[a-z0-9]+(?:-[a-z0-9]+)*)?$")
     short_description: str = Field(default="", max_length=500)
     premise: Prose = ""
     cover_material_id: ShortText | None = None

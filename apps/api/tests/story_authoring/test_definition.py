@@ -7,7 +7,14 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.db.models import CanonFact, Character, CharacterRevision, Story, StoryBeat, StoryVersion, StoryVersionCharacter
 from app.modules.story_authoring.definition import canonical_snapshot, load_story_draft
-from app.modules.story_authoring.schemas import BeatCondition, StoryCastSection, StoryModeSection, StoryRulesSection
+from app.modules.story_authoring.schemas import (
+    BeatCondition,
+    StoryCanonSection,
+    StoryCastSection,
+    StoryIdentitySection,
+    StoryModeSection,
+    StoryRulesSection,
+)
 
 
 def test_sections_and_discriminated_conditions_reject_unknown_author_fields():
@@ -35,6 +42,39 @@ def test_cast_section_limits_author_lists_to_24_entries():
 
     with pytest.raises(ValidationError):
         StoryCastSection.model_validate({"characters": characters})
+
+
+@pytest.mark.parametrize(
+    ("schema", "payload"),
+    [
+        (StoryIdentitySection, {"premise": "<script>alert(1)</script>"}),
+        (StoryIdentitySection, {"genres": ["mystery", "<b>noir</b>"]}),
+        (StoryIdentitySection, {"title": "Hidden\x00title"}),
+        (StoryRulesSection, {"generation_policy": {"forbidden_outcomes": "<img src=x onerror=alert(1)>"}}),
+        (
+            StoryCanonSection,
+            {"facts": [{"id": "fact", "order_index": 0, "title": "Fact", "statement": "<!-- hidden -->"}]},
+        ),
+    ],
+)
+def test_author_text_rejects_markup_and_ascii_controls(schema, payload):
+    with pytest.raises(ValidationError):
+        schema.model_validate(payload)
+
+
+@pytest.mark.parametrize("slug", ["../../etc", "Neon-Echo", "neon--echo", "-neon", "neon-", "neon_echo"])
+def test_slug_rejects_noncanonical_values(slug):
+    with pytest.raises(ValidationError):
+        StoryIdentitySection.model_validate({"slug": slug})
+
+
+def test_narrative_punctuation_and_path_mentions_remain_valid():
+    section = StoryIdentitySection.model_validate(
+        {"slug": "neon-echo-2", "premise": "At /tmp/story, Alice asks: is x < y > z? Yes!"}
+    )
+
+    assert section.slug == "neon-echo-2"
+    assert section.premise == "At /tmp/story, Alice asks: is x < y > z? Yes!"
 
 
 def _loaded_draft(*, reverse_insert_order: bool):
