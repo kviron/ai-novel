@@ -20,6 +20,8 @@ export type Character = {
   role?: string
   color?: string
   visual_profile_version: number
+  sprite_contract_version?: number
+  sprites?: Record<string, SpriteVariant[]>
 }
 
 export type CharacterRevision = Omit<Character, 'visual_profile_version' | 'role'> & {
@@ -33,7 +35,7 @@ export type CharacterRevision = Omit<Character, 'visual_profile_version' | 'role
 
 export type CharacterMaterial = {
   id: string
-  kind: 'avatar' | 'cover'
+  kind: string
   sha256: string
   mime_type: string
   filename: string
@@ -42,6 +44,8 @@ export type CharacterMaterial = {
   source: string
   url: string
 }
+
+export type SpriteVariant = { variant: string; material: CharacterMaterial }
 
 export type CatalogCharacter = CharacterRevision & {
   character_id: string
@@ -102,12 +106,13 @@ export type Protagonist = {
 }
 
 export type VisualDirective = {
-  mode: 'sprite_scene'
+  mode?: 'sprite_scene'
   character_id: string
   emotion: string
   pose: string
   outfit: string
   background: string
+  present_character_ids?: string[]
 }
 
 export type TurnResult = {
@@ -138,7 +143,7 @@ export type SessionTurn = {
   dialogue: string
   segments?: SceneSegment[]
   choices: string[]
-  visual_directive: Record<string, string>
+  visual_directive: VisualDirective
 }
 
 export type StorySession = {

@@ -10,8 +10,28 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
 import { Field, FieldGroup, FieldLabel } from '@/shared/ui/field'
 import { Input } from '@/shared/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/shared/ui/toggle-group'
 import { CharacterArtwork } from './CharacterArtwork'
+
+const spriteLabels: Record<string, string> = { neutral: 'Нейтральная', happy: 'Радость', sad: 'Грусть', angry: 'Злость', surprised: 'Удивление', determined: 'Решительность', fan: 'С веером', fear: 'Страх', villain: 'Злодей', lust: 'Похоть' }
+
+function SpritePreview({ name, sprites }: { name: string; sprites: Record<string, { variant: string; material: { url: string } }[]> }) {
+  const emotions = Object.keys(sprites)
+  const [expression, setExpression] = useState('neutral')
+  if (!emotions.length) return <p className="text-sm text-muted-foreground">Для этой ревизии спрайты ещё не добавлены.</p>
+  const selectedEmotion = sprites[expression]?.length ? expression : emotions[0]
+  const selected = sprites[selectedEmotion][0]
+  return <Card>
+    <CardHeader><CardTitle>Игровые эмоции</CardTitle></CardHeader>
+    <CardContent className="flex flex-col items-center gap-5">
+      <ToggleGroup type="single" value={selectedEmotion} onValueChange={(value) => { if (sprites[value]?.length) setExpression(value) }} variant="outline" aria-label="Эмоция спрайта" className="flex-wrap">
+        {emotions.map((key) => <ToggleGroupItem key={key} value={key}>{spriteLabels[key] ?? key}</ToggleGroupItem>)}
+      </ToggleGroup>
+      <img src={selected.material.url} alt={`${name}: ${spriteLabels[selectedEmotion] ?? selectedEmotion}`} className="h-[520px] max-h-[65vh] w-auto object-contain object-bottom" />
+    </CardContent>
+  </Card>
+}
 
 function appearanceDetails(value: string): { label: string; value: string }[] {
   try {
@@ -103,6 +123,9 @@ export function CharacterDetailPage() {
       <CharacterArtwork characterId={history.id} name={current.name} avatarUrl={current.avatar?.url} className="h-[360px] rounded-xl ring-1 ring-border sm:h-[480px] md:h-[min(70vh,650px)]" />
       <div className="flex flex-col gap-5">
         <header className="flex flex-col gap-2"><p className="text-sm text-muted-foreground">Ревизия {current.revision_number} · {history.source_type === 'builtin' ? 'Встроенный персонаж' : history.source_type === 'imported' ? 'Импортированный персонаж' : 'Локальный персонаж'}</p><h1 className="text-3xl font-semibold tracking-tight">{current.name}</h1><Badge variant="secondary" className="w-fit">{current.age} лет</Badge><div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link to={routes.characterEdit(history.id)}>Создать новую ревизию</Link></Button><Button type="button" variant="outline" disabled={busy} onClick={() => void downloadArchive()}>Экспортировать ZIP</Button></div></header>
+        <Tabs defaultValue="profile" className="gap-5">
+          <TabsList variant="line"><TabsTrigger value="profile">Профиль</TabsTrigger><TabsTrigger value="sprites">Спрайты</TabsTrigger></TabsList>
+          <TabsContent value="profile" className="flex flex-col gap-5">
         {materialError && <Alert variant="destructive"><AlertDescription>{materialError}</AlertDescription></Alert>}
         {current.cover && <Card><CardHeader><CardTitle>Обложка</CardTitle></CardHeader><CardContent className="flex flex-col gap-2"><img src={current.cover.url} alt={`Обложка ${current.name}`} className="max-h-48 w-full rounded-md object-cover" /><p className="text-sm text-muted-foreground">{current.cover.creator} · {current.cover.license}</p><p className="text-xs text-muted-foreground">{current.cover.source}</p></CardContent></Card>}
         <Card><CardHeader><CardTitle>Аватар</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">
@@ -119,6 +142,9 @@ export function CharacterDetailPage() {
         {appearanceDetails(current.appearance).length > 0 && <Card><CardHeader><CardTitle>Внешность</CardTitle></CardHeader><CardContent><dl className="grid gap-4 text-sm">{appearanceDetails(current.appearance).map(({ label, value }, index) => <div key={`${label}:${index}`}><dt className="mb-1 text-muted-foreground">{label}</dt><dd>{value}</dd></div>)}</dl></CardContent></Card>}
         {current.biography && <Card><CardHeader><CardTitle>История</CardTitle></CardHeader><CardContent className="text-sm leading-relaxed">{current.biography}</CardContent></Card>}
         {history.linked_stories.length > 0 && <Card><CardHeader><CardTitle>В новеллах</CardTitle></CardHeader><CardContent><ul className="flex flex-col gap-2 text-sm">{history.linked_stories.map((link) => <li key={link.story_id}>{link.story_title}<span className="text-muted-foreground"> · ревизия {link.revision_number}</span></li>)}</ul></CardContent></Card>}
+          </TabsContent>
+          <TabsContent value="sprites"><SpritePreview name={current.name} sprites={current.sprites ?? {}} /></TabsContent>
+        </Tabs>
       </div>
     </div>}
   </main>

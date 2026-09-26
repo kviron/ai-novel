@@ -3,11 +3,13 @@
 import hashlib
 import json
 import os
+import re
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlmodel import Session
 
@@ -20,6 +22,8 @@ from .service import CharacterNotFoundError, _character_profile
 MAX_AVATAR_BYTES = 10 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
 MIME_EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+SPRITE_SIZE = (1024, 1536)
+SPRITE_KIND = re.compile(r"^sprite:([a-z][a-z0-9_-]{0,31}):([a-z][a-z0-9_-]{0,31})$")
 
 
 class InvalidMaterialError(Exception):
@@ -49,12 +53,13 @@ class ArchiveRevision(BaseModel):
     profile: CharacterWrite
     avatar: ArchiveMaterial | None = None
     cover: ArchiveMaterial | None = None
+    materials: list[ArchiveMaterial] = Field(default_factory=list, max_length=200)
 
 
 class CharacterArchive(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    format_version: int = 1
+    format_version: int = 2
     origin_character_id: str
     current_revision_number: int = Field(ge=1)
     revisions: list[ArchiveRevision] = Field(min_length=1, max_length=100)
@@ -68,6 +73,25 @@ def _mime_for_bytes(data: bytes) -> str | None:
     if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+def _validate_sprite(data: bytes) -> None:
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            if image.format != "PNG" or image.mode != "RGBA" or image.size != SPRITE_SIZE:
+                raise InvalidMaterialError("Sprite must be a 1024x1536 RGBA PNG")
+            alpha = image.getchannel("A")
+            bbox = alpha.getbbox()
+            if bbox is None:
+                raise InvalidMaterialError("Sprite is empty")
+            left, top, right, bottom = bbox
+            if left < 24 or top < 24 or right > 1000 or bottom > 1520:
+                raise InvalidMaterialError("Sprite touches the safety border")
+            if bottom < 1456:
+                raise InvalidMaterialError("Sprite is not aligned to the bottom anchor")
+    except (UnidentifiedImageError, OSError) as error:
+        raise InvalidMaterialError("Invalid sprite PNG") from error
 
 
 def _blob_path(asset_dir: Path, digest: str, mime_type: str) -> Path:
@@ -106,22 +130,40 @@ def seed_builtin_materials(session: Session, asset_dir: Path) -> None:
             continue
         first_revision = repository.list_revisions(session, character_id)[0]
         revision_id = first_revision.id
-        if repository.material_for_revision(session, revision_id) is not None:
-            continue
-        path = repository_root / "apps" / "web" / "src" / "shared" / "ui" / "characters" / filename
-        digest = _save_blob(asset_dir, path.read_bytes(), "image/png")
-        session.add(
-            CharacterMaterial(
-                revision_id=revision_id,
-                kind="avatar",
-                sha256=digest,
-                mime_type="image/png",
-                filename=filename,
-                creator="AI Visual Novel project (AI-assisted)",
-                license="Unspecified; verify before redistribution",
-                source=f"bundled:{filename}",
+        if repository.material_for_revision(session, revision_id) is None:
+            path = repository_root / "apps" / "web" / "src" / "shared" / "ui" / "characters" / filename
+            digest = _save_blob(asset_dir, path.read_bytes(), "image/png")
+            session.add(
+                CharacterMaterial(
+                    revision_id=revision_id, kind="avatar", sha256=digest, mime_type="image/png", filename=filename,
+                    creator="AI Visual Novel project (AI-assisted)",
+                    license="Unspecified; verify before redistribution",
+                    source=f"bundled:{filename}",
+                )
             )
-        )
+    sprite_sets = {"akane": "akane", "mark": "mark", "16d4bf6a-9606-4b96-9419-ea0cbb49947d": "ashley"}
+    for character_id, folder in sprite_sets.items():
+        character = session.get(Character, character_id)
+        if character is None or character.current_revision_id is None:
+            continue
+        revision_id = character.current_revision_id
+        sprite_dir = repository_root / "assets" / "characters" / folder / "sprites"
+        for path in sprite_dir.glob(f"{folder}--*--*.png"):
+            _, emotion, variant = path.stem.split("--", 2)
+            kind = f"sprite:{emotion}:{variant}"
+            digest = _save_blob(asset_dir, path.read_bytes(), "image/png")
+            existing = repository.material_for_revision(session, revision_id, kind)
+            if existing is not None:
+                if existing.source.startswith("bundled:"):
+                    existing.sha256 = digest
+                    existing.filename = path.name
+                continue
+            session.add(CharacterMaterial(
+                revision_id=revision_id, kind=kind, sha256=digest, mime_type="image/png", filename=path.name,
+                creator="AI Visual Novel project (AI-assisted)", license="Project asset; verify before redistribution",
+                source=f"bundled:{folder}/{path.name}",
+            ))
+    session.commit()
 
 
 def avatar_bytes(asset_dir: Path, material: CharacterMaterial) -> bytes:
@@ -158,8 +200,12 @@ def upload_material(
     if not all((filename.strip(), creator.strip(), license.strip(), source.strip())):
         raise InvalidMaterialError("Material provenance is required")
     previous = session.get(CharacterRevision, character.current_revision_id)
-    if kind not in {"avatar", "cover"}:
+    if kind not in {"avatar", "cover"} and SPRITE_KIND.fullmatch(kind) is None:
         raise InvalidMaterialError("Unsupported material kind")
+    if kind.startswith("sprite:"):
+        if mime_type != "image/png":
+            raise InvalidMaterialError("Sprites must use PNG")
+        _validate_sprite(data)
     digest = _save_blob(asset_dir, data, mime_type)
     revision = CharacterRevision(
         character_id=character.id,
@@ -224,6 +270,7 @@ def export_character(session: Session, asset_dir: Path, character_id: str) -> by
                 profile=CharacterWrite(**{field: getattr(revision, field) for field in CharacterWrite.model_fields}),
                 avatar=archive_materials.get("avatar"),
                 cover=archive_materials.get("cover"),
+                materials=list(archive_materials.values()),
             )
         )
     manifest = CharacterArchive(
@@ -256,7 +303,7 @@ def import_character(session: Session, asset_dir: Path, data: bytes):
             if package.getinfo("manifest.json").file_size > 128 * 1024:
                 raise InvalidMaterialError("Manifest too large")
             manifest = CharacterArchive.model_validate(json.loads(package.read("manifest.json")))
-            if manifest.format_version != 1 or [r.revision_number for r in manifest.revisions] != list(
+            if manifest.format_version not in {1, 2} or [r.revision_number for r in manifest.revisions] != list(
                 range(1, len(manifest.revisions) + 1)
             ):
                 raise InvalidMaterialError("Unsupported archive revision sequence")
@@ -265,10 +312,14 @@ def import_character(session: Session, asset_dir: Path, data: bytes):
             expected = {"manifest.json"}
             blobs: dict[str, tuple[bytes, str]] = {}
             for revision in manifest.revisions:
-                for kind, material in (("avatar", revision.avatar), ("cover", revision.cover)):
+                legacy = [item for item in (revision.avatar, revision.cover) if item is not None]
+                revision_materials = revision.materials if manifest.format_version == 2 else legacy
+                for material in revision_materials:
                     if material is None:
                         continue
-                    if material.kind != kind or material.mime_type not in MIME_EXTENSIONS:
+                    if material.kind not in {"avatar", "cover"} and SPRITE_KIND.fullmatch(material.kind) is None:
+                        raise InvalidMaterialError("Unsupported material")
+                    if material.mime_type not in MIME_EXTENSIONS:
                         raise InvalidMaterialError("Unsupported material")
                     entry = f"assets/{material.sha256}.{MIME_EXTENSIONS[material.mime_type]}"
                     expected.add(entry)
@@ -302,7 +353,8 @@ def import_character(session: Session, asset_dir: Path, data: bytes):
         )
         session.add(revision)
         session.flush()
-        for material in (item.avatar, item.cover):
+        revision_materials = item.materials if manifest.format_version == 2 else [item.avatar, item.cover]
+        for material in revision_materials:
             if material:
                 session.add(CharacterMaterial(revision_id=revision.id, **material.model_dump()))
         if item.revision_number == manifest.current_revision_number:

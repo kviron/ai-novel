@@ -66,6 +66,23 @@ test('displays the current revision cover and its provenance', async () => {
   expect(screen.getByText(/Author.*CC-BY-4.0/)).toBeInTheDocument()
 })
 
+test('previews separate emotion sprites on their own tab', async () => {
+  const material = (emotion: string) => ({ id: `${emotion}-1`, url: `/api/character-materials/${emotion}-1`, kind: `sprite:${emotion}:default`, sha256: 'hash', mime_type: 'image/png', filename: `ashley-${emotion}.png`, creator: 'Project', license: 'own', source: 'ai-assisted' })
+  apiServer.characterDetail('ashley', {
+    id: 'ashley', current_revision_id: 'ashley-v2', source_type: 'local',
+    revisions: [{ ...character, id: 'ashley-v2', name: 'Эшли', sprites: { neutral: [{ variant: 'default', material: material('neutral') }], angry: [{ variant: 'default', material: material('angry') }], determined: [{ variant: 'default', material: material('determined') }] } }], linked_stories: [],
+  })
+  render(<TestRouter initialEntries={['/characters/ashley']} />)
+
+  await userEvent.click(await screen.findByRole('tab', { name: 'Спрайты' }))
+  const preview = screen.getByRole('img', { name: 'Эшли: Нейтральная' })
+  expect(preview).toHaveAttribute('src', '/api/character-materials/neutral-1')
+  await userEvent.click(screen.getByRole('radio', { name: 'Злость' }))
+  expect(screen.getByRole('img', { name: 'Эшли: Злость' })).toHaveAttribute('src', '/api/character-materials/angry-1')
+  await userEvent.click(screen.getByRole('radio', { name: 'Решительность' }))
+  expect(screen.getByRole('img', { name: 'Эшли: Решительность' })).toHaveAttribute('src', '/api/character-materials/determined-1')
+})
+
 test('filters profiles by gender without duplicating a character across stories', async () => {
   apiServer.listCharacters([character, mark])
   render(<TestRouter initialEntries={['/characters']} />)

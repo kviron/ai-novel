@@ -106,6 +106,20 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     background = directive.background if directive.background in AKANE_BACKGROUNDS else previous_background
     if background not in AKANE_BACKGROUNDS:
         background = AKANE_INITIAL_BACKGROUND
+    speaking_ids = {segment.character_id for segment in dialogue_segments}
+    if directive.present_character_ids is not None:
+        present_ids = directive.present_character_ids
+        if len(set(present_ids)) != len(present_ids) or any(
+            character_id not in characters for character_id in present_ids
+        ):
+            raise InvalidProposalError("unknown_or_duplicate_present_character_id")
+        if not speaking_ids.issubset(present_ids):
+            raise InvalidProposalError("speaker_not_present")
+    else:
+        previous_directive = context.recent_turns[-1]["visual_directive"] if context.recent_turns else {}
+        inherited = previous_directive.get("present_character_ids", []) if previous_background == background else []
+        present_ids = list(dict.fromkeys([*inherited, *[segment.character_id for segment in dialogue_segments]]))
+        present_ids = [character_id for character_id in present_ids if character_id in characters]
     return AcceptedTurn(
         speaker=character["name"],
         narration="\n".join(segment.text.strip() for segment in narration_segments),
@@ -118,5 +132,6 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
             pose=directive.pose,
             outfit=directive.outfit,
             background=background,
+            present_character_ids=present_ids,
         ),
     )

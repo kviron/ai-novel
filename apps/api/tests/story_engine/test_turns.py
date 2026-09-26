@@ -70,6 +70,7 @@ def test_valid_proposal_is_committed_once(client, fake_provider, akane_session):
         "pose": "fan_open",
         "outfit": "red_dress",
         "background": "neon_crossroads",
+        "present_character_ids": ["akane"],
     }
     assert result["speaker"] == "Аканэ Куроха"
     assert result["choices"] == ["Осмотреть след", "Спросить о веере"]
@@ -112,6 +113,104 @@ def test_interleaved_scene_preserves_two_speakers_in_history(client, fake_provid
     ]
     restored = client.get(f"/api/sessions/{akane_session.id}").json()
     assert restored["latest_turn"]["segments"] == result.json()["segments"]
+
+
+def test_silent_character_remains_present_and_rewind_restores_cast(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "background": "neon_crossroads",
+                "present_character_ids": ["akane", "mark"],
+            }
+        ),
+        proposal(
+            dialogue={"character_id": "akane", "text": "Марк молчит рядом."},
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "background": "neon_crossroads",
+            },
+        ),
+        proposal(
+            dialogue={"character_id": "akane", "text": "Марк ушёл."},
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "background": "neon_crossroads",
+                "present_character_ids": ["akane"],
+            },
+        ),
+    ]
+    first = post_turn(client, akane_session)
+    assert first.json()["visual_directive"]["present_character_ids"] == ["akane", "mark"]
+    second = post_turn(client, akane_session, request_id="turn-2", expected_state_version=2)
+    assert second.json()["visual_directive"]["present_character_ids"] == ["akane", "mark"]
+    third = post_turn(client, akane_session, request_id="turn-3", expected_state_version=3)
+    assert third.json()["visual_directive"]["present_character_ids"] == ["akane"]
+    rewound = client.post(f"/api/sessions/{akane_session.id}/rewind", json={"expected_state_version": 4})
+    assert rewound.status_code == 200
+    assert rewound.json()["latest_turn"]["visual_directive"]["present_character_ids"] == ["akane", "mark"]
+
+
+def test_unknown_present_character_is_rejected(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "present_character_ids": ["akane", "outsider"],
+            }
+        )
+    ] * 2
+    response = post_turn(client, akane_session)
+    assert response.status_code != 201
+    assert_unchanged(client, akane_session)
+
+
+def test_background_change_drops_unconfirmed_silent_character(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "background": "neon_crossroads",
+                "present_character_ids": ["akane", "mark"],
+            }
+        ),
+        proposal(
+            visual_directive={
+                "emotion": "fan",
+                "pose": "fan_open",
+                "outfit": "red_dress",
+                "background": "signal_archive",
+            }
+        ),
+    ]
+    assert post_turn(client, akane_session).status_code == 201
+    second = post_turn(client, akane_session, request_id="turn-2", expected_state_version=2)
+    assert second.json()["visual_directive"]["present_character_ids"] == ["akane"]
+
+
+def test_speaking_character_must_be_present(client, fake_provider, akane_session):
+    bad = proposal(
+        visual_directive={
+            "emotion": "fan",
+            "pose": "fan_open",
+            "outfit": "red_dress",
+            "present_character_ids": ["mark"],
+        }
+    )
+    fake_provider.responses = [bad, bad]
+    response = post_turn(client, akane_session)
+    assert response.status_code != 201
+    assert_unchanged(client, akane_session)
 
 
 def test_repeated_dialogue_in_narration_is_repaired_once(client, fake_provider, akane_session):
@@ -443,6 +542,14 @@ def test_unknown_emotion_falls_back_without_repair(client, fake_provider, akane_
         saved = db.exec(select(Turn).where(Turn.session_id == akane_session.id)).one()
         assert json.loads(saved.raw_response)["visual_directive"]["emotion"] == "unknown"
         assert json.loads(saved.visual_directive)["emotion"] == "neutral"
+
+
+@pytest.mark.parametrize("emotion", ["fear", "villain", "lust"])
+def test_extended_sprite_emotions_are_preserved(client, fake_provider, akane_session, emotion):
+    fake_provider.responses = [proposal(visual_directive={"emotion": emotion})]
+    response = post_turn(client, akane_session)
+    assert response.status_code == 201
+    assert response.json()["visual_directive"]["emotion"] == emotion
 
 
 @pytest.mark.parametrize("choices", [["only"], ["1", "2", "3", "4", "5"]])

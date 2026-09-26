@@ -28,6 +28,7 @@ class ModelChangeRequest(BaseModel):
 
 class CanonicalVisualDirective(VisualDirective):
     character_id: str
+    present_character_ids: list[str]
     # A default keeps pre-background saves replayable without rewriting their turns.
     background: str = "neon_crossroads"
 

@@ -89,6 +89,8 @@ class RevisionProfile(BaseModel):
     created_at: str
     avatar: "MaterialProfile | None" = None
     cover: "MaterialProfile | None" = None
+    sprite_contract_version: int = 1
+    sprites: dict[str, list["SpriteVariant"]] = Field(default_factory=dict)
 
 
 class MaterialProfile(BaseModel):
@@ -101,6 +103,11 @@ class MaterialProfile(BaseModel):
     license: str
     source: str
     url: str
+
+
+class SpriteVariant(BaseModel):
+    variant: str
+    material: MaterialProfile
 
 
 class CharacterProfile(RevisionProfile):

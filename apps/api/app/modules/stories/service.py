@@ -3,6 +3,8 @@ import json
 from sqlmodel import Session
 
 from app.db.models import Autosave, Character, CharacterRevision, SessionProtagonist, Story, StorySession, Turn
+from app.modules.characters import repository as character_repository
+from app.modules.characters.service import _material_profile
 from app.modules.providers.model_selection import (
     UnsupportedModelError,
     available_models,
@@ -130,7 +132,17 @@ def _story_summary(story: Story) -> StorySummary:
     )
 
 
-def _character_detail(character: Character, revision: CharacterRevision, role: str, color: str) -> CharacterDetail:
+def _character_detail(
+    session: Session, character: Character, revision: CharacterRevision, role: str, color: str
+) -> CharacterDetail:
+    materials = character_repository.materials_for_revision(session, revision.id)
+    sprites = {}
+    for material in materials:
+        if material.kind.startswith("sprite:"):
+            _, emotion, variant = material.kind.split(":", 2)
+            sprites.setdefault(emotion, []).append(
+                {"variant": variant, "material": _material_profile(material)}
+            )
     return CharacterDetail(
         id=character.id,
         name=revision.name,
@@ -141,6 +153,7 @@ def _character_detail(character: Character, revision: CharacterRevision, role: s
         role=role,
         color=color,
         visual_profile_version=revision.revision_number,
+        sprites=sprites,
     )
 
 
@@ -149,7 +162,7 @@ def _story_detail(session: Session, story: Story) -> StoryDetail:
         **_story_summary(story).model_dump(),
         current_scene=story.current_scene,
         characters=[
-            _character_detail(character, revision, link.role, link.color)
+            _character_detail(session, character, revision, link.role, link.color)
             for character, revision, link in repository.list_story_characters(session, story.id)
         ],
     )
@@ -193,7 +206,7 @@ def _session_detail(session: Session, story_session: StorySession, story: Story)
         id=story_session.id,
         story=_story_summary(story),
         characters=[
-            _character_detail(character, revision, link.role, link.color)
+            _character_detail(session, character, revision, link.role, link.color)
             for character, revision, link in repository.list_session_characters(session, story_session.id)
         ],
         protagonist=ProtagonistDetail.model_validate(protagonist, from_attributes=True),

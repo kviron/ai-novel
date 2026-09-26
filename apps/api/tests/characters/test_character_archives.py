@@ -1,12 +1,21 @@
 from io import BytesIO
 from zipfile import ZipFile
 
+from PIL import Image, ImageDraw
 from sqlmodel import Session
 
 from app.db.models import Story, StoryCharacter
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"test-avatar-bytes"
 PROFILE = {"name": "Мира", "gender": "female", "age": 26, "personality": "Смелая", "appearance": "Синий плащ"}
+
+
+def valid_sprite() -> bytes:
+    output = BytesIO()
+    image = Image.new("RGBA", (1024, 1536), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((300, 100, 724, 1500), fill=(30, 80, 160, 255))
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def test_avatar_creates_revision_without_moving_story_or_session_pin(client):
@@ -45,6 +54,41 @@ def test_avatar_creates_revision_without_moving_story_or_session_pin(client):
         )["name"]
         == "Мира"
     )
+
+
+def test_sprite_is_exposed_on_catalog_and_pinned_session_character(client):
+    story_id = client.get("/api/stories").json()[0]["id"]
+    created = client.post("/api/characters", json=PROFILE).json()
+    uploaded = client.post(
+        f"/api/characters/{created['id']}/sprite:angry:default?filename=mira-angry.png&creator=Author&license=own&source=ai-assisted",
+        content=valid_sprite(),
+        headers={"Content-Type": "image/png"},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    sprite = uploaded.json()["sprites"]["angry"][0]
+    assert sprite["variant"] == "default"
+    assert sprite["material"]["kind"] == "sprite:angry:default"
+    assert client.get(sprite["material"]["url"]).content == valid_sprite()
+
+    attached = client.post(
+        f"/api/stories/{story_id}/characters",
+        json={"character_id": created["id"], "revision_id": uploaded.json()["current_revision_id"]},
+    )
+    assert attached.status_code == 201
+    game = client.post(f"/api/stories/{story_id}/sessions", json={"provider_id": "ollama"}).json()
+    pinned = next(item for item in game["characters"] if item["id"] == created["id"])
+    assert pinned["sprites"]["angry"][0]["material"]["url"] == sprite["material"]["url"]
+
+
+def test_sprite_rejects_wrong_canvas_and_nontransparent_border(client):
+    created = client.post("/api/characters", json=PROFILE).json()
+    bad = BytesIO()
+    Image.new("RGBA", (512, 512), (255, 0, 0, 255)).save(bad, format="PNG")
+    response = client.post(
+        f"/api/characters/{created['id']}/sprite:neutral:default?filename=bad.png&creator=Author&license=own&source=manual",
+        content=bad.getvalue(), headers={"Content-Type": "image/png"},
+    )
+    assert response.status_code == 422
 
 
 def test_export_repeat_import_preserves_revisions_materials_and_origin(client):

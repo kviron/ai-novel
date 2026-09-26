@@ -28,6 +28,7 @@ class VisualDirective(BaseModel):
     pose: str = "default"
     outfit: str = "red_dress"
     background: str | None = None
+    present_character_ids: list[str] | None = Field(default=None, max_length=12)
 
 
 class ProposedEffect(BaseModel):

@@ -10,7 +10,10 @@ const session: StorySession = {
   id: 'session-1', state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
   protagonist: { session_id: 'session-1', source_kind: 'legacy', source_character_id: null, source_revision_id: null, policy_version: 1, name: 'Игрок', address: 'Игрок', gender: 'unspecified', appearance: '', biography: '', personality: '', age: null },
   story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', description: 'Дождливый город', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'gemma4-local:32k' },
-  characters: [{ id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
+  characters: [{ id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1, sprites: {
+    neutral: [{ variant: 'default', material: { id: 'neutral', kind: 'sprite:neutral:default', sha256: 'n', mime_type: 'image/png', filename: 'neutral.png', creator: 'Project', license: 'own', source: 'test', url: '/neutral.png' } }],
+    fan: [{ variant: 'default', material: { id: 'fan', kind: 'sprite:fan:default', sha256: 'f', mime_type: 'image/png', filename: 'fan.png', creator: 'Project', license: 'own', source: 'test', url: '/fan.png' } }],
+  } }],
   latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress', background: 'neon_crossroads' },
 }
 const turn: TurnResult = {
@@ -83,7 +86,7 @@ test('восстанавливает подтверждённый ход и пр
   apiServer.session({ ...session, state_version: 2, latest_turn: turn })
   render(<StoryPlayerPage sessionId="session-1" />)
   const sprite = await screen.findByRole('img', { name: 'Аканэ: С веером' })
-  expect(sprite).toHaveStyle({ aspectRatio: '1 / 3', backgroundSize: '600% 100%' })
+  expect(sprite).toHaveAttribute('src', '/fan.png')
   expect(screen.getByRole('banner')).not.toHaveTextContent('gemma4-local:32k')
   expect(screen.getByText('Дождь стихает.')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Уточнить' })).not.toBeInTheDocument()

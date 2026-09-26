@@ -15,7 +15,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
         ("Для Аканэ используй pose: default или fan_open, outfit: red_dress. " if "akane" in npc_ids else "")
         + (
             "Для Марка используй pose: default, outfit: dark_coat; "
-            "emotion: neutral, happy, sad, angry или surprised. "
+            "emotion: neutral, happy, sad, angry, surprised, determined, fear, villain или lust. "
             if "mark" in npc_ids
             else ""
         )
@@ -57,6 +57,10 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "mode: sprite_scene. "
             "Для visual_directive.background выбирай neon_crossroads для улицы или signal_archive для архива сигнала. "
             "Меняй фон только когда повествование действительно перемещается в эту локацию. "
+            "В visual_directive.present_character_ids перечисли ID всех NPC, физически присутствующих "
+            "в текущей сцене, включая молчащих; не включай героя игрока. "
+            "Сохраняй присутствующих из предыдущего хода, пока они не ушли; при смене локации "
+            "переоцени состав. Все говорящие NPC обязательно должны входить в этот список. "
             "Предложи 2–4 содержательных, непустых и разных выбора. "
             "Верни segments в порядке сцены, чередуя narration и dialogue управляемых NPC. "
             "У каждой dialogue укажи character_id; в narration его не указывай. "

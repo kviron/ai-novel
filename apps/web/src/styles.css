@@ -70,8 +70,14 @@ button, input, textarea { font: inherit; }
 .rain { position: absolute; inset: 0; background: repeating-linear-gradient(105deg, transparent 0 18px, #b8cae514 19px, #b8cae514 20px); }
 .scene-background { position: absolute; inset: 0; background-position: center; background-size: cover; }
 .scene-background::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 38%, #070a12a8); }
-.character-sprite { position: absolute; z-index: 1; left: 50%; bottom: var(--sprite-bottom); transform: translateX(-50%); height: var(--sprite-height); width: auto; background-repeat: no-repeat; filter: drop-shadow(0 8px 30px #000c); pointer-events: none; }
-.character-portrait { position: absolute; z-index: 1; left: 50%; bottom: 5%; transform: translateX(-50%); width: min(74vw, 560px); aspect-ratio: 1; object-fit: cover; object-position: center top; mask-image: radial-gradient(ellipse 90% 95% at 50% 38%, #000 52%, transparent 100%); pointer-events: none; }
+.character-cast { position: absolute; z-index: 1; inset: 0; display: flex; justify-content: center; align-items: stretch; pointer-events: none; overflow: hidden; }
+.character-cast-slot { position: relative; flex: 0 0 min(82vw, 760px); height: 100%; min-width: 0; overflow: visible; }
+.character-cast[data-cast-size="2"] .character-cast-slot { flex-basis: min(40vw, 660px); }
+.character-cast[data-cast-size="3"] .character-cast-slot { flex-basis: min(30vw, 500px); }
+.character-sprite { position: absolute; left: 50%; bottom: var(--sprite-bottom); transform: translateX(-50%); height: var(--sprite-height); max-width: 100%; width: auto; background-repeat: no-repeat; filter: drop-shadow(0 8px 30px #000c); pointer-events: none; }
+.character-fullbody { position: absolute; left: 50%; bottom: var(--sprite-bottom); transform: translateX(-50%); height: var(--sprite-height); max-width: none; width: auto; object-fit: contain; filter: drop-shadow(0 8px 30px #000c); pointer-events: none; }
+.character-portrait { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); width: min(74vw, 560px); max-width: 100%; aspect-ratio: 1; object-fit: cover; object-position: center top; mask-image: radial-gradient(ellipse 90% 95% at 50% 38%, #000 52%, transparent 100%); pointer-events: none; }
+@media (max-width: 640px) { .character-cast[data-cast-size="2"] .character-cast-slot { flex-basis: 46vw; } .character-cast[data-cast-size="3"] .character-cast-slot { flex-basis: 31vw; } }
 .dialogue { position: relative; z-index: 2; width: min(860px, calc(100% - 56px)); margin: 190px auto 20px; padding: 22px 22px 12px; background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--border); border-radius: var(--radius); backdrop-filter: blur(16px); overflow-wrap: anywhere; box-shadow: 0 16px 50px #0008; }
 .player-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; font-size: .75rem; color: var(--muted-foreground); }
 .player-status p { margin: 0; }

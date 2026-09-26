@@ -233,6 +233,13 @@ def _turn_result(session: Session, turn: Turn) -> TurnResult:
             # Very early databases permitted stories without character rows.
             # Keep those saved turns replayable with an explicit legacy sentinel.
             directive["character_id"] = "legacy"
+    # Historical turns stored only the active sprite. Keep replay read-only.
+    if "present_character_ids" not in directive:
+        saved_segments = json.loads(turn.segments) if turn.segments else []
+        directive["present_character_ids"] = list(dict.fromkeys(
+            part["character_id"] for part in saved_segments
+            if part.get("kind") == "dialogue" and part.get("character_id")
+        )) or [directive["character_id"]]
     return TurnResult(
         id=turn.id,
         session_id=turn.session_id,

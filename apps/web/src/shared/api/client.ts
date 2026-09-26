@@ -127,7 +127,7 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     reviseCharacter(characterId: string, body: CharacterWrite) {
       return request<CatalogCharacter>(`/api/characters/${encodeURIComponent(characterId)}/revisions`, { baseUrl, method: 'POST', body })
     },
-    async uploadCharacterMaterial(characterId: string, kind: 'avatar' | 'cover', file: File, metadata: { creator: string; license: string; source: string }) {
+    async uploadCharacterMaterial(characterId: string, kind: 'avatar' | 'cover' | `sprite:${string}:${string}`, file: File, metadata: { creator: string; license: string; source: string }) {
       const query = new URLSearchParams({ filename: file.name, ...metadata })
       const response = await fileRequest(`/api/characters/${encodeURIComponent(characterId)}/${kind}?${query}`, baseUrl, {
         method: 'POST', headers: { 'Content-Type': file.type }, body: file,

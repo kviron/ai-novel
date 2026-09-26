@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.characters.schemas import SpriteVariant
 from app.modules.providers.contracts import SceneSegment
 
 
@@ -81,6 +82,8 @@ class CharacterDetail(BaseModel):
     role: str
     color: str = "#D9A75F"
     visual_profile_version: int
+    sprite_contract_version: int = 1
+    sprites: dict[str, list[SpriteVariant]] = Field(default_factory=dict)
 
 
 class FixedHeroDetail(CharacterDetail):
@@ -126,7 +129,7 @@ class TurnDetail(BaseModel):
     dialogue: str
     segments: list[SceneSegment]
     choices: list[str]
-    visual_directive: dict[str, str]
+    visual_directive: dict[str, str | list[str]]
 
 
 class SessionDetail(BaseModel):

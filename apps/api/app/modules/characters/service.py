@@ -19,6 +19,7 @@ from .schemas import (
     LinkedStory,
     MaterialProfile,
     RevisionProfile,
+    SpriteVariant,
     StoryCharacterProfile,
 )
 
@@ -55,16 +56,27 @@ def _material_profile(material: CharacterMaterial | None) -> MaterialProfile | N
             key: getattr(material, key)
             for key in ("id", "kind", "sha256", "mime_type", "filename", "creator", "license", "source")
         },
-        url=f"/api/character-materials/{material.id}",
+        url=f"/api/character-materials/{material.id}?v={material.sha256[:12]}",
     )
 
 
 def _revision_profile(session: Session, revision: CharacterRevision) -> RevisionProfile:
+    sprites: dict[str, list[SpriteVariant]] = {}
+    for material in repository.materials_for_revision(session, revision.id):
+        if not material.kind.startswith("sprite:"):
+            continue
+        _, emotion, variant = material.kind.split(":", 2)
+        sprites.setdefault(emotion, []).append(
+            SpriteVariant(variant=variant, material=_material_profile(material))
+        )
     return RevisionProfile.model_validate(
         {
-            **RevisionProfile.model_validate(revision, from_attributes=True).model_dump(exclude={"avatar", "cover"}),
+            **RevisionProfile.model_validate(revision, from_attributes=True).model_dump(
+                exclude={"avatar", "cover", "sprites"}
+            ),
             "avatar": _material_profile(repository.material_for_revision(session, revision.id)),
             "cover": _material_profile(repository.material_for_revision(session, revision.id, "cover")),
+            "sprites": sprites,
         }
     )
 
