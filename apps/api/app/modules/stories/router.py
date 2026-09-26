@@ -23,6 +23,7 @@ from .protagonist import HeroSelectionError, save_protagonist_to_catalog
 from .service import (
     SessionNotFoundError,
     StoryNotFoundError,
+    StoryNotPublishedError,
     get_story,
     get_story_setup,
     list_autosaves,
@@ -77,6 +78,12 @@ def create_story_session(
         return start_story_session(session, story_id, payload, settings.ollama_model, registry)
     except StoryNotFoundError as error:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "История не найдена.") from error
+    except StoryNotPublishedError as error:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "story_not_published",
+            "Сначала опубликуйте версию новеллы.",
+        ) from error
     except HeroSelectionError as error:
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

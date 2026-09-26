@@ -1,12 +1,11 @@
 """Resolve one player-controlled identity without exposing it as an AI NPC."""
 
-import json
-
 from sqlmodel import Session
 
-from app.db.models import Character, CharacterRevision, ProtagonistExport, SessionProtagonist, Story, StoryCharacter
+from app.db.models import Character, CharacterRevision, ProtagonistExport, SessionProtagonist
 from app.modules.characters.schemas import CharacterProfile, CharacterWrite
 from app.modules.characters.service import current_character_profile, stage_character
+from app.modules.story_authoring.runtime import RuntimeStoryDefinition
 
 from .schemas import (
     CatalogHeroChoice,
@@ -23,30 +22,10 @@ class HeroSelectionError(Exception):
     pass
 
 
-def _allowed_sources(story: Story) -> list[str]:
-    try:
-        sources = json.loads(story.hero_allowed_sources)
-    except (TypeError, ValueError) as error:
-        raise HeroSelectionError("invalid_hero_policy") from error
-    if not isinstance(sources, list) or any(item not in {"catalog", "draft"} for item in sources):
-        raise HeroSelectionError("invalid_hero_policy")
-    return sources
-
-
-def _playable_ids(story: Story) -> set[str]:
-    try:
-        ids = json.loads(story.playable_character_ids)
-    except (TypeError, ValueError) as error:
-        raise HeroSelectionError("invalid_playable_characters") from error
-    if not isinstance(ids, list) or any(not isinstance(item, str) for item in ids):
-        raise HeroSelectionError("invalid_playable_characters")
-    return set(ids)
-
-
-def story_setup(session: Session, story: Story) -> StorySetup:
+def story_setup(session: Session, story: RuntimeStoryDefinition) -> StorySetup:
     fixed_hero = None
     if story.hero_policy == "fixed":
-        revision = session.get(CharacterRevision, story.fixed_hero_revision_id)
+        revision = story.revision(story.fixed_hero_revision_id)
         if revision is None:
             raise HeroSelectionError("fixed_hero_missing")
         fixed_hero = FixedHeroDetail(
@@ -63,17 +42,17 @@ def story_setup(session: Session, story: Story) -> StorySetup:
     if story.hero_policy not in {"choice", "fixed"}:
         raise HeroSelectionError("invalid_hero_policy")
     return StorySetup(
-        story_id=story.id,
+        story_id=story.story_id,
         policy=story.hero_policy,
-        policy_version=story.hero_policy_version,
-        allowed_sources=_allowed_sources(story) if story.hero_policy == "choice" else [],
-        playable_character_ids=sorted(_playable_ids(story)),
+        policy_version=story.version_number,
+        allowed_sources=story.hero_allowed_sources if story.hero_policy == "choice" else [],
+        playable_character_ids=sorted(item.character_id for item in story.cast if item.playable),
         fixed_hero=fixed_hero,
     )
 
 
 def resolve_protagonist(
-    session: Session, story: Story, choice: HeroChoice | None, session_id: str
+    session: Session, story: RuntimeStoryDefinition, choice: HeroChoice | None, session_id: str
 ) -> SessionProtagonist:
     """Validate policy and stage a stable hero snapshot; caller owns commit."""
     setup = story_setup(session, story)
@@ -92,7 +71,7 @@ def resolve_protagonist(
         protagonist = SessionProtagonist(
             session_id=session_id,
             source_kind="draft",
-            policy_version=story.hero_policy_version,
+            policy_version=story.version_number,
             name=choice.name,
             address=choice.address or choice.name,
             gender=choice.gender,
@@ -114,21 +93,23 @@ def resolve_protagonist(
             source_kind = "catalog"
         else:
             raise HeroSelectionError("invalid_hero_choice")
-        revision = session.get(CharacterRevision, revision_id)
+        revision = (
+            story.revision(revision_id) if source_kind == "fixed" else session.get(CharacterRevision, revision_id)
+        )
         if revision is None or (expected_character_id and revision.character_id != expected_character_id):
             raise HeroSelectionError("hero_revision_missing")
         character = session.get(Character, revision.character_id)
         if character is None:
             raise HeroSelectionError("hero_character_missing")
-        cast_link = session.get(StoryCharacter, (story.id, character.id))
-        if source_kind == "catalog" and cast_link is not None and character.id not in _playable_ids(story):
+        cast_link = next((item for item in story.cast if item.character_id == character.id), None)
+        if source_kind == "catalog" and cast_link is not None and not cast_link.playable:
             raise HeroSelectionError("cast_member_not_playable")
         protagonist = SessionProtagonist(
             session_id=session_id,
             source_kind=source_kind,
             source_character_id=character.id,
             source_revision_id=revision.id,
-            policy_version=story.hero_policy_version,
+            policy_version=story.version_number,
             name=revision.name,
             address=revision.name.split()[0],
             gender=revision.gender,

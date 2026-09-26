@@ -31,6 +31,21 @@ def session_count(client) -> int:
         return database.execute("SELECT COUNT(*) FROM story_sessions").fetchone()[0]
 
 
+def save_draft_section(client, draft, section, data):
+    response = client.put(
+        f"/api/author/stories/{draft['story_id']}/draft/{section}",
+        json={"expected_revision": draft["draft_revision"], "data": data},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def publish_story_version(client, draft):
+    response = client.post(f"/api/author/stories/{draft['story_id']}/publish")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_replaying_migrated_legacy_request_returns_its_original_turn(tmp_path):
     database_path = tmp_path / "legacy-replay.db"
     create_v01_database(database_path, story_id="legacy-story", turn_id="legacy-turn")
@@ -81,6 +96,118 @@ def test_seeded_akane_story_can_start_and_restore(client):
         saved = session.get(StorySession, game["id"])
         assert saved.story_version_id == f"{akane['id']}:v1"
         assert saved.draft_snapshot_id is None
+
+
+def test_player_sessions_pin_published_identity_scene_and_cast(client):
+    catalog = client.get("/api/characters").json()
+    akane = next(item for item in catalog if item["id"] == "akane")
+    mark = next(item for item in catalog if item["id"] == "mark")
+    draft = client.post("/api/author/stories", json={}).json()
+    draft = save_draft_section(
+        client,
+        draft,
+        "identity",
+        {
+            "title": "Версия один",
+            "slug": "runtime-pinning",
+            "short_description": "Первая редакция",
+            "premise": "Первая предпосылка",
+            "setting": "Город",
+            "opening_situation": "Первая сцена",
+        },
+    )
+    draft = save_draft_section(
+        client,
+        draft,
+        "cast",
+        {
+            "characters": [
+                {
+                    "id": "v1-akane",
+                    "character_id": akane["id"],
+                    "revision_id": akane["current_revision_id"],
+                    "order_index": 0,
+                    "role": "ally",
+                    "color": "#AA0000",
+                }
+            ]
+        },
+    )
+    version_one = publish_story_version(client, draft)
+    old_game = client.post(f"/api/stories/{draft['story_id']}/sessions", json={})
+    assert old_game.status_code == 201, old_game.text
+
+    draft = client.post(f"/api/author/stories/{draft['story_id']}/draft-from/{version_one['version_id']}").json()
+    draft = save_draft_section(
+        client,
+        draft,
+        "identity",
+        {
+            "title": "Версия два",
+            "slug": "runtime-pinning",
+            "short_description": "Вторая редакция",
+            "premise": "Вторая предпосылка",
+            "setting": "Порт",
+            "opening_situation": "Вторая сцена",
+        },
+    )
+    draft = save_draft_section(
+        client,
+        draft,
+        "cast",
+        {
+            "characters": [
+                {
+                    "id": "v2-mark",
+                    "character_id": mark["id"],
+                    "revision_id": mark["current_revision_id"],
+                    "order_index": 0,
+                    "role": "rival",
+                    "color": "#00AA00",
+                }
+            ]
+        },
+    )
+    version_two = publish_story_version(client, draft)
+    new_game = client.post(f"/api/stories/{draft['story_id']}/sessions", json={})
+    assert new_game.status_code == 201, new_game.text
+
+    restored_old = client.get(f"/api/sessions/{old_game.json()['id']}").json()
+    assert restored_old["story"]["current_published_version_id"] == version_one["version_id"]
+    assert (restored_old["story"]["title"], restored_old["story"]["premise"]) == (
+        "Версия один",
+        "Первая предпосылка",
+    )
+    assert restored_old["current_scene"] == "Первая сцена"
+    assert [(item["id"], item["role"], item["color"]) for item in restored_old["characters"]] == [
+        ("akane", "ally", "#AA0000")
+    ]
+    assert new_game.json()["story"]["current_published_version_id"] == version_two["version_id"]
+    assert (new_game.json()["story"]["title"], new_game.json()["story"]["premise"]) == (
+        "Версия два",
+        "Вторая предпосылка",
+    )
+    assert new_game.json()["current_scene"] == "Вторая сцена"
+    assert [item["id"] for item in new_game.json()["characters"]] == ["mark"]
+
+
+def test_unpublished_story_is_hidden_from_player_catalog_and_cannot_start(client):
+    draft = client.post("/api/author/stories", json={"title": "Черновик"}).json()
+
+    catalog = client.get("/api/stories").json()
+    response = client.post(f"/api/stories/{draft['story_id']}/sessions", json={})
+
+    assert draft["story_id"] not in {item["id"] for item in catalog}
+    assert response.status_code == 422
+    assert response.json()["code"] == "story_not_published"
+    assert session_count(client) == 0
+
+
+def test_player_catalog_uses_canonical_mode_and_exposes_published_version(client):
+    story = akane_story(client)
+
+    assert story["story_mode"] == "hybrid"
+    assert story["current_published_version_id"] == f"{story['id']}:v1"
 
 
 def test_seeded_story_contains_distinct_female_and_male_profiles(client):

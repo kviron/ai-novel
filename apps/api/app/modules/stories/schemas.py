@@ -62,12 +62,13 @@ class ProtagonistDetail(BaseModel):
 
 class StorySummary(BaseModel):
     id: str
+    current_published_version_id: str
     slug: str
     title: str
     premise: str
     description: str
     cover_image_url: str | None
-    story_mode: Literal["hybrid", "free"]
+    story_mode: Literal["hybrid", "freeform"]
     recommended_provider_id: str
     recommended_model_id: str
 
