@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 from app.db.models import (
     Autosave,
     Character,
+    SessionBeat,
     SessionCharacter,
     SessionProtagonist,
     Story,
@@ -22,6 +23,7 @@ from app.db.models import (
     StorySession,
     StoryVersion,
 )
+from app.modules.providers.contracts import TurnProposal
 from app.modules.story_authoring.sessions import snapshot_aware_session_detail
 
 
@@ -50,6 +52,74 @@ def _publishable(client):
     created = client.post("/api/author/stories", json={})
     assert created.status_code == 201, created.text
     return _save(client, created.json(), "identity", _identity())
+
+
+def _hybrid_preview_with_beat(client):
+    draft = _publishable(client)
+    with Session(client.app.state.engine) as session:
+        mark = session.get(Character, "mark")
+        revision_id = mark.current_revision_id
+    draft = _save(client, draft, "mode", {"mode": "hybrid"})
+    draft = _save(
+        client,
+        draft,
+        "cast",
+        {
+            "characters": [
+                {
+                    "id": "preview-mark",
+                    "character_id": "mark",
+                    "revision_id": revision_id,
+                    "order_index": 0,
+                    "role": "guide",
+                    "color": "#123456",
+                }
+            ]
+        },
+    )
+    draft = _save(
+        client,
+        draft,
+        "canon",
+        {
+            "creative_goals": "Explore",
+            "facts": [],
+            "beats": [
+                {
+                    "id": "snapshot-beat",
+                    "order_index": 0,
+                    "title": "Frozen",
+                    "description": "Complete frozen beat",
+                    "activation_condition": {"kind": "always"},
+                    "completion_evidence": "Done",
+                }
+            ],
+        },
+    )
+    game = client.post(f"/api/author/stories/{draft['story_id']}/test-sessions", json={})
+    assert game.status_code == 201, game.text
+    return draft, game.json()
+
+
+def _complete_snapshot_beat(client, fake_provider, game):
+    fake_provider.responses = [
+        TurnProposal.model_validate(
+            {
+                "segments": [{"kind": "dialogue", "character_id": "mark", "text": "Готово."}],
+                "visual_directive": {"emotion": "neutral", "pose": "default", "outfit": "dark_coat"},
+                "suggested_choices": ["Дальше", "Осмотреться"],
+                "proposed_effects": [],
+                "canon_assessments": [],
+                "completed_beat_ids": ["snapshot-beat"],
+            }
+        )
+    ]
+    response = client.post(
+        f"/api/sessions/{game['id']}/turns",
+        json={"request_id": "frozen-beat", "expected_state_version": 1, "action": "Завершить"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _image_bytes(mime_type, color="red"):
@@ -304,6 +374,40 @@ def test_author_session_pins_exact_canonical_snapshot_and_does_not_create_autosa
         assert session.get(SessionProtagonist, game["id"]) is not None
         assert session.exec(select(SessionCharacter).where(SessionCharacter.session_id == game["id"])).all() == []
         assert session.get(Autosave, draft["story_id"]) is None
+
+
+def test_frozen_author_session_can_complete_beat_removed_from_mutable_draft(client, fake_provider):
+    draft, game = _hybrid_preview_with_beat(client)
+    edited = _save(
+        client,
+        draft,
+        "canon",
+        {"creative_goals": "Changed", "facts": [], "beats": []},
+    )
+    turn = _complete_snapshot_beat(client, fake_provider, game)
+    with Session(client.app.state.engine) as session:
+        marker = session.get(SessionBeat, (game["id"], "snapshot-beat"))
+        snapshot = session.get(StoryDraftSnapshot, session.get(StorySession, game["id"]).draft_snapshot_id)
+    assert marker.completed_turn_id == turn["id"]
+    assert json.loads(snapshot.payload)["canon"]["beats"][0]["id"] == "snapshot-beat"
+    assert edited["canon"]["beats"] == []
+
+
+def test_completed_snapshot_beat_does_not_block_source_canon_edit(client, fake_provider):
+    draft, game = _hybrid_preview_with_beat(client)
+    _complete_snapshot_beat(client, fake_provider, game)
+    edited = _save(
+        client,
+        draft,
+        "canon",
+        {"creative_goals": "Changed", "facts": [], "beats": []},
+    )
+    with Session(client.app.state.engine) as session:
+        marker = session.get(SessionBeat, (game["id"], "snapshot-beat"))
+        snapshot = session.get(StoryDraftSnapshot, session.get(StorySession, game["id"]).draft_snapshot_id)
+    assert marker.status == "completed"
+    assert json.loads(snapshot.payload)["canon"]["beats"][0]["id"] == "snapshot-beat"
+    assert edited["canon"]["beats"] == []
 
 
 def test_runtime_covers_are_pinned_for_author_snapshot_and_published_versions(client):

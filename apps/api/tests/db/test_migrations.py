@@ -44,7 +44,7 @@ def test_upgrade_repairs_early_character_materials_schema(tmp_path):
         columns = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
         version = db.execute("SELECT version_num FROM alembic_version").fetchone()
     assert "origin_character_id" in columns
-    assert version == ("20260927_13",)
+    assert version == ("20260927_14",)
 
 
 def test_story_version_upgrade_preserves_occupied_database(tmp_path):
@@ -85,13 +85,11 @@ def test_story_version_upgrade_preserves_occupied_database(tmp_path):
         protagonist = db.execute(
             "SELECT source_kind, name, address FROM session_protagonists WHERE session_id=?", (session_id,)
         ).fetchone()
-        turn = db.execute(
-            "SELECT id, session_id, narration FROM turns WHERE id='legacy-turn'"
-        ).fetchone()
+        turn = db.execute("SELECT id, session_id, narration FROM turns WHERE id='legacy-turn'").fetchone()
         autosave = db.execute("SELECT story_id, session_id FROM autosaves").fetchone()
         broken_foreign_keys = db.execute("PRAGMA foreign_key_check").fetchall()
 
-    assert version == ("20260927_13",)
+    assert version == ("20260927_14",)
     assert published == ("legacy-story:v1", "legacy-story", 1, "published", "hybrid", 1)
     assert current == ("legacy-story:v1", "Legacy premise", "Arrival")
     assert version_content == ("Legacy premise", "Arrival", "choice", "ollama", "qwen3:14b-q4_K_M")
@@ -121,6 +119,28 @@ def test_story_versions_reject_two_drafts_for_one_story(tmp_path):
             )
 
 
+def test_session_beat_identity_is_snapshot_safe_and_downgrade_restores_old_foreign_key(tmp_path):
+    database_path = tmp_path / "beat-identity.db"
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    command.upgrade(config, "20260927_13")
+    with sqlite3.connect(database_path) as db:
+        assert any(row[2] == "story_beats" for row in db.execute("PRAGMA foreign_key_list(session_beats)"))
+
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as db:
+        foreign_tables = {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")}
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(session_beats)")}
+        assert "story_beats" not in foreign_tables
+        assert {"story_sessions", "turns"} <= foreign_tables
+        assert "ix_session_beats_session_status" in indexes
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_14",)
+
+    command.downgrade(config, "20260927_13")
+    with sqlite3.connect(database_path) as db:
+        assert any(row[2] == "story_beats" for row in db.execute("PRAGMA foreign_key_list(session_beats)"))
+
+
 def test_story_version_rejects_unknown_mode(tmp_path):
     database_path = tmp_path / "version-mode.db"
     create_pre_version_database(database_path)
@@ -148,9 +168,7 @@ def test_story_session_requires_exactly_one_version_source(tmp_path):
         with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
             db.execute("UPDATE story_sessions SET story_version_id=NULL WHERE id=?", (session_id,))
         with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-            db.execute(
-                "UPDATE story_sessions SET draft_snapshot_id='snapshot' WHERE id=?", (session_id,)
-            )
+            db.execute("UPDATE story_sessions SET draft_snapshot_id='snapshot' WHERE id=?", (session_id,))
 
 
 def test_protagonist_migration_preserves_existing_playthrough(tmp_path):
@@ -163,9 +181,7 @@ def test_protagonist_migration_preserves_existing_playthrough(tmp_path):
         story = db.execute(
             "SELECT hero_policy, hero_policy_version, playable_character_ids FROM stories WHERE id='legacy-story'"
         ).fetchone()
-        hero = db.execute(
-            "SELECT source_kind, name, address, gender FROM session_protagonists"
-        ).fetchone()
+        hero = db.execute("SELECT source_kind, name, address, gender FROM session_protagonists").fetchone()
         session_count = db.execute("SELECT COUNT(*) FROM story_sessions").fetchone()[0]
         turn_count = db.execute("SELECT COUNT(*) FROM turns WHERE id='legacy-turn'").fetchone()[0]
 

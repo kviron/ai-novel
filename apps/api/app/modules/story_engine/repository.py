@@ -64,12 +64,16 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
     )
     characters = stories.list_session_characters(session, session_id)
     turns: list[Turn] = []
+    active_turn_ids: set[str] = set()
     active_turn_count = 0
     turn_id = story_session.active_turn_id
     while turn_id is not None:
         turn = session.get(Turn, turn_id)
         if turn is None or turn.session_id != session_id:
             raise StateConflictError
+        if turn.id in active_turn_ids:
+            raise StateConflictError
+        active_turn_ids.add(turn.id)
         active_turn_count += 1
         if len(turns) < 8:
             turns.append(turn)
@@ -79,6 +83,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         for row in session.exec(
             select(SessionBeat).where(SessionBeat.session_id == session_id, SessionBeat.status == "completed")
         )
+        if row.completed_turn_id in active_turn_ids
     )
     available_beat_ids = frozenset(
         beat.id

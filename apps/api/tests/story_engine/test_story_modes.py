@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 from app.db.models import SessionBeat, StoryBeat, StorySession, Turn
 from app.modules.providers.contracts import TurnProposal
 from app.modules.story_authoring.runtime import RuntimeStoryDefinition
+from app.modules.story_engine import repository
 from app.modules.story_engine.contracts import TurnCreate
 from app.modules.story_engine.prompt import build_prompt
 from app.modules.story_engine.rules import GenerationContext, InvalidProposalError, validate_proposal
@@ -180,14 +181,14 @@ def _game_proposal(*, completed_beat_ids):
     )
 
 
-def _install_beat(client, game, *, beat_id="test-beat", condition='{"kind":"always"}'):
+def _install_beat(client, game, *, beat_id="test-beat", condition='{"kind":"always"}', order_index=0):
     with Session(client.app.state.engine) as db:
         persisted = db.get(StorySession, game.id)
         db.add(
             StoryBeat(
                 id=beat_id,
                 version_id=persisted.story_version_id,
-                order_index=0,
+                order_index=order_index,
                 title="Ключ",
                 description="Найти ключ",
                 activation_condition=condition,
@@ -228,3 +229,44 @@ def test_two_invalid_proposals_leave_turn_and_beats_unchanged(client, fake_provi
     with Session(client.app.state.engine) as db:
         assert list(db.exec(select(Turn).where(Turn.session_id == akane_session.id))) == []
         assert list(db.exec(select(SessionBeat).where(SessionBeat.session_id == akane_session.id))) == []
+
+
+def test_rewind_relocks_dependent_beats_and_alternate_branch_recompletion_moves_marker(
+    client, fake_provider, akane_session
+):
+    _install_beat(client, akane_session, beat_id="beat-a")
+    _install_beat(
+        client,
+        akane_session,
+        beat_id="beat-b",
+        condition='{"kind":"after_beat","beat_id":"beat-a"}',
+        order_index=1,
+    )
+    fake_provider.responses = [_game_proposal(completed_beat_ids=["beat-a"])]
+    first = client.post(
+        f"/api/sessions/{akane_session.id}/turns",
+        json={"request_id": "first-a", "expected_state_version": 1, "action": "Найти ключ"},
+    )
+    assert first.status_code == 201
+    rewound = client.post(
+        f"/api/sessions/{akane_session.id}/rewind",
+        json={"expected_state_version": 2},
+    )
+    assert rewound.status_code == 200
+    with Session(client.app.state.engine) as db:
+        branch = repository.load_context(db, akane_session.id, 3)
+    assert branch.completed_beat_ids == frozenset()
+    assert branch.available_beat_ids == frozenset({"beat-a"})
+
+    fake_provider.responses = [_game_proposal(completed_beat_ids=["beat-a"])]
+    alternate = client.post(
+        f"/api/sessions/{akane_session.id}/turns",
+        json={"request_id": "alternate-a", "expected_state_version": 3, "action": "Найти другой ключ"},
+    )
+    assert alternate.status_code == 201
+    with Session(client.app.state.engine) as db:
+        marker = db.get(SessionBeat, (akane_session.id, "beat-a"))
+        branch = repository.load_context(db, akane_session.id, 4)
+    assert marker.completed_turn_id == alternate.json()["id"]
+    assert branch.completed_beat_ids == frozenset({"beat-a"})
+    assert branch.available_beat_ids == frozenset({"beat-b"})

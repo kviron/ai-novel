@@ -316,8 +316,10 @@ class Autosave(SQLModel, table=True):
 
 class SessionBeat(SQLModel, table=True):
     __tablename__ = "session_beats"
+    __table_args__ = (Index("ix_session_beats_session_status", "session_id", "status"),)
 
     session_id: str = Field(foreign_key="story_sessions.id", primary_key=True)
-    beat_id: str = Field(foreign_key="story_beats.id", primary_key=True)
+    # This ID belongs to the session's immutable version/snapshot, not a mutable draft row.
+    beat_id: str = Field(primary_key=True)
     status: str = "locked"
     completed_turn_id: str | None = Field(default=None, foreign_key="turns.id")
