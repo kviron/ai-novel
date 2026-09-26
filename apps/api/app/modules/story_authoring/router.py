@@ -16,6 +16,7 @@ from app.modules.stories.protagonist import HeroSelectionError
 from app.modules.stories.schemas import SessionDetail
 from app.modules.story_authoring.cover import MAX_COVER_BYTES, InvalidCoverError, StoryCoverMaterial, save_story_cover
 from app.modules.story_authoring.definition import load_published_story_version, load_story_draft
+from app.modules.story_authoring.presentation import public_diagnostics, public_draft, public_validation
 from app.modules.story_authoring.schemas import (
     DraftValidationResult,
     StoryCanonSection,
@@ -80,10 +81,7 @@ def _author_errors(missing_code: str = "story_not_found"):
             latest_revision=error.latest_revision,
         ) from error
     except DraftInvalidError as error:
-        diagnostics = [
-            {**item.model_dump(), "field": f"{item.step}.{item.field}"}
-            for item in sorted(error.diagnostics, key=lambda item: item.severity != "error")
-        ]
+        diagnostics = [item.model_dump() for item in public_diagnostics(error.diagnostics)]
         raise ApiError(
             422, "draft_invalid", "Исправьте ошибки черновика перед продолжением.", diagnostics=diagnostics
         ) from error
@@ -102,7 +100,7 @@ def _author_errors(missing_code: str = "story_not_found"):
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=StoryDraft)
 def create_story(session: SessionDep, payload: StoryIdentitySection | None = None) -> StoryDraft:
     with _author_errors():
-        return create_story_draft(session, payload)
+        return public_draft(create_story_draft(session, payload))
 
 
 @router.get("/{story_id}/draft", response_model=StoryDraft, responses={404: {"model": ErrorResponse}})
@@ -112,7 +110,7 @@ def get_draft(story_id: str, session: SessionDep, registry: ProviderRegistryDep)
         draft.diagnostics = validate_story_draft(
             session, story_id, available_models=_available_models(registry)
         ).diagnostics
-        return draft
+        return public_draft(draft)
 
 
 @router.put(
@@ -133,7 +131,7 @@ def save_section(
             data = _SECTION_TYPES[section].model_validate(payload.data)
         except ValidationError as error:
             raise ApiError(422, "validation_error", "Проверьте поля раздела черновика.") from error
-        return replace_draft_section(
+        draft = replace_draft_section(
             session,
             story_id,
             section,
@@ -142,31 +140,26 @@ def save_section(
             confirm_mode_change=confirm_mode_change,
             available_models=_available_models(registry),
         )
+        return public_draft(draft)
 
 
 @router.post("/{story_id}/validate", response_model=DraftValidationResult)
 def validate_story(story_id: str, session: SessionDep, registry: ProviderRegistryDep) -> DraftValidationResult:
     with _author_errors():
         result = validate_story_draft(session, story_id, available_models=_available_models(registry))
-        return result.model_copy(
-            update={
-                "diagnostics": [
-                    item.model_copy(update={"field": f"{item.step}.{item.field}"}) for item in result.diagnostics
-                ]
-            }
-        )
+        return public_validation(result)
 
 
 @router.post("/{story_id}/publish", response_model=StoryDraft, responses={422: {"model": DraftInvalidResponse}})
 def publish_story(story_id: str, session: SessionDep, registry: ProviderRegistryDep) -> StoryDraft:
     with _author_errors():
-        return publish_draft(session, story_id, available_models=_available_models(registry))
+        return public_draft(publish_draft(session, story_id, available_models=_available_models(registry)))
 
 
 @router.post("/{story_id}/draft-from/{version_id}", status_code=status.HTTP_201_CREATED, response_model=StoryDraft)
 def clone_published_story(story_id: str, version_id: str, session: SessionDep) -> StoryDraft:
     with _author_errors("version_not_found"):
-        return create_draft_from_version(session, story_id, version_id)
+        return public_draft(create_draft_from_version(session, story_id, version_id))
 
 
 @router.post(

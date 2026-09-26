@@ -2,6 +2,9 @@
 
 import hashlib
 import json
+import re
+import struct
+import zlib
 from io import BytesIO
 
 import pytest
@@ -57,6 +60,14 @@ def _image_bytes(mime_type):
     return output.getvalue()
 
 
+def _forged_png(width: int, height: int) -> bytes:
+    """Keep a tiny valid PNG stream while advertising huge decoded dimensions."""
+    original = bytearray(_image_bytes("image/png"))
+    original[16:24] = struct.pack(">II", width, height)
+    original[29:33] = struct.pack(">I", zlib.crc32(original[12:29]))
+    return bytes(original)
+
+
 def test_create_get_save_validate_publish_clone_and_published_read_model(client):
     created = client.post("/api/author/stories", json={"title": "One"})
     assert created.status_code == 201
@@ -107,6 +118,39 @@ def test_stale_save_and_invalid_publish_have_structured_errors_and_preserve_poin
     with Session(client.app.state.engine) as session:
         assert session.get(Story, bad["story_id"]).current_published_version_id is None
         assert session.get(StoryVersion, bad["version_id"]).status == "draft"
+
+
+def test_diagnostics_have_identical_public_paths_and_russian_messages_across_endpoints(client):
+    created = client.post("/api/author/stories", json={}).json()
+    story_id = created["story_id"]
+    fetched = client.get(f"/api/author/stories/{story_id}/draft").json()
+    saved = _save(client, created, "identity", created["identity"])
+    validated = client.post(f"/api/author/stories/{story_id}/validate").json()
+    rejected = client.post(f"/api/author/stories/{story_id}/publish").json()
+    assert rejected["code"] == "draft_invalid"
+    for code in ("identity_title_required", "cover_missing"):
+        samples = [
+            next(item for item in body["diagnostics"] if item["code"] == code)
+            for body in (created, fetched, saved, validated, rejected)
+        ]
+        assert all(item == samples[0] for item in samples)
+        assert samples[0]["field"] == (
+            "identity.title" if code == "identity_title_required" else "identity.cover_material_id"
+        )
+        assert re.search("[А-Яа-я]", samples[0]["message"])
+
+
+def test_database_diagnostic_is_russian_with_same_public_path(client):
+    first = _publishable(client)
+    assert client.post(f"/api/author/stories/{first['story_id']}/publish").status_code == 200
+    second = _publishable(client)
+    validated = client.post(f"/api/author/stories/{second['story_id']}/validate").json()
+    rejected = client.post(f"/api/author/stories/{second['story_id']}/publish").json()
+    for response in (validated, rejected):
+        diagnostic = next(item for item in response["diagnostics"] if item["code"] == "identity_slug_duplicate")
+        assert diagnostic["field"] == "identity.slug"
+        assert re.search("[А-Яа-я]", diagnostic["message"])
+    assert validated["diagnostics"] == rejected["diagnostics"]
 
 
 def test_failed_republish_keeps_previous_published_pointer(client):
@@ -199,6 +243,22 @@ def test_cover_upload_rejects_mime_spoofing_size_and_missing_provenance(client):
         ).status_code
         == 422
     )
+
+
+@pytest.mark.parametrize("width,height", [(10_000, 10_000), (20_000, 20_000)])
+def test_cover_upload_rejects_tiny_png_with_decompression_bomb_dimensions(client, width, height):
+    draft = client.post("/api/author/stories", json={}).json()
+    content = _forged_png(width, height)
+    assert len(content) < 1_000
+    response = client.post(
+        f"/api/author/stories/{draft['story_id']}/draft/cover",
+        params={"filename": "forged.png", "creator": "Artist", "license": "own", "source": "manual"},
+        content=content,
+        headers={"content-type": "image/png"},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_material"
+    assert re.search("[А-Яа-я]", response.json()["detail"])
 
 
 def test_cover_material_from_another_story_cannot_be_attached(client):

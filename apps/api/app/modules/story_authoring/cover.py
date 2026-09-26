@@ -1,5 +1,6 @@
 """Immutable, content-addressed story cover materials."""
 
+import warnings
 from io import BytesIO
 from pathlib import Path
 
@@ -55,9 +56,11 @@ def save_story_cover(
     ):
         raise InvalidCoverError("Cover provenance is required; filename must be a name")
     try:
-        with Image.open(BytesIO(data)) as image:
-            image.verify()
-    except (UnidentifiedImageError, OSError) as error:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as image:
+                image.verify()
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, UnidentifiedImageError, OSError) as error:
         raise InvalidCoverError("Invalid cover image") from error
 
     digest = _save_blob(asset_dir, data, mime_type)
