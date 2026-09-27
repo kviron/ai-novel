@@ -17,7 +17,7 @@ export function ModeStep({ value, savedValue, hasIncompatibleCanon, saving, onCh
     <Card>
       <CardHeader><CardTitle>Режим истории</CardTitle><CardDescription>Выберите, насколько строго движок должен следовать авторскому маршруту.</CardDescription></CardHeader>
       <CardContent><FieldGroup>
-        <Field><FieldTitle id="story-mode-label">Режим</FieldTitle><ToggleGroup type="single" variant="outline" value={value.mode} onValueChange={(mode) => { if (mode) onChange({ mode: mode as StoryModeSection['mode'] }) }} aria-labelledby="story-mode-label">
+        <Field><FieldTitle id="story-mode-label">Режим</FieldTitle><ToggleGroup data-diagnostic-field="mode.mode" type="single" variant="outline" value={value.mode} onValueChange={(mode) => { if (mode) onChange({ mode: mode as StoryModeSection['mode'] }) }} aria-labelledby="story-mode-label">
           <ToggleGroupItem value="freeform" role="radio">Свободный</ToggleGroupItem><ToggleGroupItem value="hybrid" role="radio">Гибридный</ToggleGroupItem>
         </ToggleGroup></Field>
         <p>Свободный режим развивает историю без обязательного маршрута и заранее заданных ключевых событий.</p>

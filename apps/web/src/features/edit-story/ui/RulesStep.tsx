@@ -22,7 +22,9 @@ export function RulesStep({ value, saving, onChange, onSave }: Props) {
   const countError = policy.choice_policy !== 'free_input_only' && policy.min_choices > policy.max_choices
     ? 'Минимум не может быть больше максимума.' : ''
   const collision = value.themes_allowed.find((theme) => value.themes_blocked.some((blocked) => blocked.toLocaleLowerCase() === theme.toLocaleLowerCase()))
-  const boundsError = policy.choice_policy !== 'free_input_only' && (policy.min_choices < 1 || policy.max_choices > 8) ? 'Количество вариантов должно быть от 1 до 8.' : ''
+  const boundsError = policy.min_choices < 0 || policy.min_choices > 6 || policy.max_choices < 0 || policy.max_choices > 6
+    ? 'Количество вариантов должно быть от 0 до 6.'
+    : policy.choice_policy !== 'free_input_only' && policy.max_choices === 0 ? 'Для выбранного формата нужен хотя бы один вариант.' : ''
   const invalid = Boolean(countError || boundsError || collision)
   const updatePolicy = <K extends keyof typeof policy>(field: K, next: typeof policy[K]) => onChange({ ...value, generation_policy: { ...policy, [field]: next } })
   const submit = (event: FormEvent) => { event.preventDefault(); if (!invalid) void onSave() }
@@ -33,12 +35,12 @@ export function RulesStep({ value, saving, onChange, onSave }: Props) {
       <CardContent><FieldGroup>
         {collision && <Alert variant="destructive"><AlertDescription>Тема «{collision}» одновременно разрешена и запрещена.</AlertDescription></Alert>}
         <FieldSet><FieldLegend>Ответ игроку</FieldLegend>
-          <Field><FieldTitle id="choice-policy-label">Формат выбора</FieldTitle><ToggleGroup type="single" variant="outline" value={policy.choice_policy} onValueChange={(next) => { if (next) updatePolicy('choice_policy', next as typeof policy.choice_policy) }} aria-labelledby="choice-policy-label">
+          <Field><FieldTitle id="choice-policy-label">Формат выбора</FieldTitle><ToggleGroup data-diagnostic-field="rules.generation_policy" type="single" variant="outline" value={policy.choice_policy} onValueChange={(next) => { if (next) onChange({ ...value, generation_policy: { ...policy, choice_policy: next as typeof policy.choice_policy, min_choices: next === 'free_input_only' ? 0 : policy.max_choices === 0 ? 2 : policy.min_choices, max_choices: next === 'free_input_only' ? 0 : policy.max_choices === 0 ? 4 : policy.max_choices } }) }} aria-labelledby="choice-policy-label">
             <ToggleGroupItem value="choices_and_free_input">Варианты и свой ответ</ToggleGroupItem><ToggleGroupItem value="choices_only">Только варианты</ToggleGroupItem><ToggleGroupItem value="free_input_only">Только свой ответ</ToggleGroupItem>
           </ToggleGroup></Field>
           {policy.choice_policy !== 'free_input_only' && <div className="grid gap-3 sm:grid-cols-2">
-            <Field data-invalid={Boolean(countError || boundsError)}><FieldLabel htmlFor="rules-min-choices">Минимум вариантов</FieldLabel><Input id="rules-min-choices" data-diagnostic-field="rules.generation_policy.min_choices" type="number" min={1} max={8} value={policy.min_choices} aria-invalid={Boolean(countError || boundsError)} onChange={(event) => updatePolicy('min_choices', Number(event.target.value))} /></Field>
-            <Field data-invalid={Boolean(countError || boundsError)}><FieldLabel htmlFor="rules-max-choices">Максимум вариантов</FieldLabel><Input id="rules-max-choices" data-diagnostic-field="rules.generation_policy.max_choices" type="number" min={1} max={8} value={policy.max_choices} aria-invalid={Boolean(countError || boundsError)} onChange={(event) => updatePolicy('max_choices', Number(event.target.value))} /></Field>
+            <Field data-invalid={Boolean(countError || boundsError)}><FieldLabel htmlFor="rules-min-choices">Минимум вариантов</FieldLabel><Input id="rules-min-choices" data-diagnostic-field="rules.generation_policy.min_choices" type="number" min={0} max={6} value={policy.min_choices} aria-invalid={Boolean(countError || boundsError)} onChange={(event) => updatePolicy('min_choices', Number(event.target.value))} /></Field>
+            <Field data-invalid={Boolean(countError || boundsError)}><FieldLabel htmlFor="rules-max-choices">Максимум вариантов</FieldLabel><Input id="rules-max-choices" data-diagnostic-field="rules.generation_policy.max_choices" type="number" min={0} max={6} value={policy.max_choices} aria-invalid={Boolean(countError || boundsError)} onChange={(event) => updatePolicy('max_choices', Number(event.target.value))} /></Field>
             {(countError || boundsError) && <FieldError>{countError || boundsError}</FieldError>}
           </div>}
         </FieldSet>
@@ -48,8 +50,8 @@ export function RulesStep({ value, saving, onChange, onSave }: Props) {
         <FieldSet><FieldLegend>Допустимое содержание</FieldLegend>{([
           ['allow_romance', 'Романтика'], ['allow_violence', 'Насилие'], ['allow_horror', 'Ужас'], ['allow_sexual_themes', 'Сексуальные темы'],
         ] as const).map(([field, label]) => <Field key={field} orientation="horizontal"><FieldLabel htmlFor={`rules-${field}`}>{label}</FieldLabel><Switch id={`rules-${field}`} checked={policy[field]} onCheckedChange={(checked) => updatePolicy(field, checked)} /></Field>)}</FieldSet>
-        <Field><FieldLabel htmlFor="rules-allowed">Разрешённые темы</FieldLabel><Input id="rules-allowed" value={allowedText} onChange={(event) => { setAllowedText(event.target.value); onChange({ ...value, themes_allowed: splitThemes(event.target.value) }) }} /><FieldDescription>Через запятую.</FieldDescription></Field>
-        <Field><FieldLabel htmlFor="rules-blocked">Запрещённые темы</FieldLabel><Input id="rules-blocked" value={blockedText} onChange={(event) => { setBlockedText(event.target.value); onChange({ ...value, themes_blocked: splitThemes(event.target.value) }) }} /></Field>
+        <Field><FieldLabel htmlFor="rules-allowed">Разрешённые темы</FieldLabel><Input id="rules-allowed" data-diagnostic-field="rules.themes_allowed" value={allowedText} onChange={(event) => { setAllowedText(event.target.value); onChange({ ...value, themes_allowed: splitThemes(event.target.value) }) }} /><FieldDescription>Через запятую.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor="rules-blocked">Запрещённые темы</FieldLabel><Input id="rules-blocked" data-diagnostic-field="rules.themes_blocked" value={blockedText} onChange={(event) => { setBlockedText(event.target.value); onChange({ ...value, themes_blocked: splitThemes(event.target.value) }) }} /></Field>
         <Field><FieldLabel htmlFor="rules-desired">Желаемые мотивы</FieldLabel><Textarea id="rules-desired" value={policy.desired_themes} onChange={(event) => updatePolicy('desired_themes', event.target.value)} /></Field>
         <Field><FieldLabel htmlFor="rules-forbidden">Запрещённые исходы</FieldLabel><Textarea id="rules-forbidden" value={policy.forbidden_outcomes} onChange={(event) => updatePolicy('forbidden_outcomes', event.target.value)} /></Field>
         <Field><FieldLabel htmlFor="rules-provider">Рекомендуемый провайдер</FieldLabel><Input id="rules-provider" data-diagnostic-field="rules.recommended_provider_id" value={value.recommended_provider_id} onChange={(event) => onChange({ ...value, recommended_provider_id: event.target.value })} /></Field>

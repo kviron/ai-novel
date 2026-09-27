@@ -8,6 +8,7 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Skeleton } from '@/shared/ui/skeleton'
 import { useStoryDraft } from '../model/useStoryDraft'
+import { focusDraftDiagnostic } from '../model/diagnosticFocus'
 import { CastStep } from './CastStep'
 import { HeroStep } from './HeroStep'
 import { IdentityStep } from './IdentityStep'
@@ -50,8 +51,19 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
   if (editor.phase === 'loading' && !editor.draft) return <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6" aria-busy="true"><h1>Редактор новеллы</h1><p role="status">Загружаем черновик…</p><Skeleton className="h-40 w-full" /></main>
   if (!editor.draft || !editor.localSection) return <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6"><h1>Редактор новеллы</h1><Alert variant="destructive"><AlertTitle>Не удалось открыть черновик</AlertTitle><AlertDescription>{editor.error || 'История или версия не найдена.'}</AlertDescription></Alert><Button type="button" onClick={() => void editor.reloadAfterConflict()}>Повторить</Button></main>
 
+  const currentDraft = editor.draft
   const diagnostics = editor.diagnosticsFor(editor.activeStep)
   const common = { saving: editor.phase === 'saving', onSave: editor.saveSection }
+  const pinnedCanonCharacterIds = new Set([
+    ...(currentDraft.hero.fixed_hero_revision_id
+      ? currentDraft.character_revisions.filter(({ id }) => id === currentDraft.hero.fixed_hero_revision_id).map(({ character_id }) => character_id)
+      : []),
+    ...currentDraft.cast.characters.map(({ character_id }) => character_id),
+  ])
+  const canonCharacters = [...pinnedCanonCharacterIds].map((character_id) => ({
+    character_id,
+    name: currentDraft.character_revisions.find((revision) => revision.character_id === character_id)?.name ?? character_id,
+  }))
   const selectStep = (step: EditorStep) => {
     if (editor.dirtyStep) return
     setViewStep(step)
@@ -94,12 +106,7 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
   const focusDiagnostic = (diagnostic: DraftDiagnostic) => {
     const step = diagnostic.step === 'review' ? 'review' : diagnostic.step
     selectStep(step)
-    window.setTimeout(() => {
-      const item = diagnostic.item_id ? document.querySelector(`[data-item-id="${CSS.escape(diagnostic.item_id)}"]`) ?? document : document
-      const target = item.querySelector<HTMLElement>(`[data-diagnostic-field="${CSS.escape(diagnostic.field)}"]`)
-        ?? item.querySelector<HTMLElement>(`[id$="-${diagnostic.field.split('.').at(-1)}"]`)
-      target?.focus()
-    })
+    window.setTimeout(() => focusDraftDiagnostic(diagnostic))
   }
   return <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-6">
     <header className="flex flex-wrap items-start justify-between gap-3"><div><Badge variant={editor.draft.status === 'published' ? 'default' : 'secondary'}>{editor.draft.status === 'published' ? `Опубликовано · версия ${editor.draft.version_number}` : `Черновик · v${editor.draft.draft_revision}`}</Badge><h1>{editor.draft.identity.title || 'Новая новелла'}</h1><p className="text-muted-foreground">Пошаговая настройка свободной или гибридной истории.</p></div></header>
@@ -113,7 +120,7 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
     {viewStep === 'hero' && <HeroStep value={editor.localSection as StoryDraft['hero']} revisions={editor.draft.character_revisions} characters={characters} catalogError={catalogError} onRetryCatalog={retryCatalog} onChange={editor.setLocalSection} {...common} />}
     {viewStep === 'cast' && <CastStep value={editor.localSection as StoryDraft['cast']} fixedHeroRevisionId={editor.draft.hero.fixed_hero_revision_id} revisions={editor.draft.character_revisions} characters={characters} catalogError={catalogError} onRetryCatalog={retryCatalog} onChange={editor.setLocalSection} {...common} />}
     {viewStep === 'rules' && <RulesStep value={editor.localSection as StoryDraft['rules']} onChange={editor.setLocalSection} {...common} />}
-    {viewStep === 'canon' && <CanonStep mode={editor.draft.mode.mode} value={editor.localSection as StoryDraft['canon']} onChange={editor.setLocalSection} {...common} />}
+    {viewStep === 'canon' && <CanonStep mode={editor.draft.mode.mode} characters={canonCharacters} value={editor.localSection as StoryDraft['canon']} onChange={editor.setLocalSection} {...common} />}
     {viewStep === 'review' && <ReviewStep draft={editor.draft} diagnostics={reviewDiagnostics} busy={actionBusy} actionError={actionError} onValidate={async () => { await validate() }} onTest={async () => { await runValidated('test') }} onPublish={async () => { await runValidated('publish') }} onClone={clone} onDiagnostic={focusDiagnostic} />}
   </main>
 }
