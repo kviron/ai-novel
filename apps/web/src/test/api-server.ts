@@ -56,6 +56,7 @@ let activeStoryDrafts = new Map<string, StoryDraft>()
 let publishedStoryVersions = new Map<string, Map<string, StoryDraft>>()
 let nextStoryNumber = 1
 let failNextDraftCreation = false
+let failNextSectionSave = false
 let authoringRequestLog: { method: string; path: string; body: unknown }[] = []
 let lastSectionRequest: { storyId: string; section: string; expected_revision: number; data: unknown } | null = null
 let nextDraftDiagnostics: DraftDiagnostic[] = []
@@ -150,6 +151,10 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       const section = sectionMatch[2] as keyof Pick<StoryDraft, 'identity' | 'mode' | 'hero' | 'cast' | 'rules' | 'canon'>
       const request = body as { expected_revision: number; data: StoryDraft[typeof section] }
       lastSectionRequest = { storyId, section, expected_revision: request.expected_revision, data: request.data }
+      if (failNextSectionSave) {
+        failNextSectionSave = false
+        return json({ code: 'temporarily_unavailable', detail: 'Не удалось сохранить раздел. Повторите попытку.', retryable: true }, 503)
+      }
       const draft = activeStoryDrafts.get(storyId)
       if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
       if (request.expected_revision !== draft.draft_revision) {
@@ -449,6 +454,7 @@ export const apiServer = {
   },
   draftDiagnostics(value: DraftDiagnostic[]) { nextDraftDiagnostics = value },
   failDraftCreationOnce() { failNextDraftCreation = true },
+  failSectionSaveOnce() { failNextSectionSave = true },
   authoringRequests() { return authoringRequestLog },
   lastAuthoringSectionRequest() { return lastSectionRequest },
   lastCoverUploadRequest() { return lastCoverUpload },
@@ -476,6 +482,7 @@ export const apiServer = {
     publishedStoryVersions = new Map()
     nextStoryNumber = 1
     failNextDraftCreation = false
+    failNextSectionSave = false
     authoringRequestLog = []
     lastSectionRequest = null
     nextDraftDiagnostics = []

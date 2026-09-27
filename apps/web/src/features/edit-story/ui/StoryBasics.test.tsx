@@ -1,10 +1,9 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test } from 'vitest'
-
 import type { CatalogCharacter } from '@/shared/api'
 import { apiServer } from '@/test/api-server'
-import { TestRouter } from '@/test/TestRouter'
+import { TestRouter, type TestRouterInstance } from '@/test/TestRouter'
 
 const akane: CatalogCharacter = {
   id: 'akane-r3', character_id: 'akane', current_revision_id: 'akane-r3', revision_number: 3,
@@ -37,6 +36,31 @@ test('сохраняет идентичность целой секцией и �
     data: expect.objectContaining({ title: 'Ночной город', short_description: 'История под дождём', cover_material_id: 'cover-1' }),
   }))
   expect(apiServer.lastCoverUploadRequest()).toMatchObject({ creator: 'Рома', license: 'CC BY', source: 'original' })
+
+  await userEvent.type(screen.getByRole('textbox', { name: 'Название' }), ' — продолжение')
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить раздел' }))
+  await waitFor(() => expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'PUT' && path.endsWith('/draft/identity'))).toHaveLength(2))
+  expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'POST' && path.endsWith('/draft/cover'))).toHaveLength(1)
+  expect(apiServer.lastAuthoringSectionRequest()).toMatchObject({ data: expect.objectContaining({ cover_material_id: 'cover-1' }) })
+})
+
+test('после ошибки PUT повторяет сохранение с уже загруженной обложкой без повторного POST файла', async () => {
+  apiServer.storyDraft({ story_id: 'story-1' })
+  apiServer.failSectionSaveOnce()
+  render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
+  const file = new File(['png bytes'], 'cover.png', { type: 'image/png' })
+  await userEvent.upload(await screen.findByLabelText('Файл обложки'), file)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Автор обложки' }), 'Рома')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Лицензия обложки' }), 'CC BY')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Источник обложки' }), 'original')
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить раздел' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось сохранить раздел')
+  expect(apiServer.lastAuthoringSectionRequest()).toMatchObject({ data: expect.objectContaining({ cover_material_id: 'cover-1' }) })
+
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить раздел' }))
+  await waitFor(() => expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'PUT' && path.endsWith('/draft/identity'))).toHaveLength(2))
+  expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'POST' && path.endsWith('/draft/cover'))).toHaveLength(1)
+  expect(apiServer.lastAuthoringSectionRequest()).toMatchObject({ data: expect.objectContaining({ cover_material_id: 'cover-1' }) })
 })
 
 test('объясняет режимы и сохраняет выбранный гибридный режим', async () => {
@@ -124,4 +148,21 @@ test('предупреждает браузер о несохранённых и
   render(<TestRouter initialEntries={['/studio/stories/missing/edit']} />)
   expect(await screen.findByRole('alert')).toHaveTextContent('История или версия не найдена')
   expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
+})
+
+test('блокирует переход назад в истории и позволяет остаться или продолжить', async () => {
+  apiServer.storyDraft({ story_id: 'story-1' })
+  let router: TestRouterInstance | undefined
+  render(<TestRouter initialEntries={['/', '/studio/stories/story-1/edit']} initialIndex={1} onRouter={(value) => { router = value }} />)
+  await userEvent.type(await screen.findByRole('textbox', { name: 'Название' }), 'Несохранённый текст')
+
+  await router!.navigate(-1)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Есть несохранённые изменения')
+  expect(router!.state.location.pathname).toBe('/studio/stories/story-1/edit')
+  await userEvent.click(screen.getByRole('button', { name: 'Остаться в редакторе' }))
+  expect(router!.state.location.pathname).toBe('/studio/stories/story-1/edit')
+
+  await router!.navigate(-1)
+  await userEvent.click(await screen.findByRole('button', { name: 'Выйти без сохранения' }))
+  await waitFor(() => expect(router!.state.location.pathname).toBe('/'))
 })

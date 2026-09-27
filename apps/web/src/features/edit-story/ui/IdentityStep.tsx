@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 
 import { api, ApiRequestError, type StoryIdentitySection } from '@/shared/api'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
@@ -22,6 +22,7 @@ export function IdentityStep({ storyId, value, saving, onChange, onSave }: Props
   const [license, setLicense] = useState('')
   const [source, setSource] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const coverInput = useRef<HTMLInputElement>(null)
 
   const change = <K extends keyof StoryIdentitySection>(field: K, next: StoryIdentitySection[K]) => onChange({ ...value, [field]: next })
   async function submit(event: FormEvent) {
@@ -32,6 +33,8 @@ export function IdentityStep({ storyId, value, saving, onChange, onSave }: Props
         const material = await api.uploadStoryCover(storyId, cover, { creator, license, source })
         next = { ...value, cover_material_id: material.id }
         onChange(next)
+        setCover(null)
+        if (coverInput.current) coverInput.current.value = ''
         setUploadError('')
       } catch (cause) {
         setUploadError(cause instanceof ApiRequestError ? cause.message : 'Не удалось загрузить обложку.')
@@ -51,7 +54,7 @@ export function IdentityStep({ storyId, value, saving, onChange, onSave }: Props
       <Field><FieldLabel htmlFor="story-premise">Завязка</FieldLabel><Textarea id="story-premise" value={value.premise} onChange={(event) => change('premise', event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="story-setting">Место и время</FieldLabel><Textarea id="story-setting" value={value.setting} onChange={(event) => change('setting', event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="story-opening">Начальная ситуация</FieldLabel><Textarea id="story-opening" value={value.opening_situation} onChange={(event) => change('opening_situation', event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="story-cover">Файл обложки</FieldLabel><Input id="story-cover" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /><FieldDescription>PNG, JPEG или WebP. Для публикации укажите происхождение материала.</FieldDescription></Field>
+      <Field><FieldLabel htmlFor="story-cover">Файл обложки</FieldLabel><Input ref={coverInput} id="story-cover" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /><FieldDescription>PNG, JPEG или WebP. Для публикации укажите происхождение материала.</FieldDescription></Field>
       <Field><FieldLabel htmlFor="cover-creator">Автор обложки</FieldLabel><Input id="cover-creator" value={creator} onChange={(event) => setCreator(event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="cover-license">Лицензия обложки</FieldLabel><Input id="cover-license" value={license} onChange={(event) => setLicense(event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="cover-source">Источник обложки</FieldLabel><Input id="cover-source" value={source} onChange={(event) => setSource(event.target.value)} /></Field>
