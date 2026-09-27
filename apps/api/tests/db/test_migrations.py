@@ -202,10 +202,17 @@ def test_snapshot_safe_beat_migration_preserves_occupied_rows_keys_and_foreign_k
     command.downgrade(config, "20260927_13")
     with sqlite3.connect(database_path) as db:
         assert db.execute("SELECT * FROM session_beats").fetchall() == [("session", "beat", "completed", "turn")]
+        assert [row[1] for row in db.execute("PRAGMA table_info(session_beats)") if row[5]] == [
+            "session_id",
+            "beat_id",
+        ]
         assert {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")} == {
             "story_sessions",
             "story_beats",
             "turns",
+        }
+        assert "ix_session_beats_session_status" not in {
+            row[1] for row in db.execute("PRAGMA index_list(session_beats)")
         }
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
@@ -228,6 +235,14 @@ def test_snapshot_only_beat_blocks_downgrade_without_schema_or_data_changes(tmp_
         ]
         assert "story_beats" not in {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")}
         assert "ix_session_beats_session_status" in {row[1] for row in db.execute("PRAGMA index_list(session_beats)")}
+
+
+def test_snapshot_safe_beat_downgrade_rejects_offline_sql_with_clear_error(tmp_path):
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{(tmp_path / 'offline.db').as_posix()}")
+    with pytest.raises(RuntimeError, match="online preflight is required") as raised:
+        command.downgrade(config, "20260927_14:20260927_13", sql=True)
+    assert "AttributeError" not in str(raised.value)
 
 
 def test_story_version_rejects_unknown_mode(tmp_path):

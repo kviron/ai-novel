@@ -18,6 +18,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_context().as_sql:
+        raise RuntimeError("online preflight is required to downgrade session beat identity")
     bind = op.get_bind()
     incompatible = list(
         bind.execute(
