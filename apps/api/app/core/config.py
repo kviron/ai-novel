@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, Request
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:14b-q4_K_M"
     ollama_context_tokens: int = 16384
+    model_context_windows: dict[str, int] = Field(default_factory=dict)
     provider_timeout_seconds: float = 120.0
     cors_origins: str = "http://localhost:5173"
 
