@@ -12,7 +12,14 @@ from app.modules.story_engine.prompt import build_prompt
 from app.modules.story_engine.rules import GenerationContext, InvalidProposalError, validate_proposal
 
 
-def runtime_story(*, mode="hybrid", ending_policy="required_beats_then_end") -> RuntimeStoryDefinition:
+def runtime_story(
+    *,
+    mode="hybrid",
+    ending_policy="required_beats_then_end",
+    choice_policy="choices_and_free_input",
+    min_choices=2,
+    max_choices=4,
+) -> RuntimeStoryDefinition:
     return RuntimeStoryDefinition.model_validate(
         {
             "story_id": "story",
@@ -28,7 +35,19 @@ def runtime_story(*, mode="hybrid", ending_policy="required_beats_then_end") -> 
             "setting": "Город",
             "recommended_provider_id": "ollama",
             "recommended_model_id": "model",
-            "generation_policy": {},
+            "generation_policy": {
+                "narration_perspective": "first_person",
+                "prose_density": "detailed",
+                "choice_policy": choice_policy,
+                "min_choices": min_choices,
+                "max_choices": max_choices,
+                "allow_romance": False,
+                "allow_violence": True,
+                "allow_horror": False,
+                "allow_sexual_themes": False,
+                "desired_themes": "Авторская тема",
+                "forbidden_outcomes": "Авторский запрет",
+            },
             "themes_allowed": [],
             "themes_blocked": [],
             "ending_policy": ending_policy,
@@ -64,7 +83,7 @@ def runtime_story(*, mode="hybrid", ending_policy="required_beats_then_end") -> 
     )
 
 
-def context(*, mode="hybrid", completed=()) -> GenerationContext:
+def context(*, mode="hybrid", completed=(), story=None) -> GenerationContext:
     return GenerationContext(
         session_id="session",
         active_turn_id=None,
@@ -72,7 +91,7 @@ def context(*, mode="hybrid", completed=()) -> GenerationContext:
         current_scene="Начало",
         provider_id="ollama",
         model_id="model",
-        story=runtime_story(mode=mode),
+        story=story or runtime_story(mode=mode),
         protagonist={"id": "hero", "name": "Герой", "available_emotions": ["neutral"]},
         characters=[{"id": "npc", "name": "НПС", "source_type": "local"}],
         recent_turns=[],
@@ -115,6 +134,64 @@ def test_hybrid_prompt_orders_facts_and_only_includes_available_beats():
     assert payload["available_beats"][0]["completion_evidence"] == "Ключ в руке"
     assert "рекомендац" in request.system_prompt.casefold()
     assert "провер" in request.system_prompt.casefold()
+
+
+@pytest.mark.parametrize(
+    ("choice_policy", "minimum", "maximum"),
+    [
+        ("free_input_only", 0, 0),
+        ("choices_only", 1, 1),
+        ("choices_and_free_input", 6, 6),
+    ],
+)
+def test_prompt_and_schema_enforce_pinned_generation_policy(choice_policy, minimum, maximum):
+    story = runtime_story(
+        choice_policy=choice_policy,
+        min_choices=minimum if choice_policy != "free_input_only" else 2,
+        max_choices=maximum if choice_policy != "free_input_only" else 4,
+    )
+    request = build_prompt(
+        context(story=story),
+        TurnCreate(request_id="policy", expected_state_version=1, action="Продолжить"),
+        4096,
+    )
+    choices = request.response_schema["properties"]["suggested_choices"]
+    assert (choices["minItems"], choices["maxItems"]) == (minimum, maximum)
+    assert choice_policy in request.system_prompt
+    assert "first_person" in request.system_prompt
+    assert "detailed" in request.system_prompt
+    assert "allow_romance=false" in request.system_prompt
+    assert "allow_violence=true" in request.system_prompt
+    assert "allow_horror=false" in request.system_prompt
+    assert "allow_sexual_themes=false" in request.system_prompt
+    assert story.ending_policy in request.system_prompt
+    assert f"{minimum}..{maximum}" in request.system_prompt
+    assert "Авторская тема" not in request.system_prompt
+    assert "Авторский запрет" not in request.system_prompt
+    payload = json.loads(request.user_prompt)
+    assert payload["story"]["generation_policy"]["desired_themes"] == "Авторская тема"
+    assert payload["story"]["generation_policy"]["forbidden_outcomes"] == "Авторский запрет"
+
+
+@pytest.mark.parametrize(
+    ("choice_policy", "minimum", "maximum", "choices", "accepted"),
+    [
+        ("free_input_only", 2, 4, [], True),
+        ("free_input_only", 2, 4, ["Лишний выбор"], False),
+        ("choices_only", 1, 1, ["Один"], True),
+        ("choices_only", 1, 1, [], False),
+        ("choices_and_free_input", 6, 6, ["1", "2", "3", "4", "5", "6"], True),
+        ("choices_and_free_input", 6, 6, ["1", "2", "3", "4", "5"], False),
+    ],
+)
+def test_choice_validation_uses_pinned_policy(choice_policy, minimum, maximum, choices, accepted):
+    story = runtime_story(choice_policy=choice_policy, min_choices=minimum, max_choices=maximum)
+    candidate = proposal(suggested_choices=choices)
+    if accepted:
+        assert validate_proposal(candidate, context(story=story)).choices == choices
+    else:
+        with pytest.raises(InvalidProposalError, match="choice_count_out_of_policy"):
+            validate_proposal(candidate, context(story=story))
 
 
 @pytest.mark.parametrize(
@@ -165,6 +242,25 @@ def test_freeform_ignores_authored_canon_contract_but_keeps_base_safety_rules():
 def test_duplicate_already_completed_beat_is_rejected():
     with pytest.raises(InvalidProposalError, match="duplicate_beat_completion"):
         validate_proposal(proposal(completed_beat_ids=["beat-1"]), context(completed=("beat-1",)))
+
+
+def test_ending_gate_only_requires_beats_with_both_required_and_gate_flags():
+    story = runtime_story()
+    beats = [
+        story.beats[0].model_copy(update={"id": "both", "required": True, "ending_gate": True}),
+        story.beats[0].model_copy(update={"id": "required-only", "required": True, "ending_gate": False}),
+        story.beats[0].model_copy(update={"id": "gate-only", "required": False, "ending_gate": True}),
+    ]
+    story = story.model_copy(update={"beats": beats})
+    # Only the conjunctive gate should matter: the other two beats deliberately remain incomplete.
+    ctx = context(story=story)
+    ctx = GenerationContext(**{**ctx.__dict__, "available_beat_ids": frozenset({"both"})})
+    accepted = validate_proposal(proposal(completed_beat_ids=["both"], requests_ending=True), ctx)
+    assert accepted.completed_beat_ids == ["both"]
+
+    blocked = context(story=story, completed=("required-only", "gate-only"))
+    with pytest.raises(InvalidProposalError, match="ending_gate_not_satisfied"):
+        validate_proposal(proposal(requests_ending=True), blocked)
 
 
 def _game_proposal(*, completed_beat_ids):

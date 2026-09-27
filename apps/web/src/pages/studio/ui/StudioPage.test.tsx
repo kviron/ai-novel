@@ -13,7 +13,7 @@ const story: StorySession['story'] = {
 const session: StorySession = {
   id: 'session-1', story, state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
   protagonist: { session_id: 'session-1', source_kind: 'legacy', source_character_id: null, source_revision_id: null, policy_version: 1, name: 'Игрок', address: 'Игрок', gender: 'unspecified', appearance: '', biography: '', personality: '', age: null },
-  characters: [{ id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
+  characters: [{ id: 'akane', revision_id: 'akane-r1', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1 }],
   latest_turn: null, visual_state: { emotion: 'neutral', pose: 'standing', outfit: 'red_dress', background: 'neon_crossroads' },
 }
 const turn: TurnResult = {
@@ -59,4 +59,10 @@ test('открывает существующую сессию по ID', async (
   await userEvent.type(await screen.findByRole('textbox', { name: 'ID сессии' }), 'session-1')
   await userEvent.click(screen.getByRole('button', { name: 'Открыть сессию' }))
   expect(await screen.findByText('Крыша')).toBeInTheDocument()
+})
+
+test('открывает создание новой новеллы из Студии', async () => {
+  render(<TestRouter initialEntries={['/studio']} />)
+  const link = await screen.findByRole('link', { name: 'Создать новеллу' })
+  expect(link).toHaveAttribute('href', '/studio/stories/new')
 })

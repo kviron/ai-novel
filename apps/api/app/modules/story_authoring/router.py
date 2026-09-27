@@ -1,17 +1,18 @@
 """Local authoring HTTP boundary over the draft lifecycle service."""
 
+import json
 from contextlib import contextmanager
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, DraftConflictResponse, DraftInvalidResponse, ErrorResponse
 from app.db.engine import get_session
-from app.db.models import StoryMaterial
+from app.db.models import SessionBeat, StoryDraftSnapshot, StoryMaterial, StorySession
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError, available_models
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.protagonist import HeroSelectionError
@@ -61,6 +62,18 @@ class SectionUpdate(BaseModel):
 
     expected_revision: int = Field(ge=1)
     data: dict[str, Any]
+
+
+class AuthorSessionAudit(BaseModel):
+    session_id: str
+    source: Literal["draft_snapshot", "published_version"]
+    story_version_id: str | None
+    draft_snapshot_id: str | None
+    snapshot_sha256: str | None
+    source_draft_revision: int | None
+    snapshot_title: str | None
+    snapshot_premise: str | None
+    completed_beat_ids: list[str]
 
 
 def _available_models(registry: ProviderRegistryDep) -> list[str]:
@@ -182,6 +195,29 @@ def start_test_session(
         return create_author_test_session(
             session, story_id, payload or AuthorTestSessionRequest(), settings.ollama_model, registry
         )
+
+
+@router.get("/test-sessions/{session_id}/audit", response_model=AuthorSessionAudit)
+def author_session_audit(session_id: str, session: SessionDep) -> AuthorSessionAudit:
+    game = session.get(StorySession, session_id)
+    if game is None or game.kind != "author":
+        raise ApiError(404, "session_not_found", "Авторская тестовая сессия не найдена.")
+    snapshot = session.get(StoryDraftSnapshot, game.draft_snapshot_id) if game.draft_snapshot_id else None
+    payload = json.loads(snapshot.payload) if snapshot else None
+    completed = session.exec(
+        select(SessionBeat).where(SessionBeat.session_id == session_id, SessionBeat.status == "completed")
+    ).all()
+    return AuthorSessionAudit(
+        session_id=game.id,
+        source="draft_snapshot" if snapshot else "published_version",
+        story_version_id=game.story_version_id,
+        draft_snapshot_id=game.draft_snapshot_id,
+        snapshot_sha256=snapshot.sha256 if snapshot else None,
+        source_draft_revision=snapshot.source_draft_revision if snapshot else None,
+        snapshot_title=payload["identity"]["title"] if payload else None,
+        snapshot_premise=payload["identity"]["premise"] if payload else None,
+        completed_beat_ids=sorted(beat.beat_id for beat in completed),
+    )
 
 
 @router.post("/{story_id}/draft/cover", status_code=status.HTTP_201_CREATED, response_model=StoryCoverMaterial)

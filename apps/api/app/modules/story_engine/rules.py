@@ -76,7 +76,7 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
         completed_beat_ids = proposal.completed_beat_ids
         if proposal.requests_ending and context.story.ending_policy == "required_beats_then_end":
             completed_after = context.completed_beat_ids | set(completed_beat_ids)
-            required = {beat.id for beat in context.story.beats if beat.required or beat.ending_gate}
+            required = {beat.id for beat in context.story.beats if beat.required and beat.ending_gate}
             if not required.issubset(completed_after):
                 raise InvalidProposalError("ending_gate_not_satisfied")
     characters = {character["id"]: character for character in context.characters}
@@ -124,8 +124,12 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     if directive.outfit != allowed_outfit:
         raise InvalidProposalError("unknown_outfit_id")
     choices = [choice.strip() for choice in proposal.suggested_choices]
-    if not 2 <= len(choices) <= 4 or not all(choices):
-        raise InvalidProposalError("expected_2_to_4_nonempty_choices")
+    policy = context.story.generation_policy
+    minimum, maximum = (0, 0) if policy.choice_policy == "free_input_only" else (policy.min_choices, policy.max_choices)
+    if not minimum <= len(choices) <= maximum:
+        raise InvalidProposalError("choice_count_out_of_policy")
+    if not all(choices):
+        raise InvalidProposalError("empty_choice")
     if len({choice.casefold() for choice in choices}) != len(choices):
         raise InvalidProposalError("duplicate_choices")
     if proposal.segments is None and (not proposal.narration or not proposal.narration.strip()):

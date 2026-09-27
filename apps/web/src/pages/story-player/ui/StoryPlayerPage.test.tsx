@@ -10,7 +10,7 @@ const session: StorySession = {
   id: 'session-1', state_version: 1, can_rewind: false, current_scene: 'Крыша', provider_id: 'ollama', model_id: 'gemma4-local:32k',
   protagonist: { session_id: 'session-1', source_kind: 'legacy', source_character_id: null, source_revision_id: null, policy_version: 1, name: 'Игрок', address: 'Игрок', gender: 'unspecified', appearance: '', biography: '', personality: '', age: null },
   story: { id: 'story-1', slug: 'akane-neon-echo', title: 'Эхо неона', premise: 'Дождливый город', description: 'Дождливый город', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'gemma4-local:32k' },
-  characters: [{ id: 'akane', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1, sprites: {
+  characters: [{ id: 'akane', revision_id: 'akane-r1', name: 'Аканэ', gender: 'female', age: 25, personality: 'Наблюдательная', appearance: 'Красное платье', visual_profile_version: 1, sprites: {
     neutral: [{ variant: 'default', material: { id: 'neutral', kind: 'sprite:neutral:default', sha256: 'n', mime_type: 'image/png', filename: 'neutral.png', creator: 'Project', license: 'own', source: 'test', url: '/neutral.png' } }],
     fan: [{ variant: 'default', material: { id: 'fan', kind: 'sprite:fan:default', sha256: 'f', mime_type: 'image/png', filename: 'fan.png', creator: 'Project', license: 'own', source: 'test', url: '/fan.png' } }],
   } }],
@@ -42,7 +42,7 @@ test('даёт перейти в Студию без технических де
 test('не приписывает вступительную реплику закреплённого героя NPC', async () => {
   apiServer.session({ ...session,
     protagonist: { ...session.protagonist, source_kind: 'fixed', source_character_id: 'akane', name: 'Аканэ Куроха' },
-    characters: [{ id: 'mark', name: 'Марк Ветров', gender: 'male', age: 29, personality: '', appearance: '', visual_profile_version: 1 }],
+    characters: [{ id: 'mark', revision_id: 'mark-r1', name: 'Марк Ветров', gender: 'male', age: 29, personality: '', appearance: '', visual_profile_version: 1 }],
   })
   render(<StoryPlayerPage sessionId="session-1" />)
   expect(await screen.findByRole('region', { name: 'Игровая сцена' })).not.toHaveTextContent('Вы всё-таки пришли. Что привело вас сюда?')

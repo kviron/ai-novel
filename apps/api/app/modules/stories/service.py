@@ -183,6 +183,7 @@ def _character_detail(
             )
     return CharacterDetail(
         id=character.id,
+        revision_id=revision.id,
         name=revision.name,
         gender=revision.gender,
         age=revision.age,

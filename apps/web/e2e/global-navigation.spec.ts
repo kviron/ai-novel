@@ -11,7 +11,7 @@ test('режим сцены скрывает интерфейс и возвра�
 
   await expect(page.locator('[data-slot="sidebar-wrapper"]')).toHaveAttribute('data-cinematic', 'true')
   await expect(page.getByRole('region', { name: 'Игровая сцена' }).locator('.scene-background')).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Игровая сцена' }).locator('.character-sprite')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Игровая сцена' }).getByRole('img', { name: /Аканэ/ })).toBeVisible()
   await expect(page.locator('.game-header')).toBeHidden()
   await expect(page.locator('.dialogue')).toBeHidden()
   await expect(page.locator('[data-slot="sidebar-trigger"]')).toBeHidden()

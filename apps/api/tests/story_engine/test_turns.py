@@ -816,7 +816,7 @@ def test_concurrent_requests_commit_only_once(client, fake_provider, akane_sessi
         assert len(list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))) == 1
 
 
-def test_prompt_contains_state_facts_memory_and_eight_recent_complete_turns(
+def test_prompt_contains_state_facts_memory_and_bounded_recent_complete_turns(
     client, fake_provider, akane_session, monkeypatch
 ):
     requests = []
@@ -840,16 +840,22 @@ def test_prompt_contains_state_facts_memory_and_eight_recent_complete_turns(
     assert request.model_id == akane_session.model_id
     assert "Аканэ Куроха" not in request.system_prompt
     assert "чужое воспоминание" not in request.system_prompt
-    assert "2–4" in request.system_prompt
+    assert "choice_range=2..4" in request.system_prompt
     assert "suggested_choices" in request.response_schema["properties"]
     context = json.loads(request.user_prompt)
     assert context["story"]["premise"] == "В дождливом неоновом городе Аканэ помогает распутать чужое воспоминание."
     assert any(character["name"] == "Аканэ Куроха" for character in context["characters"])
     assert context["action"] == "Действие 9"
     assert context["state"]["state_version"] == 10
-    assert len(context["recent_turns"]) == 8
+    recent_count = len(context["recent_turns"])
+    assert 0 < recent_count <= 8
     assert context["earlier_confirmed_memory"] == "Подтверждённый ранний ход."
-    assert [turn["action"] for turn in context["recent_turns"]] == [f"Действие {n}" for n in range(1, 9)]
+    assert [turn["action"] for turn in context["recent_turns"]] == [
+        f"Действие {n}" for n in range(9 - recent_count, 9)
+    ]
+    memory = client.get(f"/api/sessions/{akane_session.id}/memory")
+    assert memory.status_code == 200
+    assert memory.json()["covered_turn_count"] + recent_count == 9
     assert all({"segments", "choices", "visual_directive"} <= turn.keys() for turn in context["recent_turns"])
     assert all("narration" not in turn and "dialogue" not in turn for turn in context["recent_turns"])
 

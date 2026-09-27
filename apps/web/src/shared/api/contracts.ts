@@ -12,6 +12,7 @@ export type StorySummary = {
 
 export type Character = {
   id: string
+  revision_id: string
   name: string
   gender: 'female' | 'male' | 'unspecified'
   age: number
@@ -24,7 +25,7 @@ export type Character = {
   sprites?: Record<string, SpriteVariant[]>
 }
 
-export type CharacterRevision = Omit<Character, 'visual_profile_version' | 'role'> & {
+export type CharacterRevision = Omit<Character, 'revision_id' | 'visual_profile_version' | 'role'> & {
   revision_number: number
   biography: string
   speech: string
