@@ -30,7 +30,7 @@ function deferred<T>() {
 function json(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }) }
 const error = (code: string, status: number) => json({ code, detail: 'Не удалось продолжить. Повторите попытку.', retryable: true }, status)
 beforeEach(() => { apiServer.session(session); apiServer.providersAvailable(true, ['gemma4-local:32k']); apiServer.turn(session.id, turn) })
-afterEach(() => { cleanup(); apiServer.reset(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); apiServer.reset(); vi.restoreAllMocks(); localStorage.clear(); sessionStorage.clear() })
 
 test('даёт перейти в Студию без технических деталей в шапке игрока', async () => {
   render(<StoryPlayerPage sessionId="session-1" />)
@@ -49,12 +49,12 @@ test('не приписывает вступительную реплику за
   expect(screen.getByText('Начните историю своим действием.')).toBeInTheDocument()
 })
 
-test('открывает переписку из кнопки после названия с разными цветами игрока и персонажа', async () => {
+test('открывает переписку из панели слева с сообщениями и прокруткой shadcn', async () => {
   apiServer.dialogueHistory(session.id, [turn, { ...turn, id: 'turn-2', action: 'Идти дальше', speaker: 'Марк', narration: 'В архиве темно.', dialogue: 'Я нашёл запись.' }])
   render(<StoryPlayerPage sessionId="session-1" />)
-  const title = await screen.findByRole('heading', { name: 'Эхо неона' })
+  await screen.findByRole('heading', { name: 'Эхо неона' })
   const historyButton = screen.getByRole('button', { name: 'История диалогов' })
-  expect(title.parentElement).toContainElement(historyButton)
+  expect(screen.getByRole('toolbar', { name: 'Управление прохождением' })).toContainElement(historyButton)
 
   await userEvent.click(historyButton)
   const dialog = await screen.findByRole('dialog', { name: 'История диалогов' })
@@ -63,14 +63,20 @@ test('открывает переписку из кнопки после наз�
   expect(dialog).toHaveTextContent('Аканэ')
   expect(dialog).toHaveTextContent('Марк')
   expect(dialog.textContent?.indexOf('Спросить о веере')).toBeLessThan(dialog.textContent?.indexOf('Идти дальше') ?? 0)
-  expect(dialog.querySelector('[data-speaker="player"]')).toHaveClass('bg-primary')
-  expect(dialog.querySelector('[data-speaker="character"]')).toHaveClass('bg-muted')
+  expect(dialog.querySelector('[data-slot="message-scroller"]')).toBeInTheDocument()
+  expect(dialog.querySelector('[data-slot="message-scroller-viewport"]')).toBeInTheDocument()
+  expect(dialog.querySelectorAll('[data-slot="message-scroller-item"]')).toHaveLength(4)
+  expect(dialog.querySelector('[data-speaker="player"]')).toHaveAttribute('data-slot', 'message')
+  expect(dialog.querySelector('[data-speaker="character"]')).toHaveAttribute('data-slot', 'message')
+  expect(dialog.querySelector('[data-speaker="player"] [data-slot="bubble"]')).toHaveAttribute('data-variant', 'default')
+  expect(dialog.querySelector('[data-speaker="character"] [data-slot="bubble"]')).toHaveAttribute('data-variant', 'muted')
 })
 
 test('показывает пустое состояние переписки до первого хода', async () => {
   render(<StoryPlayerPage sessionId="session-1" />)
   await userEvent.click(await screen.findByRole('button', { name: 'История диалогов' }))
   expect(await screen.findByText('Диалогов пока нет.')).toBeInTheDocument()
+  expect(screen.getByText('Диалогов пока нет.').closest('[data-slot="empty"]')).toBeInTheDocument()
 })
 
 test('не приписывает новой истории Аканэ и готовые варианты Эха неона', async () => {
@@ -136,20 +142,79 @@ test('пустая отправка объясняет блокировку, с�
   const send = await screen.findByRole('button', { name: 'Отправить' })
   expect(send).toBeDisabled()
   expect(send).toHaveAccessibleDescription(/Введите действие/)
+  expect(screen.getByRole('button', { name: 'Разбор сообщения' })).toBeDisabled()
   await userEvent.type(screen.getByRole('textbox'), 'Посмотреть вокруг')
   expect(send).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Разбор сообщения' })).toBeEnabled()
 })
 
-test('варианты открываются иконкой внутри поля, а отправка остаётся кнопкой без текста', async () => {
+test('показывает границы речи и приватной мысли перед отправкой', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const input = await screen.findByRole('textbox', { name: 'Ваше действие' })
+  await userEvent.type(input, 'Я смутился. *Отвёл взгляд* «Всё хорошо» (Она заметила?)')
+  expect(screen.queryByLabelText('Как новелла прочитает сообщение')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '«Речь»' })).not.toBeInTheDocument()
+  const inspect = screen.getByRole('button', { name: 'Разбор сообщения' })
+  expect(screen.getByRole('toolbar', { name: 'Управление прохождением' })).toContainElement(inspect)
+  expect(inspect).toHaveTextContent('')
+  await userEvent.click(inspect)
+  const dialog = screen.getByRole('dialog', { name: 'Разбор сообщения' })
+  const preview = within(dialog).getByLabelText('Как новелла прочитает сообщение')
+  expect(preview.querySelectorAll('[data-kind="action"]')).toHaveLength(1)
+  expect(preview.querySelectorAll('[data-kind="explicit_action"]')).toHaveLength(1)
+  expect(preview.querySelectorAll('[data-kind="speech"]')).toHaveLength(1)
+  expect(preview.querySelectorAll('[data-kind="thought"]')).toHaveLength(1)
+  expect(preview).toHaveTextContent('Она заметила?')
+  expect(input).toHaveValue('Я смутился. *Отвёл взгляд* «Всё хорошо» (Она заметила?)')
+  await userEvent.keyboard('{Escape}')
+  expect(screen.queryByLabelText('Как новелла прочитает сообщение')).not.toBeInTheDocument()
+})
+
+test('объясняет синтаксис сообщения в настройках прохождения', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Настройки прохождения' }))
+  const dialog = screen.getByRole('dialog', { name: 'Настройки' })
+  const sections = within(dialog).getByRole('navigation', { name: 'Разделы настроек' })
+  for (const name of ['Модель', 'Сообщения', 'Герой', 'Прогресс', 'Каталог']) expect(within(sections).getByRole('button', { name })).toBeInTheDocument()
+  expect(dialog).not.toHaveTextContent('*действие*')
+  await userEvent.click(within(sections).getByRole('button', { name: 'Сообщения' }))
+  expect(within(dialog).getByText('Как писать сообщения')).toBeInTheDocument()
+  expect(dialog).toHaveTextContent('*действие*')
+  expect(dialog).toHaveTextContent('«речь»')
+  expect(dialog).toHaveTextContent('(мысль)')
+  expect(dialog).toHaveTextContent('Shift+Enter')
+})
+
+test('управление сгруппировано слева от чата, а отправка остаётся справа от поля', async () => {
   render(<StoryPlayerPage sessionId="session-1" />)
   const input = await screen.findByRole('textbox', { name: 'Ваше действие' })
   const choices = screen.getByRole('button', { name: 'Варианты (3)' })
   const send = screen.getByRole('button', { name: 'Отправить' })
-  expect(choices.closest('[data-slot="input-group"]')).toContainElement(input)
+  const toolbar = screen.getByRole('toolbar', { name: 'Управление прохождением' })
+  for (const name of ['Настройки прохождения', 'Отменить ход', 'Варианты (3)', 'Разбор сообщения', 'История диалогов']) {
+    const button = screen.getByRole('button', { name })
+    expect(toolbar).toContainElement(button)
+    expect(button).toHaveAttribute('data-variant', 'outline')
+    expect(button).toHaveAttribute('data-size', 'icon-lg')
+  }
+  expect(toolbar).not.toContainElement(input)
+  expect(input).toHaveAttribute('rows', '1')
   expect(choices).toHaveTextContent('')
   expect(send).toHaveTextContent('')
   await userEvent.click(choices)
   expect(screen.getByRole('dialog', { name: 'Варианты ответа' })).toBeInTheDocument()
+})
+
+test('Enter отправляет сообщение, Shift+Enter добавляет новую строку', async () => {
+  render(<StoryPlayerPage sessionId="session-1" />)
+  const input = await screen.findByRole('textbox', { name: 'Ваше действие' })
+  const before = vi.mocked(fetch).mock.calls.length
+  await userEvent.type(input, 'Я задумался{Shift>}{Enter}{/Shift}и ответил')
+  expect(input).toHaveValue('Я задумался\nи ответил')
+  expect(vi.mocked(fetch).mock.calls).toHaveLength(before)
+  await userEvent.type(input, '{Enter}')
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls).toHaveLength(before + 1))
+  expect(JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).action).toBe('Я задумался\nи ответил')
 })
 
 test('медленная проверка блокирует повторные проверки и отправку', async () => {
@@ -189,6 +254,7 @@ test('двойной submit отправляет один запрос и мен
   await userEvent.click(screen.getByRole('button', { name: 'Варианты (1)' }))
   expect(screen.getByRole('button', { name: 'Уточнить' })).toBeEnabled()
   expect(input).toHaveValue('')
+  expect(sessionStorage.getItem('mnemosyne.session.session-1.action-draft')).toBeNull()
 })
 
 test('отмена хода восстанавливает предыдущий снимок без обращения к модели', async () => {
@@ -222,6 +288,39 @@ test('ошибка сервера сохраняет текст, ход и reque
   expect(second.request_id).toBe(first.request_id)
 })
 
+test('сетевой сбой не очищает введённое действие', async () => {
+  const view = render(<StoryPlayerPage sessionId="session-1" />)
+  const input = await screen.findByRole('textbox', { name: 'Ваше действие' })
+  await userEvent.type(input, 'Мой ответ')
+  vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(await screen.findByRole('alert')).toBeInTheDocument()
+  expect(input).toHaveValue('Мой ответ')
+  expect(screen.getByRole('button', { name: 'Отправить' })).toBeEnabled()
+  view.unmount()
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByRole('textbox', { name: 'Ваше действие' })).toHaveValue('Мой ответ')
+})
+
+test('показывает спрайт выбранного героя слева по переключателю и сохраняет настройку', async () => {
+  const hero = { ...session.protagonist, source_kind: 'catalog' as const, source_character_id: 'hero', source_revision_id: 'hero-revision', name: 'Герой', sprites: {
+    neutral: [{ variant: 'default', material: { id: 'hero-sprite', kind: 'sprite:neutral:default', sha256: 'hero', mime_type: 'image/png', filename: 'hero.png', creator: 'Project', license: 'own', source: 'test', url: '/hero.png' } }],
+  } }
+  apiServer.session({ ...session, protagonist: hero })
+  const view = render(<StoryPlayerPage sessionId="session-1" />)
+  await screen.findByRole('img', { name: 'Аканэ: Нейтральная' })
+  expect(screen.queryByRole('img', { name: 'Герой: Нейтральная' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Настройки прохождения' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Герой' }))
+  await userEvent.click(screen.getByRole('switch', { name: 'Показывать своего персонажа' }))
+  expect(screen.getByAltText('Герой: Нейтральная')).toHaveAttribute('src', '/hero.png')
+  expect(screen.getByAltText('Аканэ: Нейтральная')).toBeInTheDocument()
+  expect(localStorage.getItem('mnemosyne.session.session-1.show-protagonist')).toBe('true')
+  view.unmount()
+  render(<StoryPlayerPage sessionId="session-1" />)
+  expect(await screen.findByRole('img', { name: 'Герой: Нейтральная' })).toBeInTheDocument()
+})
+
 test('provider_unavailable сохраняет действие до успешной health-проверки', async () => {
   render(<StoryPlayerPage sessionId="session-1" />)
   await userEvent.type(await screen.findByRole('textbox'), 'Остаться')
@@ -242,8 +341,11 @@ test('позволяет сменить отсутствующую модель 
 
   expect(await screen.findByText('Нейросеть недоступна')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Настройки прохождения' }))
-  expect(screen.getByRole('dialog', { name: 'Настройки прохождения' })).toBeInTheDocument()
+  const settings = screen.getByRole('dialog', { name: 'Настройки' })
+  expect(settings).toHaveAttribute('data-slot', 'dialog-content')
+  await userEvent.click(screen.getByRole('button', { name: 'Прогресс' }))
   expect(screen.getByText('Автосохранение')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Модель' }))
   await userEvent.click(screen.getByRole('combobox', { name: 'Модель Ollama' }))
   await userEvent.click(screen.getByRole('option', { name: 'gemma4-local:32k' }))
   await userEvent.click(screen.getByRole('button', { name: 'Применить модель' }))
@@ -257,6 +359,7 @@ test('позволяет сменить отсутствующую модель 
 test('сохраняет персонажа из текущего прохождения как независимый профиль', async () => {
   render(<StoryPlayerPage sessionId="session-1" />)
   await userEvent.click(await screen.findByRole('button', { name: 'Настройки прохождения' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Каталог' }))
   await userEvent.click(screen.getByRole('button', { name: 'Сохранить персонажа в каталог' }))
   expect(await screen.findByText(/Аканэ.*добавлен.*каталог/)).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([url, options]) =>

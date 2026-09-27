@@ -92,3 +92,37 @@ test('uses a separate revision sprite for a catalog character emotion', () => {
   render(<CharacterSprite session={session} />)
   expect(screen.getByRole('img', { name: 'Эшли: Злость' })).toHaveAttribute('src', '/api/character-materials/angry-1')
 })
+
+test('shows the selected hero on the left without removing scene NPCs', () => {
+  const sprite = (id: string) => ({ neutral: [{ variant: 'default', material: { id, kind: 'sprite:neutral:default', sha256: id, mime_type: 'image/png', filename: `${id}.png`, creator: 'Project', license: 'own', source: 'test', url: `/${id}.png` } }] })
+  const session: StorySession = {
+    id: 'hero-scene', state_version: 2, can_rewind: false, current_scene: 'Улица', provider_id: 'ollama', model_id: 'local',
+    protagonist: { ...protagonist, source_kind: 'catalog', source_character_id: 'hero', source_revision_id: 'hero-revision', name: 'Герой', sprites: sprite('hero') },
+    story: { id: 'story-1', slug: 'pair', title: 'Пара', premise: '', description: '', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'local' },
+    characters: [{ id: 'npc', revision_id: 'npc-r1', name: 'NPC', gender: 'male', age: 29, personality: '', appearance: '', visual_profile_version: 1, sprites: sprite('npc') }],
+    latest_turn: { id: 'turn-1', state_version: 2, action: '', prompt_version: 'v1', speaker: 'NPC', narration: '', dialogue: '', choices: [], visual_directive: { character_id: 'npc', emotion: 'neutral', pose: 'default', outfit: 'coat', background: 'street', present_character_ids: ['npc'] } },
+    visual_state: { emotion: 'neutral', pose: 'default', outfit: 'coat', background: 'street' },
+  }
+
+  const { rerender } = render(<CharacterSprite session={session} showProtagonist={false} />)
+  expect(screen.queryByRole('img', { name: 'Герой: Нейтральная' })).not.toBeInTheDocument()
+  rerender(<CharacterSprite session={session} showProtagonist />)
+  expect(screen.getByRole('img', { name: 'Герой: Нейтральная' })).toHaveAttribute('src', '/hero.png')
+  expect(screen.getByRole('img', { name: 'NPC: Нейтральная' })).toHaveAttribute('src', '/npc.png')
+  expect(screen.getByTestId('character-cast').firstElementChild).toHaveAttribute('data-protagonist', 'true')
+})
+
+test('uses the saved protagonist expression independently of the NPC', () => {
+  const material = (emotion: string) => ({ variant: 'default', material: { id: emotion, kind: `sprite:${emotion}:default`, sha256: emotion, mime_type: 'image/png', filename: `${emotion}.png`, creator: 'Project', license: 'own', source: 'test', url: `/${emotion}.png` } })
+  const session: StorySession = {
+    id: 'hero-emotion', state_version: 2, can_rewind: true, current_scene: 'Улица', provider_id: 'ollama', model_id: 'local',
+    protagonist: { ...protagonist, source_kind: 'catalog', source_character_id: 'hero', name: 'Герой', sprites: { neutral: [material('neutral')], surprised: [material('surprised')] } },
+    story: { id: 'story-1', slug: 'pair', title: 'Пара', premise: '', description: '', cover_image_url: null, story_mode: 'hybrid', recommended_provider_id: 'ollama', recommended_model_id: 'local' },
+    characters: [{ id: 'npc', revision_id: 'npc-r1', name: 'NPC', gender: 'male', age: 29, personality: '', appearance: '', visual_profile_version: 1, sprites: { neutral: [material('npc')] } }],
+    latest_turn: { id: 'turn-1', state_version: 2, action: 'Я удивился', prompt_version: 'v1', speaker: 'NPC', narration: '', dialogue: '', choices: [], visual_directive: { character_id: 'npc', emotion: 'neutral', protagonist_emotion: 'surprised', pose: 'default', outfit: 'coat', background: 'street', present_character_ids: ['npc'] } },
+    visual_state: { emotion: 'neutral', pose: 'default', outfit: 'coat', background: 'street' },
+  }
+  render(<CharacterSprite session={session} showProtagonist />)
+  expect(screen.getByRole('img', { name: 'Герой: Удивление' })).toHaveAttribute('src', '/surprised.png')
+  expect(screen.getByRole('img', { name: 'NPC: Нейтральная' })).toBeInTheDocument()
+})

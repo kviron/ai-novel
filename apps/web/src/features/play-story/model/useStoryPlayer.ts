@@ -18,6 +18,13 @@ const errorText = (cause: unknown) => cause instanceof ApiRequestError ? cause.m
 export function useStoryPlayer(sessionId: string) {
   const [state, setState] = useState<PlayerState>(initial)
   const [action, setAction] = useState('')
+  const draftKey = `mnemosyne.session.${sessionId}.action-draft`
+
+  function updateAction(value: string) {
+    setAction(value)
+    if (value) sessionStorage.setItem(draftKey, value)
+    else sessionStorage.removeItem(draftKey)
+  }
   const lifetime = useRef<AbortController | null>(null)
   const busy = useRef(false)
   const attempt = useRef<CreateTurnRequest | null>(null)
@@ -27,7 +34,7 @@ export function useStoryPlayer(sessionId: string) {
     lifetime.current = controller
     busy.current = true
     attempt.current = null
-    setAction('')
+    setAction(sessionStorage.getItem(draftKey) ?? '')
     setState(initial)
     void (async () => {
       try {
@@ -47,7 +54,7 @@ export function useStoryPlayer(sessionId: string) {
       }
     })()
     return () => controller.abort()
-  }, [sessionId])
+  }, [sessionId, draftKey])
 
   async function reloadAfterConflict(controller: AbortController, successMessage: string) {
     // Version conflicts mean another request already changed this save. Never replay a
@@ -97,7 +104,7 @@ export function useStoryPlayer(sessionId: string) {
       const turn = await api.createTurn(sessionId, attempt.current, controller.signal)
       if (controller.signal.aborted) return
       attempt.current = null
-      setAction('')
+      updateAction('')
       setState({ session: { ...session, state_version: turn.state_version, can_rewind: true, latest_turn: turn, visual_state: turn.visual_directive }, models: state.models, phase: 'ready', message: 'Ход сохранён.', error: null, checking: false, reloadRequired: false })
     } catch (cause) {
       if (controller.signal.aborted) return
@@ -124,7 +131,7 @@ export function useStoryPlayer(sessionId: string) {
       const updated = await api.rewind(sessionId, session.state_version, controller.signal)
       if (controller.signal.aborted) return
       attempt.current = null
-      setAction('')
+      updateAction('')
       setState({ session: updated, models: state.models, phase: 'ready', message: 'Ход отменён. Можно выбрать другое действие.', error: null, checking: false, reloadRequired: false })
     } catch (cause) {
       if (controller.signal.aborted) return
@@ -172,5 +179,5 @@ export function useStoryPlayer(sessionId: string) {
     }
   }
 
-  return { ...state, action, setAction, submit, rewind, changeModel, retry, rewinding: state.phase === 'rewinding', disabled: state.phase === 'loading' || state.phase === 'submitting' || state.phase === 'rewinding' || state.phase === 'switching_model' || state.phase === 'provider_unavailable' || state.checking || state.reloadRequired || !state.session }
+  return { ...state, action, setAction: updateAction, submit, rewind, changeModel, retry, rewinding: state.phase === 'rewinding', disabled: state.phase === 'loading' || state.phase === 'submitting' || state.phase === 'rewinding' || state.phase === 'switching_model' || state.phase === 'provider_unavailable' || state.checking || state.reloadRequired || !state.session }
 }

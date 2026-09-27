@@ -1,5 +1,7 @@
 import json
+from io import BytesIO
 
+from PIL import Image, ImageDraw
 from sqlmodel import Session, select
 
 from app.db.models import Character, CharacterRevision, Story, StorySession, StoryVersion
@@ -85,6 +87,37 @@ def test_catalog_hero_pins_revision_and_stays_out_of_ai_cast(client):
         },
     )
     assert client.get(f"/api/sessions/{game['id']}").json()["protagonist"]["appearance"] == "Серый шарф"
+
+
+def test_catalog_hero_exposes_pinned_sprites_separately_from_npcs(client):
+    story = story_id(client)
+    character = client.post('/api/characters', json={
+        'name': 'Герой', 'gender': 'male', 'age': 24,
+        'personality': 'Спокоен', 'appearance': 'Серый плащ',
+    }).json()
+    image = BytesIO()
+    canvas = Image.new('RGBA', (1024, 1536), (0, 0, 0, 0))
+    ImageDraw.Draw(canvas).rectangle((300, 100, 724, 1500), fill=(30, 80, 160, 255))
+    canvas.save(image, format='PNG')
+    revision = client.post(
+        f"/api/characters/{character['id']}/sprite:neutral:default?filename=hero.png&creator=Author&license=own&source=manual",
+        content=image.getvalue(), headers={'Content-Type': 'image/png'},
+    ).json()
+    game = client.post(f'/api/stories/{story}/sessions', json={
+        'provider_id': 'ollama',
+        'hero': {
+            'source_kind': 'catalog',
+            'character_id': character['id'],
+            'revision_id': revision['current_revision_id'],
+        },
+    }).json()
+
+    assert character['id'] not in {npc['id'] for npc in game['characters']}
+    hero_url = game['protagonist']['sprites']['neutral'][0]['material']['url']
+    catalog_url = revision['sprites']['neutral'][0]['material']['url']
+    assert hero_url == catalog_url
+    restored = client.get(f"/api/sessions/{game['id']}").json()
+    assert restored['protagonist']['sprites'] == game['protagonist']['sprites']
 
 
 def test_unplayable_cast_member_is_rejected_without_creating_session(client):

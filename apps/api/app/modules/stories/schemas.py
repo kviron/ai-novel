@@ -58,6 +58,7 @@ class ProtagonistDetail(BaseModel):
     biography: str
     personality: str
     age: int | None
+    sprites: dict[str, list[SpriteVariant]] = Field(default_factory=dict)
 
 
 class StorySummary(BaseModel):

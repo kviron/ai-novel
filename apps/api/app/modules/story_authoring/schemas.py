@@ -70,7 +70,7 @@ class StoryCastMember(StrictAuthorModel):
     character_id: ShortText
     revision_id: ShortText
     order_index: int = Field(ge=0)
-    role: ShortText = "cast"
+    role: Prose = "cast"
     color: str = Field(default="#D9A75F", pattern=r"^#[0-9A-Fa-f]{6}$")
     playable: bool = False
 
@@ -174,7 +174,7 @@ class CharacterRevisionSnapshot(StrictAuthorModel):
     appearance: Prose
     biography: Prose = ""
     speech: Prose = ""
-    role: ShortText = ""
+    role: Prose = ""
 
 
 class StoryDraft(StrictAuthorModel):

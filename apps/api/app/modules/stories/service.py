@@ -173,14 +173,7 @@ def _story_summary(story: RuntimeStoryDefinition) -> StorySummary:
 def _character_detail(
     session: Session, character: Character, revision: CharacterRevision, role: str, color: str
 ) -> CharacterDetail:
-    materials = character_repository.materials_for_revision(session, revision.id)
-    sprites = {}
-    for material in materials:
-        if material.kind.startswith("sprite:"):
-            _, emotion, variant = material.kind.split(":", 2)
-            sprites.setdefault(emotion, []).append(
-                {"variant": variant, "material": _material_profile(material)}
-            )
+    sprites = _sprites_for_revision(session, revision.id)
     return CharacterDetail(
         id=character.id,
         revision_id=revision.id,
@@ -249,6 +242,12 @@ def _session_detail(
     latest_turn = repository.get_active_turn(session, story_session)
     visual_directive = _visual_directive(latest_turn) if latest_turn else None
     protagonist = session.get(SessionProtagonist, story_session.id)
+    protagonist_detail = ProtagonistDetail.model_validate(protagonist, from_attributes=True)
+    if protagonist.source_revision_id:
+        protagonist_detail = ProtagonistDetail.model_validate({
+            **protagonist_detail.model_dump(),
+            "sprites": _sprites_for_revision(session, protagonist.source_revision_id),
+        })
     return SessionDetail(
         id=story_session.id,
         story=_story_summary(story),
@@ -256,7 +255,7 @@ def _session_detail(
             _character_detail(session, character, revision, link.role, link.color)
             for character, revision, link in repository.list_session_characters(session, story_session.id)
         ],
-        protagonist=ProtagonistDetail.model_validate(protagonist, from_attributes=True),
+        protagonist=protagonist_detail,
         state_version=story_session.state_version,
         can_rewind=story_session.active_turn_id is not None and story_session.rewind_count < 10,
         current_scene=story_session.current_scene,
@@ -274,3 +273,15 @@ def _session_detail(
             ),
         ),
     )
+
+
+def _sprites_for_revision(session: Session, revision_id: str) -> dict:
+    materials = character_repository.materials_for_revision(session, revision_id)
+    sprites = {}
+    for material in materials:
+        if material.kind.startswith("sprite:"):
+            _, emotion, variant = material.kind.split(":", 2)
+            sprites.setdefault(emotion, []).append(
+                {"variant": variant, "material": _material_profile(material)}
+            )
+    return sprites

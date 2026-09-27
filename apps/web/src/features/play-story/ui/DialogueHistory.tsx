@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
-import { MessagesSquare } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { ArrowDown, MessagesSquare } from 'lucide-react'
 
 import { api, type Character, type TurnResult } from '@/shared/api'
 import { resolveStoryTheme } from '@/shared/config'
+import { Alert, AlertDescription } from '@/shared/ui/alert'
+import { Bubble, BubbleContent } from '@/shared/ui/bubble'
 import { Button } from '@/shared/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/shared/ui/empty'
+import { Marker, MarkerContent } from '@/shared/ui/marker'
+import { Message, MessageContent, MessageHeader } from '@/shared/ui/message'
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from '@/shared/ui/message-scroller'
 import { SceneSegments } from './SceneSegments'
 
 export function DialogueHistory({ sessionId, storySlug, characters = [] }: { sessionId: string; storySlug?: string; characters?: Character[] }) {
@@ -27,30 +33,45 @@ export function DialogueHistory({ sessionId, storySlug, characters = [] }: { ses
 
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogTrigger asChild>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label="История диалогов" title="История диалогов" className="text-white hover:bg-white/15 hover:text-white">
+      <Button type="button" variant="outline" size="icon-lg" aria-label="История диалогов" title="История диалогов">
         <MessagesSquare aria-hidden="true" />
       </Button>
     </DialogTrigger>
-    <DialogContent className="flex max-h-[min(80dvh,720px)] flex-col sm:max-w-2xl" style={resolveStoryTheme(storySlug).variables}>
+    <DialogContent className="flex h-[min(80dvh,720px)] flex-col sm:max-w-2xl" style={resolveStoryTheme(storySlug).variables}>
       <DialogHeader>
         <DialogTitle>История диалогов</DialogTitle>
         <DialogDescription>Текущая ветка прохождения — от первого действия до последнего ответа.</DialogDescription>
       </DialogHeader>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-sm" aria-live="polite">
-        {loading && <p role="status" className="text-muted-foreground">Загружаем переписку…</p>}
-        {error && <p role="alert" className="text-destructive">Не удалось загрузить переписку. Закройте окно и попробуйте снова.</p>}
-        {!loading && !error && turns.length === 0 && <p className="py-10 text-center text-muted-foreground">Диалогов пока нет.</p>}
-        {!loading && !error && turns.map((turn) => <div key={turn.id} className="space-y-3">
-          <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground" data-speaker="player">
-            <p className="mb-1 text-xs opacity-75">Вы</p>
-            <p className="whitespace-pre-wrap">{turn.action}</p>
-          </div>
-          <div className="mr-auto max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-4 py-3 text-foreground" data-speaker="character">
-            {new Set(turn.segments?.filter((part) => part.kind === 'dialogue').map((part) => part.character_id)).size <= 1 && <p className="mb-1 text-xs font-semibold text-primary">{turn.speaker || 'Новелла'}</p>}
-            <SceneSegments segments={turn.segments} narration={turn.narration} dialogue={turn.dialogue} speaker={turn.speaker} characters={characters} />
-          </div>
-        </div>)}
-      </div>
+      <MessageScrollerProvider autoScroll>
+        <MessageScroller className="min-h-0 flex-1" aria-live="polite">
+          <MessageScrollerViewport>
+            <MessageScrollerContent className="gap-4 pb-2">
+              {loading && <MessageScrollerItem messageId="loading"><Marker><MarkerContent role="status">Загружаем переписку…</MarkerContent></Marker></MessageScrollerItem>}
+              {error && <MessageScrollerItem messageId="error"><Alert variant="destructive"><AlertDescription>Не удалось загрузить переписку. Закройте окно и попробуйте снова.</AlertDescription></Alert></MessageScrollerItem>}
+              {!loading && !error && turns.length === 0 && <MessageScrollerItem messageId="empty"><Empty><EmptyHeader><EmptyMedia variant="icon"><MessagesSquare aria-hidden="true" /></EmptyMedia><EmptyTitle>Диалогов пока нет.</EmptyTitle><EmptyDescription>Продолжите историю, чтобы здесь появились сообщения.</EmptyDescription></EmptyHeader></Empty></MessageScrollerItem>}
+              {!loading && !error && turns.map((turn) => <Fragment key={turn.id}>
+                <MessageScrollerItem messageId={`${turn.id}-player`} scrollAnchor>
+                  <Message align="end" data-speaker="player">
+                    <MessageContent>
+                      <MessageHeader className="justify-end">Вы</MessageHeader>
+                      <Bubble align="end"><BubbleContent className="whitespace-pre-wrap">{turn.action}</BubbleContent></Bubble>
+                    </MessageContent>
+                  </Message>
+                </MessageScrollerItem>
+                <MessageScrollerItem messageId={`${turn.id}-reply`}>
+                  <Message data-speaker="character">
+                    <MessageContent>
+                      {new Set(turn.segments?.filter((part) => part.kind === 'dialogue').map((part) => part.character_id)).size <= 1 && <MessageHeader className="text-primary">{turn.speaker || 'Новелла'}</MessageHeader>}
+                      <Bubble variant="muted"><BubbleContent><SceneSegments segments={turn.segments} narration={turn.narration} dialogue={turn.dialogue} speaker={turn.speaker} characters={characters} /></BubbleContent></Bubble>
+                    </MessageContent>
+                  </Message>
+                </MessageScrollerItem>
+              </Fragment>)}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton><ArrowDown aria-hidden="true" /><span className="sr-only">К последнему сообщению</span></MessageScrollerButton>
+        </MessageScroller>
+      </MessageScrollerProvider>
     </DialogContent>
   </Dialog>
 }

@@ -53,7 +53,7 @@ def chat(request: ChatRequest) -> dict:
     speaker_id = speaker["id"]
     legacy = speaker_id == "akane" or speaker.get("source_type") == "legacy"
     hybrid = draft.get("story", {}).get("mode") == "hybrid"
-    repaired = "Исправь предыдущий ответ" in content
+    repaired = "Исправь ответ по схеме." in content
     early_ending = action == "Попытка раннего финала"
     hard_facts = draft.get("hard_facts", [])
     available_beats = draft.get("available_beats", [])

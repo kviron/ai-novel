@@ -104,6 +104,7 @@ export type Protagonist = {
   biography: string
   personality: string
   age: number | null
+  sprites?: Record<string, SpriteVariant[]>
 }
 
 export type VisualDirective = {
@@ -114,6 +115,7 @@ export type VisualDirective = {
   outfit: string
   background: string
   present_character_ids?: string[]
+  protagonist_emotion?: string
 }
 
 export type TurnResult = {
