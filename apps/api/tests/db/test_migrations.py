@@ -141,6 +141,95 @@ def test_session_beat_identity_is_snapshot_safe_and_downgrade_restores_old_forei
         assert any(row[2] == "story_beats" for row in db.execute("PRAGMA foreign_key_list(session_beats)"))
 
 
+def _insert_occupied_session_beat(db, *, beat_id="beat", create_story_beat=True):
+    db.execute(
+        "INSERT INTO stories (id, slug, title, premise, current_scene, created_at) "
+        "VALUES ('story', 'story', 'Story', 'Premise', 'Arrival', 'now')"
+    )
+    db.execute(
+        "INSERT INTO story_versions (id, story_id, version_number, status, mode, title, slug, created_at) "
+        "VALUES ('version', 'story', 1, 'published', 'hybrid', 'Story', 'story', 'now')"
+    )
+    db.execute("UPDATE stories SET current_published_version_id='version' WHERE id='story'")
+    db.execute(
+        "INSERT INTO story_sessions "
+        "(id, story_id, story_version_id, current_scene, provider_id, model_id, created_at, updated_at) "
+        "VALUES ('session', 'story', 'version', 'Arrival', 'ollama', 'model', 'now', 'now')"
+    )
+    db.execute(
+        "INSERT INTO turns "
+        "(id, session_id, request_id, state_version, action, speaker, narration, dialogue, choices, "
+        "visual_directive, raw_response, provider_id, model_id, prompt_version, created_at) "
+        "VALUES ('turn', 'session', 'request', 2, 'Act', 'NPC', 'N', 'D', '[]', '{}', '{}', "
+        "'ollama', 'model', 'v2', 'now')"
+    )
+    if create_story_beat:
+        db.execute(
+            "INSERT INTO story_beats (id, version_id, order_index, title, description) "
+            "VALUES (?, 'version', 0, 'Beat', 'Complete')",
+            (beat_id,),
+        )
+    db.execute(
+        "INSERT INTO session_beats (session_id, beat_id, status, completed_turn_id) "
+        "VALUES ('session', ?, 'completed', 'turn')",
+        (beat_id,),
+    )
+    db.commit()
+
+
+def test_snapshot_safe_beat_migration_preserves_occupied_rows_keys_and_foreign_keys(tmp_path):
+    database_path = tmp_path / "occupied-beats.db"
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    command.upgrade(config, "20260927_13")
+    with sqlite3.connect(database_path) as db:
+        _insert_occupied_session_beat(db)
+
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as db:
+        assert db.execute("SELECT * FROM session_beats").fetchall() == [("session", "beat", "completed", "turn")]
+        assert [row[1] for row in db.execute("PRAGMA table_info(session_beats)") if row[5]] == [
+            "session_id",
+            "beat_id",
+        ]
+        assert {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")} == {
+            "story_sessions",
+            "turns",
+        }
+        assert "ix_session_beats_session_status" in {row[1] for row in db.execute("PRAGMA index_list(session_beats)")}
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+    command.downgrade(config, "20260927_13")
+    with sqlite3.connect(database_path) as db:
+        assert db.execute("SELECT * FROM session_beats").fetchall() == [("session", "beat", "completed", "turn")]
+        assert {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")} == {
+            "story_sessions",
+            "story_beats",
+            "turns",
+        }
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_snapshot_only_beat_blocks_downgrade_without_schema_or_data_changes(tmp_path):
+    database_path = tmp_path / "snapshot-only-beat.db"
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as db:
+        _insert_occupied_session_beat(db, beat_id="snapshot-only", create_story_beat=False)
+
+    with pytest.raises(RuntimeError, match="snapshot-only.*cannot downgrade"):
+        command.downgrade(config, "20260927_13")
+
+    with sqlite3.connect(database_path) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_14",)
+        assert db.execute("SELECT * FROM session_beats").fetchall() == [
+            ("session", "snapshot-only", "completed", "turn")
+        ]
+        assert "story_beats" not in {row[2] for row in db.execute("PRAGMA foreign_key_list(session_beats)")}
+        assert "ix_session_beats_session_status" in {row[1] for row in db.execute("PRAGMA index_list(session_beats)")}
+
+
 def test_story_version_rejects_unknown_mode(tmp_path):
     database_path = tmp_path / "version-mode.db"
     create_pre_version_database(database_path)

@@ -1,6 +1,7 @@
 """Make session beat identity independent from mutable author draft rows."""
 
 from alembic import op
+from sqlalchemy import text
 
 revision = "20260927_14"
 down_revision = "20260927_13"
@@ -17,6 +18,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    incompatible = list(
+        bind.execute(
+            text(
+                "SELECT DISTINCT sb.beat_id FROM session_beats AS sb "
+                "LEFT JOIN story_beats AS b ON b.id = sb.beat_id "
+                "WHERE b.id IS NULL ORDER BY sb.beat_id"
+            )
+        ).scalars()
+    )
+    if incompatible:
+        identifiers = ", ".join(incompatible)
+        raise RuntimeError(f"snapshot-only beat IDs cannot downgrade to 20260927_13: {identifiers}")
     with op.batch_alter_table("session_beats", naming_convention=_NAMING) as batch:
         batch.drop_index("ix_session_beats_session_status")
         batch.create_foreign_key(
