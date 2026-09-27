@@ -1,9 +1,11 @@
-import type { CatalogCharacter, CharacterRevisionSnapshot, StoryCastSection, StoryDraftCastMember } from '@/shared/api'
+import type { CatalogCharacter, CharacterRevisionSnapshot, StoryCastSection, StoryDraftCastMember, StoryGenerationField } from '@/shared/api'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
-import { FieldGroup } from '@/shared/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/shared/ui/field'
+import { Textarea } from '@/shared/ui/textarea'
+import { StoryGenerateButton, type StoryFieldGenerator } from './StoryGenerateButton'
 
 type Props = {
   value: StoryCastSection
@@ -15,11 +17,14 @@ type Props = {
   onRetryCatalog: () => void
   onChange: (value: StoryCastSection) => void
   onSave: () => Promise<boolean>
+  onGenerate: StoryFieldGenerator
+  generatingField: StoryGenerationField | null
+  generationDisabled: boolean
 }
 
 function ageLabel(age: number) { return age % 10 === 1 && age % 100 !== 11 ? 'год' : age % 10 >= 2 && age % 10 <= 4 && (age % 100 < 12 || age % 100 > 14) ? 'года' : 'лет' }
 
-export function CastStep({ value, fixedHeroRevisionId, revisions, characters, catalogError, saving, onRetryCatalog, onChange, onSave }: Props) {
+export function CastStep({ value, fixedHeroRevisionId, revisions, characters, catalogError, saving, onRetryCatalog, onChange, onSave, onGenerate, generatingField, generationDisabled }: Props) {
   const pinnedRevisionIds = new Set(value.characters.map(({ revision_id }) => revision_id))
   const pinnedCharacterIds = new Set(value.characters.map(({ character_id }) => character_id))
   const fixedHeroCharacterId = revisions.find(({ id }) => id === fixedHeroRevisionId)?.character_id
@@ -38,7 +43,7 @@ export function CastStep({ value, fixedHeroRevisionId, revisions, characters, ca
       <CardHeader><CardTitle>Состав персонажей</CardTitle><CardDescription>Каждый участник закрепляется за точной ревизией каталога.</CardDescription></CardHeader>
       <CardContent><FieldGroup>
         {catalogError && <Alert variant="destructive"><AlertDescription>{catalogError} <Button type="button" variant="outline" size="sm" onClick={onRetryCatalog}>Повторить загрузку персонажей</Button></AlertDescription></Alert>}
-        {value.characters.length === 0 ? <p data-diagnostic-field="cast.characters" tabIndex={-1} aria-label="Состав персонажей">В составе пока нет персонажей.</p> : value.characters.map((member) => { const character = snapshot(member); return <Card size="sm" key={member.id} data-item-id={member.id} data-diagnostic-field="cast.characters" tabIndex={-1}><CardHeader><CardTitle>{character?.name ?? member.character_id}</CardTitle><CardDescription>{member.role || 'Роль пока не задана'}</CardDescription></CardHeader><CardContent><div data-diagnostic-field="cast.revision_id" tabIndex={-1}>{character && <Badge variant="secondary">{character.name} · ревизия {character.revision_number} · {character.age} {ageLabel(character.age)}</Badge>}</div></CardContent><CardFooter><Button type="button" variant="outline" onClick={() => remove(member)}>Удалить {character?.name ?? member.character_id}</Button></CardFooter></Card> })}
+        {value.characters.length === 0 ? <p data-diagnostic-field="cast.characters" tabIndex={-1} aria-label="Состав персонажей">В составе пока нет персонажей.</p> : value.characters.map((member) => { const character = snapshot(member); const name = character?.name ?? member.character_id; return <Card size="sm" key={member.id} data-item-id={member.id} data-diagnostic-field="cast.characters" tabIndex={-1}><CardHeader><CardTitle>{name}</CardTitle><CardDescription><span data-diagnostic-field="cast.revision_id" tabIndex={-1}>{character && <Badge variant="secondary">{name} · ревизия {character.revision_number} · {character.age} {ageLabel(character.age)}</Badge>}</span></CardDescription></CardHeader><CardContent><Field><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor={`cast-role-${member.id}`}>Роль {name}</FieldLabel><StoryGenerateButton label={`роль ${name}`} field="cast.role" value={member.role} targetId={member.id} busy={generatingField === 'cast.role'} disabled={generationDisabled} onGenerate={onGenerate} /></div><Textarea id={`cast-role-${member.id}`} value={member.role} disabled={generatingField === 'cast.role'} onChange={(event) => onChange({ ...value, characters: value.characters.map((item) => item.id === member.id ? { ...item, role: event.target.value } : item) })} /></Field></CardContent><CardFooter><Button type="button" variant="outline" size="sm" onClick={() => remove(member)}>Удалить {name}</Button></CardFooter></Card> })}
         {available.map((character) => <Button key={character.current_revision_id} type="button" variant="outline" onClick={() => add(character)}>Добавить {character.name} · ревизия {character.revision_number} · {character.age} {ageLabel(character.age)}</Button>)}
       </FieldGroup></CardContent>
       <CardFooter><Button type="submit" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить раздел'}</Button></CardFooter>

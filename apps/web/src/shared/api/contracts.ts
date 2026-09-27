@@ -337,6 +337,14 @@ export type StoryDraftSectionMap = {
 
 export type StoryDraftSectionName = keyof StoryDraftSectionMap
 
+export type StoryGenerationField =
+  | 'identity.title' | 'identity.short_description' | 'identity.premise' | 'identity.setting'
+  | 'identity.opening_situation' | 'identity.genres' | 'identity.tone'
+  | 'cast.role' | 'rules.themes_allowed' | 'rules.themes_blocked'
+  | 'rules.generation_policy.desired_themes' | 'rules.generation_policy.forbidden_outcomes'
+  | 'canon.creative_goals' | 'canon.fact.title' | 'canon.fact.statement'
+  | 'canon.beat.title' | 'canon.beat.description' | 'canon.beat.completion_evidence'
+
 export type SaveStoryDraftSectionRequest<K extends StoryDraftSectionName> = {
   expected_revision: number
   data: StoryDraftSectionMap[K]

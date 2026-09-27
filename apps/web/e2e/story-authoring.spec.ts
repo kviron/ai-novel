@@ -17,6 +17,20 @@ async function create(page: Page, title: string, slug: string) {
 async function cast(page: Page, name: string) { await step(page, 'Состав'); await page.getByRole('button', { name: new RegExp(`Добавить ${name}`) }).click(); await expect(page.getByText(new RegExp(`${name} · ревизия 1 ·`))).toBeVisible(); await save(page) }
 async function publish(page: Page) { await step(page, 'Проверка'); await page.getByRole('button', { name: 'Проверить черновик' }).click(); await expect(page.getByRole('button', { name: 'Опубликовать' })).toBeEnabled(); await page.getByRole('button', { name: 'Опубликовать' }).click(); await expect(page.getByRole('button', { name: 'Создать новую редакцию' })).toBeVisible() }
 
+test('генерация развивает несохранённую завязку и сохраняет её только по действию автора', async ({ page, request }) => {
+  const draft = await read<Draft>(await request.post('/api/author/stories', { data: {} }))
+  await page.goto(`/studio/stories/${draft.story_id}/edit`)
+  const premise = page.getByRole('textbox', { name: 'Завязка' })
+  await premise.fill('Поиск старого архива')
+  const response = page.waitForResponse((item) => item.request().method() === 'POST' && item.url().endsWith(`/api/author/stories/${draft.story_id}/generate-field`))
+  await page.getByRole('button', { name: 'Сгенерировать завязку' }).click()
+  expect((await response).ok()).toBeTruthy()
+  await expect(premise).toHaveValue(/Поиск старого архива.*подробная черта героя для сцен/s)
+  expect((await read<Draft>(await request.get(`/api/author/stories/${draft.story_id}/draft`))).identity.premise).toBe('')
+  await save(page)
+  expect((await read<Draft>(await request.get(`/api/author/stories/${draft.story_id}/draft`))).identity.premise).toContain('Поиск старого архива')
+})
+
 test('свободная новелла проходит видимый конструктор и закрепляет опубликованную версию', async ({ page, request }) => {
   const storyId = await create(page, 'E2E Свободный маршрут', 'e2e-freeform-route')
   await step(page, 'Режим'); await expect(page.getByRole('radio', { name: 'Свободный' })).toBeChecked(); await save(page)

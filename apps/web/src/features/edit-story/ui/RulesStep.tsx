@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
-import type { StoryRulesSection } from '@/shared/api'
+import type { StoryGenerationField, StoryRulesSection } from '@/shared/api'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
 import { Button } from '@/shared/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/shared/ui/card'
@@ -10,14 +10,18 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from '@/shared/ui/switch'
 import { Textarea } from '@/shared/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/shared/ui/toggle-group'
+import { StoryGenerateButton, type StoryFieldGenerator } from './StoryGenerateButton'
 
-type Props = { value: StoryRulesSection; saving: boolean; onChange: (value: StoryRulesSection) => void; onSave: () => Promise<boolean> }
+type Props = { value: StoryRulesSection; saving: boolean; onChange: (value: StoryRulesSection) => void; onSave: () => Promise<boolean>; onGenerate: StoryFieldGenerator; generatingField: StoryGenerationField | null; generationDisabled: boolean }
 
 const splitThemes = (value: string) => [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
 
-export function RulesStep({ value, saving, onChange, onSave }: Props) {
+export function RulesStep({ value, saving, onChange, onSave, onGenerate, generatingField, generationDisabled }: Props) {
   const [allowedText, setAllowedText] = useState(value.themes_allowed.join(', '))
   const [blockedText, setBlockedText] = useState(value.themes_blocked.join(', '))
+  useEffect(() => { const next = value.themes_allowed.join(', '); if (next !== splitThemes(allowedText).join(', ')) setAllowedText(next) }, [allowedText, value.themes_allowed])
+  useEffect(() => { const next = value.themes_blocked.join(', '); if (next !== splitThemes(blockedText).join(', ')) setBlockedText(next) }, [blockedText, value.themes_blocked])
+  const generate = (label: string, field: StoryGenerationField, text: string) => <StoryGenerateButton label={label} field={field} value={text} busy={generatingField === field} disabled={generationDisabled} onGenerate={onGenerate} />
   const policy = value.generation_policy
   const countError = policy.choice_policy !== 'free_input_only' && policy.min_choices > policy.max_choices
     ? 'Минимум не может быть больше максимума.' : ''
@@ -50,10 +54,10 @@ export function RulesStep({ value, saving, onChange, onSave }: Props) {
         <FieldSet><FieldLegend>Допустимое содержание</FieldLegend>{([
           ['allow_romance', 'Романтика'], ['allow_violence', 'Насилие'], ['allow_horror', 'Ужас'], ['allow_sexual_themes', 'Сексуальные темы'],
         ] as const).map(([field, label]) => <Field key={field} orientation="horizontal"><FieldLabel htmlFor={`rules-${field}`}>{label}</FieldLabel><Switch id={`rules-${field}`} checked={policy[field]} onCheckedChange={(checked) => updatePolicy(field, checked)} /></Field>)}</FieldSet>
-        <Field><FieldLabel htmlFor="rules-allowed">Разрешённые темы</FieldLabel><Input id="rules-allowed" data-diagnostic-field="rules.themes_allowed" value={allowedText} onChange={(event) => { setAllowedText(event.target.value); onChange({ ...value, themes_allowed: splitThemes(event.target.value) }) }} /><FieldDescription>Через запятую.</FieldDescription></Field>
-        <Field><FieldLabel htmlFor="rules-blocked">Запрещённые темы</FieldLabel><Input id="rules-blocked" data-diagnostic-field="rules.themes_blocked" value={blockedText} onChange={(event) => { setBlockedText(event.target.value); onChange({ ...value, themes_blocked: splitThemes(event.target.value) }) }} /></Field>
-        <Field><FieldLabel htmlFor="rules-desired">Желаемые мотивы</FieldLabel><Textarea id="rules-desired" value={policy.desired_themes} onChange={(event) => updatePolicy('desired_themes', event.target.value)} /></Field>
-        <Field><FieldLabel htmlFor="rules-forbidden">Запрещённые исходы</FieldLabel><Textarea id="rules-forbidden" value={policy.forbidden_outcomes} onChange={(event) => updatePolicy('forbidden_outcomes', event.target.value)} /></Field>
+        <Field><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor="rules-allowed">Разрешённые темы</FieldLabel>{generate('разрешённые темы', 'rules.themes_allowed', allowedText)}</div><Input id="rules-allowed" data-diagnostic-field="rules.themes_allowed" value={allowedText} disabled={generatingField === 'rules.themes_allowed'} onChange={(event) => { setAllowedText(event.target.value); onChange({ ...value, themes_allowed: splitThemes(event.target.value) }) }} /><FieldDescription>Через запятую.</FieldDescription></Field>
+        <Field><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor="rules-blocked">Запрещённые темы</FieldLabel>{generate('запрещённые темы', 'rules.themes_blocked', blockedText)}</div><Input id="rules-blocked" data-diagnostic-field="rules.themes_blocked" value={blockedText} disabled={generatingField === 'rules.themes_blocked'} onChange={(event) => { setBlockedText(event.target.value); onChange({ ...value, themes_blocked: splitThemes(event.target.value) }) }} /></Field>
+        <Field><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor="rules-desired">Желаемые мотивы</FieldLabel>{generate('желаемые мотивы', 'rules.generation_policy.desired_themes', policy.desired_themes)}</div><Textarea id="rules-desired" value={policy.desired_themes} disabled={generatingField === 'rules.generation_policy.desired_themes'} onChange={(event) => updatePolicy('desired_themes', event.target.value)} /></Field>
+        <Field><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor="rules-forbidden">Запрещённые исходы</FieldLabel>{generate('запрещённые исходы', 'rules.generation_policy.forbidden_outcomes', policy.forbidden_outcomes)}</div><Textarea id="rules-forbidden" value={policy.forbidden_outcomes} disabled={generatingField === 'rules.generation_policy.forbidden_outcomes'} onChange={(event) => updatePolicy('forbidden_outcomes', event.target.value)} /></Field>
         <Field><FieldLabel htmlFor="rules-provider">Рекомендуемый провайдер</FieldLabel><Input id="rules-provider" data-diagnostic-field="rules.recommended_provider_id" value={value.recommended_provider_id} onChange={(event) => onChange({ ...value, recommended_provider_id: event.target.value })} /></Field>
         <Field><FieldLabel htmlFor="rules-model">Рекомендуемая модель</FieldLabel><Input id="rules-model" data-diagnostic-field="rules.recommended_model_id" value={value.recommended_model_id} onChange={(event) => onChange({ ...value, recommended_model_id: event.target.value })} /></Field>
       </FieldGroup></CardContent>

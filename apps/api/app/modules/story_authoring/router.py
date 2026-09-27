@@ -10,15 +10,31 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlmodel import Session, select
 
 from app.core.config import RuntimeSettingsDep
-from app.core.errors import ApiError, DraftConflictResponse, DraftInvalidResponse, ErrorResponse
+from app.core.errors import (
+    ApiError,
+    DraftConflictResponse,
+    DraftInvalidResponse,
+    ErrorResponse,
+    ProviderResponseError,
+    ProviderUnavailableError,
+)
 from app.db.engine import get_session
 from app.db.models import SessionBeat, StoryDraftSnapshot, StoryMaterial, StorySession
+from app.modules.llm_harness.budget import ContextBudgetError
+from app.modules.llm_harness.executor import GenerationRejectedError
+from app.modules.llm_harness.models import UnknownModelProfileError
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError, available_models
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.protagonist import HeroSelectionError
 from app.modules.stories.schemas import SessionDetail
 from app.modules.story_authoring.cover import MAX_COVER_BYTES, InvalidCoverError, StoryCoverMaterial, save_story_cover
 from app.modules.story_authoring.definition import load_published_story_version, load_story_draft
+from app.modules.story_authoring.field_generation import (
+    GeneratedStoryField,
+    GenerateStoryFieldRequest,
+    InvalidStoryGenerationTargetError,
+    generate_story_field,
+)
 from app.modules.story_authoring.presentation import public_diagnostics, public_draft, public_validation
 from app.modules.story_authoring.schemas import (
     DraftValidationResult,
@@ -127,6 +143,47 @@ def get_draft(story_id: str, session: SessionDep, registry: ProviderRegistryDep)
             session, story_id, available_models=_available_models(registry)
         ).diagnostics
         return public_draft(draft)
+
+
+@router.post("/{story_id}/generate-field", response_model=GeneratedStoryField)
+def generate_field(
+    story_id: str,
+    payload: GenerateStoryFieldRequest,
+    session: SessionDep,
+    settings: RuntimeSettingsDep,
+    registry: ProviderRegistryDep,
+) -> GeneratedStoryField:
+    with _author_errors():
+        load_story_draft(session, story_id)
+    if payload.draft.story_id != story_id:
+        raise ApiError(404, "story_not_found", "История не найдена.")
+    try:
+        return generate_story_field(
+            payload, registry, settings.ollama_model, settings.ollama_context_tokens,
+            settings.model_context_windows,
+        )
+    except (NoAvailableModelError, ProviderUnavailableError) as error:
+        raise ApiError(
+            503, "provider_unavailable", "Нейросеть недоступна. Проверьте модель и повторите.", retryable=True
+        ) from error
+    except ProviderResponseError as error:
+        raise ApiError(
+            502, "invalid_model_response", "Модель вернула некорректный текст для поля.", retryable=True
+        ) from error
+    except ContextBudgetError as error:
+        raise ApiError(
+            422, "context_requirements_exceed_model", "Контекст модели слишком мал для черновика."
+        ) from error
+    except GenerationRejectedError as error:
+        raise ApiError(
+            502, "invalid_model_response", "Модель дважды вернула некорректный ответ.", retryable=True
+        ) from error
+    except UnknownModelProfileError as error:
+        raise ApiError(422, "model_profile_unavailable", "Для этой модели не задан размер контекста.") from error
+    except UnsupportedModelError as error:
+        raise ApiError(422, "validation_error", "Выбранные провайдер или модель не поддерживаются.") from error
+    except InvalidStoryGenerationTargetError as error:
+        raise ApiError(422, "validation_error", "Выбранное поле больше не существует в черновике.") from error
 
 
 @router.put(

@@ -13,6 +13,7 @@ import type {
   StorySession,
   StoryDetail,
   StoryDraft,
+  StoryGenerationField,
   StoryDraftSectionMap,
   StoryDraftSectionName,
   StoryCoverMaterial,
@@ -260,6 +261,11 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
     },
     getStoryDraft(storyId: string, signal?: AbortSignal) {
       return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/draft`, { baseUrl, signal })
+    },
+    generateStoryField(storyId: string, field: StoryGenerationField, currentText: string, draft: StoryDraft, targetId?: string) {
+      return request<{ text: string }>(`/api/author/stories/${encodeURIComponent(storyId)}/generate-field`, {
+        baseUrl, method: 'POST', body: { field, current_text: currentText, draft, target_id: targetId ?? null },
+      })
     },
     saveStoryDraftSection<K extends StoryDraftSectionName>(
       storyId: string,

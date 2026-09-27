@@ -37,6 +37,7 @@ export type {
   StoryCastSection,
   StoryCoverMaterial,
   StoryDraft,
+  StoryGenerationField,
   StoryDraftCastMember,
   StoryDraftSectionMap,
   StoryDraftSectionName,

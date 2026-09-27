@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBlocker, useNavigate } from 'react-router-dom'
 
-import { api, ApiRequestError, type CatalogCharacter, type DraftDiagnostic, type StoryDraft, type StoryDraftSectionName } from '@/shared/api'
+import { api, ApiRequestError, type CatalogCharacter, type DraftDiagnostic, type StoryDraft, type StoryDraftSectionName, type StoryGenerationField } from '@/shared/api'
 import { routes } from '@/shared/config'
 import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
@@ -9,6 +9,7 @@ import { Button } from '@/shared/ui/button'
 import { Skeleton } from '@/shared/ui/skeleton'
 import { useStoryDraft } from '../model/useStoryDraft'
 import { focusDraftDiagnostic } from '../model/diagnosticFocus'
+import { applyGeneratedField } from '../model/generatedField'
 import { CastStep } from './CastStep'
 import { HeroStep } from './HeroStep'
 import { IdentityStep } from './IdentityStep'
@@ -37,6 +38,8 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
   const [validationResult, setValidationResult] = useState<{ revision: number; diagnostics: DraftDiagnostic[] } | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [generatingField, setGeneratingField] = useState<StoryGenerationField | null>(null)
+  const [generationError, setGenerationError] = useState('')
   const [characters, setCharacters] = useState<CatalogCharacter[]>([])
   const [catalogError, setCatalogError] = useState('')
   const [catalogAttempt, setCatalogAttempt] = useState(0)
@@ -55,6 +58,19 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
   const currentDraft = editor.draft
   const visibleDiagnostics = validationResult?.revision === currentDraft.draft_revision ? validationResult.diagnostics : currentDraft.diagnostics
   const common = { saving: editor.phase === 'saving', onSave: editor.saveSection }
+  const generateField = async (field: StoryGenerationField, currentText: string, targetId?: string) => {
+    if (generatingField || !editor.localSection) return
+    setGeneratingField(field)
+    setGenerationError('')
+    try {
+      const liveDraft = { ...currentDraft, [editor.activeStep]: editor.localSection }
+      const result = await api.generateStoryField(storyId, field, currentText, liveDraft, targetId)
+      editor.updateLocalSection((section) => applyGeneratedField(section, field, result.text, targetId))
+    } catch (cause) {
+      setGenerationError(cause instanceof ApiRequestError ? cause.message : 'Не удалось сгенерировать поле. Проверьте модель и повторите.')
+    } finally { setGeneratingField(null) }
+  }
+  const generator = { onGenerate: (field: StoryGenerationField, text: string, targetId?: string) => void generateField(field, text, targetId), generatingField, generationDisabled: Boolean(generatingField) || editor.phase === 'saving' || currentDraft.status === 'published' }
   const pinnedCanonCharacterIds = new Set([
     ...(currentDraft.hero.fixed_hero_revision_id
       ? currentDraft.character_revisions.filter(({ id }) => id === currentDraft.hero.fixed_hero_revision_id).map(({ character_id }) => character_id)
@@ -66,7 +82,7 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
     name: currentDraft.character_revisions.find((revision) => revision.character_id === character_id)?.name ?? character_id,
   }))
   const selectStep = (step: EditorStep) => {
-    if (editor.dirtyStep) return
+    if (editor.dirtyStep || generatingField) return
     setViewStep(step)
     if (step !== 'review') editor.setActiveStep(step)
   }
@@ -112,17 +128,18 @@ export function StoryEditorShell({ storyId, initialDraft }: { storyId: string; i
   return <main className="flex w-full min-w-0 flex-col gap-6 p-4 md:p-6 xl:p-8">
     <header className="flex flex-wrap items-end justify-between gap-3"><div className="flex flex-col gap-2"><Badge className="w-fit" variant={editor.draft.status === 'published' ? 'default' : 'secondary'}>{editor.draft.status === 'published' ? `Опубликовано · версия ${editor.draft.version_number}` : `Черновик · v${editor.draft.draft_revision}`}</Badge><h1>{editor.draft.identity.title || 'Новая новелла'}</h1><p className="text-muted-foreground">Пошаговая настройка свободной или гибридной истории.</p></div></header>
     <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(250px,300px)] xl:grid-cols-[170px_minmax(0,1fr)_minmax(270px,320px)]">
-    <nav aria-label="Разделы редактора" className="flex min-w-0 flex-wrap gap-1 rounded-lg border bg-card p-2 lg:col-span-2 xl:sticky xl:top-6 xl:col-span-1 xl:flex-col"><p className="hidden px-2 py-1 text-xs font-medium text-muted-foreground xl:block">Разделы</p>{steps.map((step, index) => <Button key={step.id} type="button" variant={viewStep === step.id ? 'secondary' : 'ghost'} size="sm" className="justify-start" aria-current={viewStep === step.id ? 'step' : undefined} disabled={Boolean(editor.dirtyStep && viewStep !== step.id)} onClick={() => selectStep(step.id)}><span aria-hidden="true">{index + 1}.</span>{step.label}</Button>)}</nav>
+    <nav aria-label="Разделы редактора" className="flex min-w-0 flex-wrap gap-1 rounded-lg border bg-card p-2 lg:col-span-2 xl:sticky xl:top-6 xl:col-span-1 xl:flex-col"><p className="hidden px-2 py-1 text-xs font-medium text-muted-foreground xl:block">Разделы</p>{steps.map((step, index) => <Button key={step.id} type="button" variant={viewStep === step.id ? 'secondary' : 'ghost'} size="sm" className="justify-start" aria-current={viewStep === step.id ? 'step' : undefined} disabled={Boolean(generatingField || (editor.dirtyStep && viewStep !== step.id))} onClick={() => selectStep(step.id)}><span aria-hidden="true">{index + 1}.</span>{step.label}</Button>)}</nav>
     <div className="flex min-w-0 flex-col gap-4">
     {editor.dirtyStep && <p role="status" className="text-muted-foreground">Есть несохранённые изменения. Сохраните раздел перед переходом.</p>}
     {editor.dirtyStep && <DirtyNavigationGuard />}
     {editor.error && <Alert variant="destructive"><AlertTitle>{editor.phase === 'conflict' ? 'Конфликт версий' : 'Ошибка сохранения'}</AlertTitle><AlertDescription>{editor.error}{editor.phase === 'conflict' && <Button type="button" variant="outline" size="sm" onClick={() => void editor.reloadAfterConflict()}>Загрузить версию сервера</Button>}</AlertDescription></Alert>}
-    {viewStep === 'identity' && <IdentityStep storyId={storyId} value={editor.localSection as StoryDraft['identity']} onChange={editor.setLocalSection} {...common} />}
+    {generationError && <Alert variant="destructive"><AlertTitle>Генерация не выполнена</AlertTitle><AlertDescription>{generationError}</AlertDescription></Alert>}
+    {viewStep === 'identity' && <IdentityStep storyId={storyId} value={editor.localSection as StoryDraft['identity']} onChange={editor.setLocalSection} {...common} {...generator} />}
     {viewStep === 'mode' && <ModeStep value={editor.localSection as StoryDraft['mode']} savedValue={editor.draft.mode} hasIncompatibleCanon={Boolean(editor.draft.canon.creative_goals || editor.draft.canon.facts.length || editor.draft.canon.beats.length)} onChange={editor.setLocalSection} {...common} />}
     {viewStep === 'hero' && <HeroStep value={editor.localSection as StoryDraft['hero']} revisions={editor.draft.character_revisions} characters={characters} catalogError={catalogError} onRetryCatalog={retryCatalog} onChange={editor.setLocalSection} {...common} />}
-    {viewStep === 'cast' && <CastStep value={editor.localSection as StoryDraft['cast']} fixedHeroRevisionId={editor.draft.hero.fixed_hero_revision_id} revisions={editor.draft.character_revisions} characters={characters} catalogError={catalogError} onRetryCatalog={retryCatalog} onChange={editor.setLocalSection} {...common} />}
-    {viewStep === 'rules' && <RulesStep value={editor.localSection as StoryDraft['rules']} onChange={editor.setLocalSection} {...common} />}
-    {viewStep === 'canon' && <CanonStep mode={editor.draft.mode.mode} characters={canonCharacters} value={editor.localSection as StoryDraft['canon']} onChange={editor.setLocalSection} {...common} />}
+    {viewStep === 'cast' && <CastStep value={editor.localSection as StoryDraft['cast']} fixedHeroRevisionId={editor.draft.hero.fixed_hero_revision_id} revisions={editor.draft.character_revisions} characters={characters} catalogError={catalogError} onRetryCatalog={retryCatalog} onChange={editor.setLocalSection} {...common} {...generator} />}
+    {viewStep === 'rules' && <RulesStep value={editor.localSection as StoryDraft['rules']} onChange={editor.setLocalSection} {...common} {...generator} />}
+    {viewStep === 'canon' && <CanonStep mode={editor.draft.mode.mode} characters={canonCharacters} value={editor.localSection as StoryDraft['canon']} onChange={editor.setLocalSection} {...common} {...generator} />}
     {viewStep === 'review' && <ReviewStep draft={editor.draft} />}
     </div>
     <DraftStatusPanel draft={currentDraft} diagnostics={visibleDiagnostics} busy={actionBusy} dirty={Boolean(editor.dirtyStep)} actionError={actionError} onValidate={async () => { await validate() }} onTest={async () => { await runValidated('test') }} onPublish={async () => { await runValidated('publish') }} onClone={clone} onDiagnostic={focusDiagnostic} />

@@ -54,6 +54,10 @@ export function useStoryDraft(storyId: string, initialDraft?: StoryDraft) {
     setLocalSectionState(section)
     setDirtyStep(activeStep)
   }, [activeStep])
+  const updateLocalSection = useCallback((update: (section: StoryDraftSectionMap[StoryDraftSectionName]) => StoryDraftSectionMap[StoryDraftSectionName]) => {
+    setLocalSectionState((section) => section ? update(section) : section)
+    setDirtyStep(activeStep)
+  }, [activeStep])
 
   const saveSection = useCallback(async (
     override?: StoryDraftSectionMap[StoryDraftSectionName],
@@ -97,7 +101,7 @@ export function useStoryDraft(storyId: string, initialDraft?: StoryDraft) {
     setPhase('ready')
   }, [activeStep])
   return useMemo(() => ({
-    draft, phase, error, activeStep, localSection, dirtyStep, setActiveStep, setLocalSection,
+    draft, phase, error, activeStep, localSection, dirtyStep, setActiveStep, setLocalSection, updateLocalSection,
     saveSection, reloadAfterConflict, diagnosticsFor, acceptDraft,
-  }), [acceptDraft, activeStep, diagnosticsFor, dirtyStep, draft, error, localSection, phase, reloadAfterConflict, saveSection, setActiveStep, setLocalSection])
+  }), [acceptDraft, activeStep, diagnosticsFor, dirtyStep, draft, error, localSection, phase, reloadAfterConflict, saveSection, setActiveStep, setLocalSection, updateLocalSection])
 }

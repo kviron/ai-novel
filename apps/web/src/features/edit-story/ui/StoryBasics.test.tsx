@@ -18,6 +18,18 @@ const mark: CatalogCharacter = {
 
 afterEach(() => { cleanup(); apiServer.reset() })
 
+test('генерирует поле из несохранённого текста и оставляет результат редактируемым', async () => {
+  apiServer.storyDraft({ story_id: 'story-1' })
+  render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
+  const premise = await screen.findByRole('textbox', { name: 'Завязка' })
+  await userEvent.type(premise, 'Поиск брата')
+  await userEvent.click(screen.getByRole('button', { name: 'Сгенерировать завязку' }))
+  await waitFor(() => expect(premise).toHaveValue('Поиск брата\n\nНовая деталь истории.'))
+  const request = apiServer.authoringRequests().find(({ path }) => path.endsWith('/generate-field'))
+  expect(request?.body).toMatchObject({ field: 'identity.premise', current_text: 'Поиск брата', draft: { identity: { premise: 'Поиск брата' } } })
+  expect(apiServer.lastAuthoringSectionRequest()).toBeNull()
+})
+
 test('сохраняет идентичность целой секцией и загружает обложку с происхождением', async () => {
   apiServer.storyDraft({ story_id: 'story-1' })
   render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
@@ -95,7 +107,7 @@ test('закрепляет точную ревизию героя и не пре
   expect(screen.queryByRole('button', { name: /Добавить Аканэ/ })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Добавить Марк/ })).not.toBeInTheDocument()
 
-  await userEvent.click(within(markRevision.closest('[data-slot="card"]')!).getByRole('button'))
+  await userEvent.click(within(markRevision.closest('[data-slot="card"]')!).getByRole('button', { name: 'Удалить Марк' }))
   await userEvent.click(screen.getByRole('button', { name: 'Сохранить раздел' }))
   await waitFor(() => expect(apiServer.lastAuthoringSectionRequest()).toMatchObject({ section: 'cast', data: { characters: [] } }))
 })

@@ -146,6 +146,10 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       const draft = activeStoryDrafts.get(decodeURIComponent(draftMatch[1]))
       return draft ? json(draft) : json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
     }
+    if (method === 'POST' && /^\/api\/author\/stories\/[^/]+\/generate-field$/.test(pathname)) {
+      const request = body as { current_text: string }
+      return json({ text: `${request.current_text ? `${request.current_text}\n\n` : ''}Новая деталь истории.` })
+    }
     const sectionMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft\/(identity|mode|hero|cast|rules|canon)$/)
     if (method === 'PUT' && sectionMatch) {
       const storyId = decodeURIComponent(sectionMatch[1])
