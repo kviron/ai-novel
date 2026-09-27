@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, expect, test } from 'vitest'
 
@@ -33,6 +33,37 @@ test('a later deliberate visit to the new route creates a fresh draft', async ()
   await router.navigate('/studio/stories/new')
 
   await waitFor(() => expect(router.state.location.pathname).toBe('/studio/stories/story-2/edit'))
+  expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'POST' && path === '/api/author/stories')).toHaveLength(2)
+})
+
+test('independent simultaneous new routes create independent drafts', async () => {
+  const routeConfig = [
+    { path: '/studio/stories/new', element: <StoryEditorRoute /> },
+    { path: '/studio/stories/:storyId/edit', element: <StoryEditorRoute /> },
+  ]
+  const firstRouter = createMemoryRouter(routeConfig, { initialEntries: ['/studio/stories/new'] })
+  const secondRouter = createMemoryRouter(routeConfig, { initialEntries: ['/studio/stories/new'] })
+
+  render(<div data-testid="first-editor"><RouterProvider router={firstRouter} /></div>)
+  render(<div data-testid="second-editor"><RouterProvider router={secondRouter} /></div>)
+
+  await waitFor(() => expect(firstRouter.state.location.pathname).toBe('/studio/stories/story-1/edit'))
+  await waitFor(() => expect(secondRouter.state.location.pathname).toBe('/studio/stories/story-2/edit'))
+  expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'POST' && path === '/api/author/stories')).toHaveLength(2)
+})
+
+test('a rejected draft creation can be deliberately retried with a fresh request', async () => {
+  apiServer.failDraftCreationOnce()
+  const router = createMemoryRouter([
+    { path: '/studio/stories/new', element: <StoryEditorRoute /> },
+    { path: '/studio/stories/:storyId/edit', element: <StoryEditorRoute /> },
+  ], { initialEntries: ['/studio/stories/new'] })
+  render(<RouterProvider router={router} />)
+
+  const alert = await screen.findByRole('alert')
+  fireEvent.click(within(alert.parentElement!).getByRole('button', { name: 'Повторить' }))
+
+  await waitFor(() => expect(router.state.location.pathname).toBe('/studio/stories/story-1/edit'))
   expect(apiServer.authoringRequests().filter(({ method, path }) => method === 'POST' && path === '/api/author/stories')).toHaveLength(2)
 })
 

@@ -55,6 +55,7 @@ let modelChanges = new Map<string, Session>()
 let activeStoryDrafts = new Map<string, StoryDraft>()
 let publishedStoryVersions = new Map<string, Map<string, StoryDraft>>()
 let nextStoryNumber = 1
+let failNextDraftCreation = false
 let authoringRequestLog: { method: string; path: string; body: unknown }[] = []
 let lastSectionRequest: { storyId: string; section: string; expected_revision: number; data: unknown } | null = null
 let nextDraftDiagnostics: DraftDiagnostic[] = []
@@ -126,6 +127,10 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     const body = await requestBody(input, init)
     authoringRequestLog.push({ method, path: pathname, body })
     if (method === 'POST' && pathname === '/api/author/stories') {
+      if (failNextDraftCreation) {
+        failNextDraftCreation = false
+        return json({ code: 'temporarily_unavailable', detail: 'Не удалось создать черновик.', retryable: true }, 503)
+      }
       const storyId = `story-${nextStoryNumber++}`
       const created = mergeDraftSeed({
         story_id: storyId,
@@ -443,6 +448,7 @@ export const apiServer = {
     activeStoryDrafts.set(draft.story_id, draft)
   },
   draftDiagnostics(value: DraftDiagnostic[]) { nextDraftDiagnostics = value },
+  failDraftCreationOnce() { failNextDraftCreation = true },
   authoringRequests() { return authoringRequestLog },
   lastAuthoringSectionRequest() { return lastSectionRequest },
   lastCoverUploadRequest() { return lastCoverUpload },
@@ -469,6 +475,7 @@ export const apiServer = {
     activeStoryDrafts = new Map()
     publishedStoryVersions = new Map()
     nextStoryNumber = 1
+    failNextDraftCreation = false
     authoringRequestLog = []
     lastSectionRequest = null
     nextDraftDiagnostics = []

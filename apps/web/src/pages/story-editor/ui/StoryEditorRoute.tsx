@@ -4,25 +4,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiRequestError, type StoryDraft } from '@/shared/api'
 import { routes } from '@/shared/config'
 
-let createDraftInFlight: Promise<StoryDraft> | null = null
-
-function createDraftOnce(): Promise<StoryDraft> {
-  if (createDraftInFlight) return createDraftInFlight
-  const request = api.createStoryDraft()
-  createDraftInFlight = request
-  const clear = () => {
-    if (createDraftInFlight === request) createDraftInFlight = null
-  }
-  void request.then(clear, clear)
-  return request
-}
-
 export function StoryEditorRoute() {
   const { storyId } = useParams()
   const navigate = useNavigate()
   const [draft, setDraft] = useState<StoryDraft | null>(null)
   const [error, setError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const loadedStoryId = useRef<string | null>(null)
+  const createDraftRequest = useRef<Promise<StoryDraft> | null>(null)
   const creating = !storyId
 
   useEffect(() => {
@@ -31,9 +20,20 @@ export function StoryEditorRoute() {
     let active = true
     setError('')
 
-    const load = creating
-      ? createDraftOnce()
-      : api.getStoryDraft(storyId, controller.signal)
+    let load: Promise<StoryDraft>
+    if (creating) {
+      if (!createDraftRequest.current) {
+        const request = api.createStoryDraft()
+        createDraftRequest.current = request
+        const clear = () => {
+          if (createDraftRequest.current === request) createDraftRequest.current = null
+        }
+        void request.then(clear, clear)
+      }
+      load = createDraftRequest.current
+    } else {
+      load = api.getStoryDraft(storyId, controller.signal)
+    }
 
     load.then((nextDraft) => {
       if (!active) return
@@ -50,9 +50,15 @@ export function StoryEditorRoute() {
       active = false
       if (!creating) controller.abort()
     }
-  }, [creating, navigate, storyId])
+  }, [creating, loadAttempt, navigate, storyId])
 
-  if (error) return <main><h1>Редактор новеллы</h1><p role="alert">{error}</p></main>
+  if (error) return (
+    <main>
+      <h1>Редактор новеллы</h1>
+      <p role="alert">{error}</p>
+      <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Повторить</button>
+    </main>
+  )
 
   return (
     <main>
