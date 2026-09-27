@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 
-test('автор добавляет персонажа, настраивает цвет и убирает его без потери каталога', async ({ page }) => {
-  const [story] = await (await page.request.get('/api/stories')).json() as { id: string }[]
+test('устаревший экран состава не меняет опубликованную версию и сохраняет персонажа в каталоге', async ({ page }) => {
+  const stories = await (await page.request.get('/api/stories')).json() as { id: string; title: string }[]
+  const story = stories.find(({ title }) => title === 'Эхо неона')!
   const created = await page.request.post('/api/characters', { data: {
     name: 'Леон для состава', gender: 'male', age: 29, personality: 'Наблюдательный', appearance: 'Тёмные волосы',
   } })
@@ -12,34 +13,18 @@ test('автор добавляет персонажа, настраивает �
   await page.getByRole('button', { name: 'Добавить' }).click()
   await expect(page.getByRole('dialog', { name: 'Добавить персонажей' })).toContainText('Леон для состава')
   await page.getByRole('checkbox', { name: 'Леон для состава' }).check()
+  const mutation = page.waitForResponse((response) => response.url().endsWith(`/api/stories/${story.id}/characters/batch`))
   await page.getByRole('button', { name: 'Добавить выбранных' }).click()
-  await expect(page.getByText('Леон для состава', { exact: true })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Редактировать Леон для состава' }).click()
-  await page.getByRole('button', { name: 'Выбрать цвет' }).click()
-  const swatches = page.getByRole('button', { name: /^Цвет #/ })
-  expect(await swatches.count()).toBe(6)
-  const firstSwatch = await swatches.first().boundingBox()
-  const lastSwatch = await swatches.last().boundingBox()
-  expect(Math.abs(firstSwatch!.y - lastSwatch!.y)).toBeLessThanOrEqual(8)
-  await page.keyboard.press('Escape')
-  await page.getByRole('textbox', { name: 'Роль в новелле' }).fill('Союзник')
-  await page.locator('#cast-color').fill('#3366aa')
-  await page.getByRole('button', { name: 'Сохранить' }).click()
-  await expect(page.getByText('Союзник')).toBeVisible()
-  const game = await page.request.post(`/api/stories/${story.id}/sessions`, { data: {} })
-  expect(game.ok()).toBeTruthy()
-  expect((await game.json() as { characters: { id: string; color: string }[] }).characters.find((item) => item.id === character.id)?.color).toBe('#3366AA')
-
-  await page.getByRole('button', { name: 'Удалить Леон для состава' }).click()
-  await page.getByRole('button', { name: 'Убрать из новеллы' }).click()
-  await expect(page.getByText('Леон для состава', { exact: true })).toHaveCount(0)
-  expect((await (await page.request.get(`/api/sessions/${(await game.json()).id}`)).json() as { characters: { id: string }[] }).characters.some((item) => item.id === character.id)).toBeTruthy()
+  const response = await mutation
+  expect(response.status()).toBe(409)
+  expect(await response.json()).toMatchObject({ code: 'story_versioned' })
+  await expect(page.getByRole('alert')).toContainText('Состав не изменён')
   expect((await page.request.get(`/api/characters/${character.id}`)).ok()).toBeTruthy()
 })
 
 test('состав остаётся доступным на узком экране без горизонтального скролла', async ({ page }) => {
-  const [story] = await (await page.request.get('/api/stories')).json() as { id: string }[]
+  const stories = await (await page.request.get('/api/stories')).json() as { id: string; title: string }[]
+  const story = stories.find(({ title }) => title === 'Эхо неона')!
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(`/studio/stories/${story.id}/characters`)
   await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible()
