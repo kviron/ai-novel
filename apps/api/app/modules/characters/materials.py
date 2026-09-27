@@ -317,7 +317,10 @@ def import_character(session: Session, asset_dir: Path, data: bytes):
                 for material in revision_materials:
                     if material is None:
                         continue
-                    if material.kind not in {"avatar", "cover"} and SPRITE_KIND.fullmatch(material.kind) is None:
+                    if (
+                        material.kind not in {"avatar", "cover", "sprite_sheet"}
+                        and SPRITE_KIND.fullmatch(material.kind) is None
+                    ):
                         raise InvalidMaterialError("Unsupported material")
                     if material.mime_type not in MIME_EXTENSIONS:
                         raise InvalidMaterialError("Unsupported material")

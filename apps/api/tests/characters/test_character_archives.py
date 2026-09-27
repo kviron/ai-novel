@@ -1,11 +1,12 @@
+import json
 from io import BytesIO
 from zipfile import ZipFile
 
 from PIL import Image, ImageDraw
-from sqlmodel import Session
+from sqlmodel import Session, select
 from versioned_story_helpers import publish_cast
 
-from app.db.models import Story
+from app.db.models import CharacterMaterial, Story
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"test-avatar-bytes"
 PROFILE = {"name": "Мира", "gender": "female", "age": 26, "personality": "Смелая", "appearance": "Синий плащ"}
@@ -124,6 +125,34 @@ def test_import_rejects_bad_archive_without_creating_character(client):
     bad = client.post("/api/characters/import", content=b"not a zip", headers={"Content-Type": "application/zip"})
     assert bad.status_code == 422
     assert len(client.get("/api/characters").json()) == before
+
+
+def test_import_accepts_legacy_sprite_sheet_material(client):
+    created = client.post("/api/characters", json=PROFILE).json()
+    uploaded = client.post(
+        f"/api/characters/{created['id']}/avatar?filename=mira.png&creator=Author&license=own&source=manual",
+        content=PNG,
+        headers={"Content-Type": "image/png"},
+    ).json()
+    exported = client.get(f"/api/characters/{created['id']}/export").content
+    output = BytesIO()
+    with ZipFile(BytesIO(exported)) as source, ZipFile(output, "w") as target:
+        manifest = json.loads(source.read("manifest.json"))
+        avatar = manifest["revisions"][-1]["materials"][0]
+        manifest["revisions"][-1]["materials"].append({**avatar, "kind": "sprite_sheet"})
+        target.writestr("manifest.json", json.dumps(manifest))
+        for name in source.namelist():
+            if name != "manifest.json":
+                target.writestr(name, source.read(name))
+
+    imported = client.post("/api/characters/import", content=output.getvalue())
+    assert imported.status_code == 201, imported.text
+    with Session(client.app.state.engine) as session:
+        materials = session.exec(
+            select(CharacterMaterial).where(CharacterMaterial.revision_id == imported.json()["current_revision_id"])
+        ).all()
+    assert {item.kind for item in materials} == {"avatar", "sprite_sheet"}
+    assert uploaded["avatar"]["sha256"] in {item.sha256 for item in materials}
 
 
 def test_character_with_avatar_can_join_two_stories(client):
