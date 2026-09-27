@@ -71,7 +71,8 @@ def test_ollama_sends_schema_and_parses_turn():
             "suggested_choices",
             "proposed_effects",
         ]
-        assert body["options"] == {"num_ctx": 16384}
+        assert body["options"] == {"num_ctx": 16384, "num_predict": 1024}
+        assert body["think"] is False
         return httpx.Response(
             200, json={"message": {"content": VALID_TURN_JSON}, "prompt_eval_count": 180, "eval_count": 42}
         )

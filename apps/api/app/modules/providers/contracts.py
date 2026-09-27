@@ -85,6 +85,7 @@ class TurnGenerationRequest(BaseModel):
     user_prompt: str
     response_schema: Mapping[str, Any]
     context_tokens: int = 16384
+    output_tokens: int = 1024
 
     @field_validator("response_schema", mode="after")
     @classmethod
@@ -103,6 +104,7 @@ class TextGenerationRequest(BaseModel):
     system_prompt: str
     user_prompt: str
     context_tokens: int = 16384
+    output_tokens: int = 1024
 
 
 class TextProposal(BaseModel):

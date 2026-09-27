@@ -85,8 +85,9 @@ class OllamaProvider:
                     {"role": "user", "content": request.user_prompt},
                 ],
                 "stream": False,
+                "think": False,
                 "format": response_schema,
-                "options": {"num_ctx": request.context_tokens},
+                "options": {"num_ctx": request.context_tokens, "num_predict": request.output_tokens},
             },
         )
         try:
@@ -117,8 +118,9 @@ class OllamaProvider:
                     {"role": "user", "content": request.user_prompt},
                 ],
                 "stream": False,
+                "think": False,
                 "format": TextProposal.model_json_schema(),
-                "options": {"num_ctx": request.context_tokens},
+                "options": {"num_ctx": request.context_tokens, "num_predict": request.output_tokens},
             },
         )
         try:

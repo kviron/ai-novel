@@ -73,7 +73,8 @@ class LLMHarness:
                 PromptLayer("user", "user", user_prompt, required=True),
                 PromptLayer("schema", "schema", json.dumps(task.response_schema, ensure_ascii=False), required=True),
             ]
-            package = fit_layers(profile, layers, task.output_reserve or min(1024, profile.output_limit))
+            output_reserve = task.output_reserve or min(1024, profile.output_limit)
+            package = fit_layers(profile, layers, output_reserve)
             try:
                 if task.output_kind == "turn":
                     request = TurnGenerationRequest(
@@ -82,6 +83,7 @@ class LLMHarness:
                         user_prompt=package.content("user"),
                         response_schema=task.response_schema,
                         context_tokens=profile.working_window,
+                        output_tokens=output_reserve,
                     )
                     proposal = provider.generate_turn(request)
                 else:
@@ -90,6 +92,7 @@ class LLMHarness:
                         system_prompt=package.content("system"),
                         user_prompt=package.content("user"),
                         context_tokens=profile.working_window,
+                        output_tokens=output_reserve,
                     )
                     proposal = provider.generate_text(request)
                 raw_response = proposal.model_dump_json()
