@@ -55,13 +55,19 @@ export function useStoryDraft(storyId: string, initialDraft?: StoryDraft) {
     setDirtyStep(activeStep)
   }, [activeStep])
 
-  const saveSection = useCallback(async (override?: StoryDraftSectionMap[StoryDraftSectionName]) => {
+  const saveSection = useCallback(async (
+    override?: StoryDraftSectionMap[StoryDraftSectionName],
+    options: { confirmClearIncompatible?: boolean } = {},
+  ) => {
     const sectionToSave = override ?? localSection
     if (!draft || !sectionToSave) return false
     setPhase('saving')
     setError('')
     try {
-      const next = await api.saveStoryDraftSection(storyId, activeStep, sectionToSave as never, draft.draft_revision)
+      const next = await api.saveStoryDraftSection(storyId, activeStep, sectionToSave as never, draft.draft_revision, {
+        confirmModeChange: options.confirmClearIncompatible,
+        confirmClearIncompatible: options.confirmClearIncompatible,
+      })
       setDraft(next)
       setLocalSectionState(next[activeStep])
       setDirtyStep(null)
@@ -83,9 +89,15 @@ export function useStoryDraft(storyId: string, initialDraft?: StoryDraft) {
   const diagnosticsFor = useCallback((step: StoryDraftSectionName): DraftDiagnostic[] => (
     draft?.diagnostics.filter((diagnostic) => diagnostic.step === step) ?? []
   ), [draft])
-
+  const acceptDraft = useCallback((next: StoryDraft) => {
+    setDraft(next)
+    setLocalSectionState(next[activeStep])
+    setDirtyStep(null)
+    setError('')
+    setPhase('ready')
+  }, [activeStep])
   return useMemo(() => ({
     draft, phase, error, activeStep, localSection, dirtyStep, setActiveStep, setLocalSection,
-    saveSection, reloadAfterConflict, diagnosticsFor,
-  }), [activeStep, diagnosticsFor, dirtyStep, draft, error, localSection, phase, reloadAfterConflict, saveSection, setActiveStep, setLocalSection])
+    saveSection, reloadAfterConflict, diagnosticsFor, acceptDraft,
+  }), [acceptDraft, activeStep, diagnosticsFor, dirtyStep, draft, error, localSection, phase, reloadAfterConflict, saveSection, setActiveStep, setLocalSection])
 }

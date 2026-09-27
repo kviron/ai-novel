@@ -49,11 +49,11 @@ export function IdentityStep({ storyId, value, saving, onChange, onSave }: Props
       <CardHeader><CardTitle>Основа новеллы</CardTitle><CardDescription>Название, завязка, мир и обложка будущей истории.</CardDescription></CardHeader>
       <CardContent><FieldGroup>
       {uploadError && <Alert variant="destructive"><AlertDescription>{uploadError}</AlertDescription></Alert>}
-      <Field><FieldLabel htmlFor="story-title">Название</FieldLabel><Input id="story-title" value={value.title} onChange={(event) => change('title', event.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="story-title">Название</FieldLabel><Input id="story-title" data-diagnostic-field="identity.title" value={value.title} onChange={(event) => change('title', event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="story-description">Краткое описание</FieldLabel><Textarea id="story-description" value={value.short_description} onChange={(event) => change('short_description', event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="story-premise">Завязка</FieldLabel><Textarea id="story-premise" value={value.premise} onChange={(event) => change('premise', event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="story-setting">Место и время</FieldLabel><Textarea id="story-setting" value={value.setting} onChange={(event) => change('setting', event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="story-opening">Начальная ситуация</FieldLabel><Textarea id="story-opening" value={value.opening_situation} onChange={(event) => change('opening_situation', event.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="story-premise">Завязка</FieldLabel><Textarea id="story-premise" data-diagnostic-field="identity.premise" value={value.premise} onChange={(event) => change('premise', event.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="story-setting">Место и время</FieldLabel><Textarea id="story-setting" data-diagnostic-field="identity.setting" value={value.setting} onChange={(event) => change('setting', event.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="story-opening">Начальная ситуация</FieldLabel><Textarea id="story-opening" data-diagnostic-field="identity.opening_situation" value={value.opening_situation} onChange={(event) => change('opening_situation', event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="story-cover">Файл обложки</FieldLabel><Input ref={coverInput} id="story-cover" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /><FieldDescription>PNG, JPEG или WebP. Для публикации укажите происхождение материала.</FieldDescription></Field>
       <Field><FieldLabel htmlFor="cover-creator">Автор обложки</FieldLabel><Input id="cover-creator" value={creator} onChange={(event) => setCreator(event.target.value)} /></Field>
       <Field><FieldLabel htmlFor="cover-license">Лицензия обложки</FieldLabel><Input id="cover-license" value={license} onChange={(event) => setLicense(event.target.value)} /></Field>

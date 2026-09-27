@@ -262,9 +262,11 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
       section: K,
       data: StoryDraftSectionMap[K],
       expectedRevision: number,
-      options: { confirmModeChange?: boolean; signal?: AbortSignal } = {},
+      options: { confirmModeChange?: boolean; confirmClearIncompatible?: boolean; signal?: AbortSignal } = {},
     ) {
-      const query = options.confirmModeChange ? '?confirm_mode_change=true' : ''
+      const query = options.confirmModeChange || options.confirmClearIncompatible
+        ? '?confirm_mode_change=true&confirm_clear_incompatible=true'
+        : ''
       return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/draft/${section}${query}`, {
         baseUrl, method: 'PUT', body: { expected_revision: expectedRevision, data }, signal: options.signal,
       })
