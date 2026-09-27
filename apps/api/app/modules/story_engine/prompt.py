@@ -97,5 +97,3 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
         response_schema=response_schema,
         context_tokens=context_tokens,
     )
-
-
