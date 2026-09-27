@@ -1,4 +1,8 @@
+from collections import deque
 from collections.abc import Iterable
+from dataclasses import asdict
+from threading import Lock
+from typing import Any
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 
@@ -10,6 +14,16 @@ class ProviderRegistry:
 
     def __init__(self, providers: Iterable[LLMProvider]) -> None:
         self._providers = {provider.provider_id: provider for provider in providers}
+        self._traces: deque[dict[str, Any]] = deque(maxlen=100)
+        self._trace_lock = Lock()
+
+    def record_trace(self, trace: Any) -> None:
+        with self._trace_lock:
+            self._traces.append(asdict(trace))
+
+    def latest_trace(self) -> dict[str, Any] | None:
+        with self._trace_lock:
+            return dict(self._traces[-1]) if self._traces else None
 
     def get(self, provider_id: str) -> LLMProvider:
         return self._providers[provider_id]

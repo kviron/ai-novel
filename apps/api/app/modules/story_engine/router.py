@@ -6,6 +6,7 @@ from sqlmodel import Session
 from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
+from app.modules.llm_harness.budget import ContextBudgetError
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail
@@ -94,7 +95,9 @@ def post_turn(
     settings: RuntimeSettingsDep,
 ) -> TurnResult:
     try:
-        result, created = create_turn(session, registry, session_id, payload, settings.ollama_context_tokens)
+        result, created = create_turn(
+            session, registry, session_id, payload, settings.ollama_context_tokens, settings.model_context_windows
+        )
     except SessionNotFoundError:
         raise ApiError(404, "not_found", "Игровая сессия не найдена. Начните новую игру.") from None
     except StateConflictError:
@@ -124,6 +127,12 @@ def post_turn(
             "invalid_model_response",
             "Модель дважды вернула некорректный ход. Повторите действие.",
             retryable=True,
+        ) from None
+    except ContextBudgetError:
+        raise ApiError(
+            422,
+            "context_requirements_exceed_model",
+            "Контекст этой модели слишком мал для обязательных данных истории.",
         ) from None
     if not created:
         response.status_code = 200

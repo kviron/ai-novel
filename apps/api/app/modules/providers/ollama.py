@@ -84,7 +84,9 @@ class OllamaProvider:
             raise ProviderResponseError(raw_response=response.text) from error
 
         try:
-            return TurnProposal.model_validate_json(content)
+            proposal = TurnProposal.model_validate_json(content)
+            proposal._usage = _response_usage(payload)
+            return proposal
         except (ValidationError, ValueError):
             invalid_response = ProviderResponseError(raw_response=response.text)
         raise invalid_response
@@ -102,10 +104,14 @@ class OllamaProvider:
                 ],
                 "stream": False,
                 "format": TextProposal.model_json_schema(),
+                "options": {"num_ctx": request.context_tokens},
             },
         )
         try:
-            return TextProposal.model_validate_json(response.json()["message"]["content"])
+            payload = response.json()
+            proposal = TextProposal.model_validate_json(payload["message"]["content"])
+            proposal._usage = _response_usage(payload)
+            return proposal
         except (KeyError, TypeError, ValueError, ValidationError) as error:
             raise ProviderResponseError(raw_response=response.text) from error
 
@@ -134,3 +140,12 @@ class OllamaProvider:
         except httpx.HTTPStatusError as error:
             raise ProviderUnavailableError(raw_response=response.text) from error
         return response
+
+
+def _response_usage(payload: dict[str, Any]) -> tuple[int | None, int | None]:
+    input_count = payload.get("prompt_eval_count")
+    output_count = payload.get("eval_count")
+    return (
+        input_count if isinstance(input_count, int) and input_count >= 0 else None,
+        output_count if isinstance(output_count, int) and output_count >= 0 else None,
+    )

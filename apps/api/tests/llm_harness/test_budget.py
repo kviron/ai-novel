@@ -18,7 +18,7 @@ def profile(window: int) -> ModelProfile:
 def test_small_model_keeps_required_content_and_drops_optional():
     layers = [
         PromptLayer(key="rules", role="system", text="rules", required=True),
-        PromptLayer(key="history", role="user", text="past " * 2000, priority=10),
+        PromptLayer(key="history", role="user", text="past " * 4000, priority=10),
         PromptLayer(key="action", role="user", text="continue", required=True),
     ]
 
@@ -32,7 +32,7 @@ def test_small_model_keeps_required_content_and_drops_optional():
 def test_larger_model_keeps_the_same_optional_history():
     layers = [
         PromptLayer(key="rules", role="system", text="rules", required=True),
-        PromptLayer(key="history", role="user", text="past " * 2000, priority=10),
+        PromptLayer(key="history", role="user", text="past " * 4000, priority=10),
     ]
 
     package = fit_layers(profile(16384), layers, output_reserve=512)
@@ -51,8 +51,8 @@ def test_required_content_never_truncates():
 def test_priority_selects_more_important_optional_layer_first():
     layers = [
         PromptLayer(key="rules", role="system", text="rules", required=True),
-        PromptLayer(key="less", role="user", text="x" * 1600, priority=1),
-        PromptLayer(key="more", role="user", text="y" * 1600, priority=2),
+        PromptLayer(key="less", role="user", text="x" * 3200, priority=1),
+        PromptLayer(key="more", role="user", text="y" * 3200, priority=2),
     ]
 
     package = fit_layers(profile(2048), layers, output_reserve=128)
@@ -77,7 +77,7 @@ def test_catalog_selects_context_by_provider_and_model():
 def test_response_schema_consumes_budget_without_becoming_user_text():
     layers = [
         PromptLayer(key="instruction", role="system", text="respond", required=True),
-        PromptLayer(key="schema", role="schema", text="{" + "x" * 500 + "}", required=True),
+        PromptLayer(key="schema", role="schema", text="{" + "x" * 1000 + "}", required=True),
     ]
 
     package = fit_layers(profile(1024), layers, output_reserve=128)

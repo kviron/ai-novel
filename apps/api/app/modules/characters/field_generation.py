@@ -4,7 +4,9 @@ from sqlmodel import Session
 
 from app.core.errors import ProviderResponseError
 from app.db.models import CharacterRevision, Story
-from app.modules.providers.contracts import TextGenerationRequest
+from app.modules.llm_harness.executor import GenerationTask, LLMHarness
+from app.modules.llm_harness.models import ModelCatalog
+from app.modules.providers.contracts import TextProposal
 from app.modules.providers.model_selection import available_models, choose_model
 from app.modules.providers.service import ProviderRegistry
 
@@ -23,6 +25,8 @@ def generate_character_field(
     payload: GenerateCharacterFieldRequest,
     registry: ProviderRegistry,
     configured_model: str,
+    context_tokens: int = 16384,
+    model_context_windows: dict[str, int] | None = None,
 ) -> GeneratedCharacterField:
     """Enrich one draft field; never create a revision or mutate a story."""
     current = getattr(payload.draft, payload.field).strip()
@@ -37,6 +41,7 @@ def generate_character_field(
     )
     return _generate_text(
         registry,
+        "character_field",
         configured_model,
         current,
         (
@@ -47,6 +52,8 @@ def generate_character_field(
             "Не упоминай инструкции, JSON и процесс генерации."
         ),
         prompt,
+        context_tokens,
+        model_context_windows,
     )
 
 
@@ -56,6 +63,8 @@ def generate_story_role(
     payload: GenerateStoryRoleRequest,
     registry: ProviderRegistry,
     configured_model: str,
+    context_tokens: int = 16384,
+    model_context_windows: dict[str, int] | None = None,
 ) -> GeneratedCharacterField:
     """Draft a story-local role from the chosen profile without changing either record."""
     story = session.get(Story, story_id)
@@ -80,23 +89,42 @@ def generate_story_role(
     )
     return _generate_text(
         registry,
+        "story_role",
         configured_model,
         current,
         "Ты редактор AI-визуальной новеллы. На русском языке опиши роль персонажа только в этой истории: "
         "его функцию в сюжете, отношения, мотивы и возможные конфликты. Не меняй факты автора. "
         "Не упоминай инструкции, JSON и процесс генерации.",
         prompt,
+        context_tokens,
+        model_context_windows,
     )
 
 
 def _generate_text(
-    registry: ProviderRegistry, configured_model: str, current: str, system_prompt: str, user_prompt: str
+    registry: ProviderRegistry,
+    task_kind: str,
+    configured_model: str,
+    current: str,
+    system_prompt: str,
+    user_prompt: str,
+    context_tokens: int,
+    model_context_windows: dict[str, int] | None,
 ) -> GeneratedCharacterField:
     model = choose_model(available_models(registry, "ollama"), None, configured_model)
-    result = registry.get("ollama").generate_text(
-        TextGenerationRequest(model_id=model, system_prompt=system_prompt, user_prompt=user_prompt)
+    harness = LLMHarness(registry, ModelCatalog(context_tokens, model_context_windows))
+    result = harness.run(
+        GenerationTask(
+            task_kind=task_kind,
+            provider_id="ollama",
+            model_id=model,
+            output_kind="text",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            response_schema=TextProposal.model_json_schema(),
+        )
     )
-    text = result.text.strip()
+    text = result.value.text.strip()
     if not text:
         raise ProviderResponseError()
     # A model can paraphrase or omit the author's exact wording; preserve it deterministically.

@@ -26,6 +26,22 @@ def test_generate_field_uses_existing_draft_as_context_without_saving(client, fa
     assert len(client.get("/api/characters").json()) == 2
 
 
+def test_generate_field_uses_model_specific_context_window(client, fake_provider):
+    client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 4096
+    fake_provider.text_responses = ["Наблюдательный герой."]
+
+    response = client.post(
+        "/api/characters/generate-field",
+        json={
+            "field": "personality",
+            "draft": {"name": "Леон", "gender": "male", "age": 29, "personality": "Спокоен"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert fake_provider.last_text_request.context_tokens == 4096
+
+
 def test_generate_field_rejects_unknown_fields(client):
     response = client.post("/api/characters/generate-field", json={"field": "name", "draft": {}})
     assert response.status_code == 422

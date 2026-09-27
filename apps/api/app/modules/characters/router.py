@@ -8,6 +8,8 @@ from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
 from app.db.models import CharacterMaterial
+from app.modules.llm_harness.budget import ContextBudgetError
+from app.modules.llm_harness.executor import GenerationRejectedError
 from app.modules.providers.model_selection import NoAvailableModelError
 from app.modules.providers.router import ProviderRegistryDep
 
@@ -150,10 +152,20 @@ def generate_field(
     payload: GenerateCharacterFieldRequest, settings: RuntimeSettingsDep, registry: ProviderRegistryDep
 ) -> GeneratedCharacterField:
     try:
-        return generate_character_field(payload, registry, settings.ollama_model)
+        return generate_character_field(
+            payload, registry, settings.ollama_model, settings.ollama_context_tokens, settings.model_context_windows
+        )
     except (NoAvailableModelError, ProviderUnavailableError, ProviderResponseError) as error:
         raise ApiError(
             503, "provider_unavailable", "Нейросеть недоступна. Проверьте Ollama и повторите.", retryable=True
+        ) from error
+    except ContextBudgetError as error:
+        raise ApiError(
+            422, "context_requirements_exceed_model", "Контекст модели слишком мал для этого черновика."
+        ) from error
+    except GenerationRejectedError as error:
+        raise ApiError(
+            502, "invalid_model_response", "Модель дважды вернула некорректный черновик.", retryable=True
         ) from error
 
 
@@ -253,7 +265,10 @@ def generate_role(
     registry: ProviderRegistryDep,
 ) -> GeneratedCharacterField:
     try:
-        return generate_story_role(session, story_id, payload, registry, settings.ollama_model)
+        return generate_story_role(
+            session, story_id, payload, registry, settings.ollama_model,
+            settings.ollama_context_tokens, settings.model_context_windows,
+        )
     except StoryNotFoundError as error:
         raise ApiError(404, "not_found", "История не найдена.") from error
     except InvalidRevisionError as error:
@@ -261,6 +276,14 @@ def generate_role(
     except (NoAvailableModelError, ProviderUnavailableError, ProviderResponseError) as error:
         raise ApiError(
             503, "provider_unavailable", "Нейросеть недоступна. Проверьте Ollama и повторите.", retryable=True
+        ) from error
+    except ContextBudgetError as error:
+        raise ApiError(
+            422, "context_requirements_exceed_model", "Контекст модели слишком мал для этого черновика."
+        ) from error
+    except GenerationRejectedError as error:
+        raise ApiError(
+            502, "invalid_model_response", "Модель дважды вернула некорректный черновик.", retryable=True
         ) from error
 
 

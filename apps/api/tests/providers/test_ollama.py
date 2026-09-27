@@ -72,7 +72,9 @@ def test_ollama_sends_schema_and_parses_turn():
             "proposed_effects",
         ]
         assert body["options"] == {"num_ctx": 16384}
-        return httpx.Response(200, json={"message": {"content": VALID_TURN_JSON}})
+        return httpx.Response(
+            200, json={"message": {"content": VALID_TURN_JSON}, "prompt_eval_count": 180, "eval_count": 42}
+        )
 
     provider = OllamaProvider(
         base_url="http://ollama.test",
@@ -83,6 +85,7 @@ def test_ollama_sends_schema_and_parses_turn():
     proposal = provider.generate_turn(turn_request())
 
     assert proposal.dialogue.character_id == "akane"
+    assert proposal._usage == (180, 42)
 
 
 def test_ollama_generates_structured_character_text():

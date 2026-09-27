@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_serializer, field_validator
 
 
 class DialogueProposal(BaseModel):
@@ -54,6 +54,7 @@ class TurnProposal(BaseModel):
         extra="forbid",
         json_schema_extra={"required": ["segments", "visual_directive", "suggested_choices", "proposed_effects"]},
     )
+    _usage: tuple[int | None, int | None] = PrivateAttr(default=(None, None))
 
     # Legacy test/provider payloads remain readable; the new prompt schema requires segments.
     narration: str | None = Field(default=None, max_length=6000)
@@ -101,10 +102,12 @@ class TextGenerationRequest(BaseModel):
     model_id: str
     system_prompt: str
     user_prompt: str
+    context_tokens: int = 16384
 
 
 class TextProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    _usage: tuple[int | None, int | None] = PrivateAttr(default=(None, None))
 
     text: str = Field(min_length=1, max_length=6000)
 

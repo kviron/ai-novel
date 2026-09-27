@@ -76,7 +76,7 @@ def test_runtime_model_and_context_config_drive_new_sessions_and_turns(tmp_path)
     settings = Settings(
         database_path=tmp_path / "runtime-config.db",
         ollama_model="review:model",
-        ollama_context_tokens=2048,
+        ollama_context_tokens=32768,
     )
 
     with TestClient(create_app(settings, ProviderRegistry([provider]))) as client:
@@ -103,7 +103,7 @@ def test_runtime_model_and_context_config_drive_new_sessions_and_turns(tmp_path)
     assert turn.json()["model_id"] == "review:model"
     assert restored.json()["model_id"] == "review:model"
     assert requests[0].model_id == "review:model"
-    assert requests[0].context_tokens == 2048
+    assert requests[0].context_tokens == 32768
 
 
 def test_errors_share_one_safe_russian_shape(client, fake_provider, akane_session):

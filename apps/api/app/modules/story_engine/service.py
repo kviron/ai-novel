@@ -1,6 +1,9 @@
 from sqlmodel import Session
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
+from app.modules.llm_harness.budget import ContextBudgetError
+from app.modules.llm_harness.executor import GenerationRejectedError, GenerationTask, LLMHarness
+from app.modules.llm_harness.models import ModelCatalog
 from app.modules.providers.model_selection import UnsupportedModelError, available_models
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.schemas import SessionDetail
@@ -8,7 +11,7 @@ from app.modules.stories.service import get_session_detail
 
 from . import repository
 from .contracts import AcceptedTurn, TurnCreate, TurnResult
-from .prompt import build_prompt, repair_prompt
+from .prompt import build_prompt
 from .rules import GenerationContext, InvalidProposalError, validate_proposal
 
 
@@ -26,6 +29,7 @@ def create_turn(
     session_id: str,
     request: TurnCreate,
     context_tokens: int,
+    model_context_windows: dict[str, int] | None = None,
 ) -> tuple[TurnResult, bool]:
     """Generate, repair at most once, and save one canonical turn, or replay its saved result.
 
@@ -48,8 +52,8 @@ def create_turn(
         # The context contains plain values: release the read transaction before I/O.
         session.rollback()
     try:
-        accepted, raw_response = _generate_turn(registry, context, request, context_tokens)
-    except (ProviderUnavailableError, ProviderResponseError, TurnGenerationFailedError):
+        accepted, raw_response = _generate_turn(registry, context, request, context_tokens, model_context_windows)
+    except (ProviderUnavailableError, ProviderResponseError, TurnGenerationFailedError, ContextBudgetError):
         # A committed duplicate wins even when this request's generation failed.
         # Discard any prior snapshot before checking, then release the fresh read.
         session.rollback()
@@ -84,28 +88,27 @@ def _generate_turn(
     context: GenerationContext,
     request: TurnCreate,
     context_tokens: int,
+    model_context_windows: dict[str, int] | None = None,
 ) -> tuple[AcceptedTurn, str]:
     """Propose and repair without owning or opening any database transaction."""
-    try:
-        provider = registry.get(context.provider_id)
-    except KeyError:
-        raise ProviderUnavailableError() from None
     generation_request = build_prompt(context, request, context_tokens)
-    raw_response = ""
-    for attempt in range(2):
-        try:
-            proposal = provider.generate_turn(generation_request)
-            raw_response = proposal.model_dump_json()
-            accepted = validate_proposal(proposal, context)
-            break
-        except ProviderResponseError as error:
-            if error.code == "model_unavailable":
-                raise
-            raw_response = error.raw_response or ""
-            validation_error = error.code
-        except InvalidProposalError as error:
-            validation_error = str(error)
-        if attempt == 1:
-            raise TurnGenerationFailedError(raw_response=raw_response) from None
-        generation_request = repair_prompt(generation_request, validation_error, raw_response)
-    return accepted, raw_response
+    harness = LLMHarness(registry, ModelCatalog(context_tokens, model_context_windows))
+    try:
+        result = harness.run(
+            GenerationTask(
+                task_kind="game_turn",
+                provider_id=context.provider_id,
+                model_id=context.model_id,
+                output_kind="turn",
+                system_prompt=generation_request.system_prompt,
+                user_prompt=generation_request.user_prompt,
+                response_schema=generation_request.model_dump(mode="json", include={"response_schema"})[
+                    "response_schema"
+                ],
+                validator=lambda proposal: validate_proposal(proposal, context),
+                retryable_errors=(InvalidProposalError,),
+            )
+        )
+    except GenerationRejectedError as error:
+        raise TurnGenerationFailedError(raw_response=error.raw_response) from None
+    return result.value, result.raw_response

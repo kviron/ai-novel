@@ -36,7 +36,7 @@ class ModelCatalog:
 
     def resolve(self, provider_id: str, model_id: str) -> ModelProfile:
         window = self._windows.get(f"{provider_id}:{model_id}")
-        if window is None and provider_id == "ollama":
+        if window is None and (provider_id == "ollama" or (provider_id, model_id) == ("legacy", "legacy")):
             window = self._default_ollama_window
         if window is None:
             raise ValueError(f"No verified context window for {provider_id}/{model_id}")
@@ -46,7 +46,7 @@ class ModelCatalog:
             context_window=window,
             working_window=window,
             output_limit=min(4096, max(256, window // 4)),
-            token_safety_margin=max(128, window // 20),
+            token_safety_margin=max(128, window * 15 // 100),
         )
 
 

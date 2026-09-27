@@ -483,11 +483,29 @@ def test_invalid_json_repairs_once_with_diagnostics(client, fake_provider, akane
     fake_provider.errors = [ProviderResponseError(raw_response="BROKEN JSON")]
     fake_provider.responses = [proposal()]
     response = post_turn(client, akane_session)
-    assert response.status_code == 201
+    assert response.status_code == 201, (response.text, fake_provider.call_count)
     assert fake_provider.call_count == 2
-    assert "BROKEN JSON" in requests[1].user_prompt
+    assert "BROKEN JSON" not in requests[1].user_prompt
     assert "provider_invalid_response" in requests[1].user_prompt
     assert "BROKEN JSON" not in response.text
+
+
+def test_game_turn_uses_selected_model_context_window(client, fake_provider, akane_session, monkeypatch):
+    client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 32768
+    requests = []
+    generate = fake_provider.generate_turn
+
+    def record(request):
+        requests.append(request)
+        return generate(request)
+
+    monkeypatch.setattr(fake_provider, "generate_turn", record)
+    fake_provider.responses = [proposal()]
+
+    response = post_turn(client, akane_session)
+
+    assert response.status_code == 201, response.text
+    assert requests[0].context_tokens == 32768
 
 
 def test_invalid_json_twice_has_no_state_change(client, fake_provider, akane_session, caplog):

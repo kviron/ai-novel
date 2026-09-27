@@ -8,8 +8,8 @@ class ContextBudgetError(Exception):
 
 
 def estimate_tokens(text: str) -> int:
-    """Use UTF-8 byte count as a conservative fallback for byte-based tokenizers."""
-    return len(text.encode("utf-8"))
+    """Estimate without a tokenizer, biased high for mixed Russian and JSON text."""
+    return (len(text.encode("utf-8")) + 1) // 2
 
 
 def _layer_size(layer: PromptLayer) -> int:
