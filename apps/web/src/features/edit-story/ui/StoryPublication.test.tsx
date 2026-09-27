@@ -63,6 +63,25 @@ test('focuses canonical backend fields across hero, cast, rules, facts, and beat
   }
 }, 20_000)
 
+test('focuses empty conditional diagnostic targets when hero and fact options are missing', async () => {
+  const fact = { id: 'fact-empty', order_index: 0, title: 'Одинокий факт', statement: '', severity: 'hard' as const, scope: 'character' as const, referenced_character_ids: ['missing-character'] }
+  const cases = [
+    { field: 'hero.fixed_hero_revision_id', step: 'hero' as const, message: 'Нет ревизии героя', target: '[data-diagnostic-field="hero.fixed_hero_revision_id"]', seed: { hero: { hero_policy: 'fixed' as const, hero_allowed_sources: ['catalog' as const], fixed_hero_revision_id: null } } },
+    { field: 'canon.referenced_character_ids', step: 'canon' as const, message: 'Нет персонажа для факта', target: '[data-item-id="fact-empty"] [data-diagnostic-field="canon.referenced_character_ids"]', seed: { mode: { mode: 'hybrid' as const }, canon: { creative_goals: '', facts: [fact], beats: [] } } },
+    { field: 'cast.characters', step: 'cast' as const, message: 'Пустой состав', target: '[data-diagnostic-field="cast.characters"]', seed: {} },
+  ]
+  for (const item of cases) {
+    apiServer.storyDraft({ story_id: 'story-1', ...item.seed })
+    apiServer.draftDiagnostics([diagnostic({ step: item.step, field: item.field, item_id: item.step === 'canon' ? 'fact-empty' : null, message: item.message })])
+    render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Проверка' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить черновик' }))
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(item.message) }))
+    await waitFor(() => expect(document.querySelector<HTMLElement>(item.target)).toHaveFocus())
+    cleanup(); apiServer.reset()
+  }
+})
+
 test('errors block publication, warnings do not, and validation always precedes test and publish', async () => {
   apiServer.storyDraft({ story_id: 'story-1' })
   apiServer.draftDiagnostics([diagnostic({ severity: 'error' })])
@@ -134,4 +153,19 @@ test('review renders every persisted authoring field in stable readable order', 
   await userEvent.click(await screen.findByRole('button', { name: 'Проверка' }))
   const text = screen.getByRole('heading', { level: 2, name: 'Полная история' }).closest('[data-slot="card"]')!.textContent!
   for (const expected of ['full-story', 'Кратко', 'Замысел', 'cover-9', 'нуар', 'мрачно', 'Неоновый город', 'Встреча под дождём', 'Эшли', 'hero-r2', 'Марк', 'mark-r3', 'Союзник', '#123456', 'тайна', 'комедия', 'required_beats_then_end', 'third_person', 'detailed', 'choices_only', '1–6', 'ollama', 'qwen:test', 'искупление', 'сон', 'Закон', 'Магия имеет цену', 'ashley', 'Разоблачение', 'Правда открыта', '3', 'Герой признался']) expect(text).toContain(expected)
+})
+
+test('review preserves canon IDs and raw non-contiguous order indexes', async () => {
+  apiServer.storyDraft({ story_id: 'story-1', mode: { mode: 'hybrid' }, canon: {
+    creative_goals: '',
+    facts: [{ id: 'fact-stable-42', order_index: 7, title: 'Поздний факт', statement: 'Сохранён как есть', severity: 'soft', scope: 'plot', referenced_character_ids: [] }],
+    beats: [{ id: 'beat-stable-99', order_index: 12, title: 'Позднее событие', description: 'Не перенумеровывать', activation_condition: { kind: 'always' }, completion_evidence: '', required: false, ending_gate: false }],
+  } })
+  render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Проверка' }))
+  const review = screen.getByRole('heading', { name: 'Канон' }).closest('section')!
+  expect(review).toHaveTextContent('fact-stable-42')
+  expect(review).toHaveTextContent('order_index: 7')
+  expect(review).toHaveTextContent('beat-stable-99')
+  expect(review).toHaveTextContent('order_index: 12')
 })

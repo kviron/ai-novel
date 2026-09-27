@@ -14,6 +14,7 @@ export function focusDraftDiagnostic(diagnostic: DraftDiagnostic) {
     : document
   const canonical = fieldAliases[diagnostic.field] ?? diagnostic.field
   const marked = scope.querySelector<HTMLElement>(`[data-diagnostic-field="${CSS.escape(canonical)}"]`)
-  const target = marked?.matches('button,input,textarea,[tabindex]') ? marked : marked?.querySelector<HTMLElement>('button,input,textarea,[tabindex]')
+  const target = marked?.querySelector<HTMLElement>('button,input,textarea,[tabindex]')
+    ?? (marked?.matches('button,input,textarea,[tabindex]') ? marked : null)
   target?.focus()
 }
