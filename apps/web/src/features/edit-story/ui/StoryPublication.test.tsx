@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test } from 'vitest'
 
@@ -11,6 +11,18 @@ afterEach(() => { cleanup(); apiServer.reset() })
 const diagnostic = (value: Partial<DraftDiagnostic>): DraftDiagnostic => ({
   code: 'invalid', severity: 'error', step: 'identity', field: 'identity.premise', item_id: null,
   message: 'Добавьте завязку', ...value,
+})
+
+test('keeps validation status beside the form across editor sections', async () => {
+  apiServer.storyDraft({ story_id: 'story-1', diagnostics: [diagnostic({ message: 'Добавьте завязку' })] })
+  render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
+
+  const status = await screen.findByRole('complementary', { name: 'Статус проверки' })
+  expect(within(status).getByText('Добавьте завязку')).toBeInTheDocument()
+  expect(within(status).getByRole('button', { name: 'Проверить черновик' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Режим' }))
+  expect(within(status).getByText('Добавьте завязку')).toBeInTheDocument()
+  expect(screen.getByText('Режим истории')).toBeInTheDocument()
 })
 
 test('groups diagnostics and focuses the exact field or stable item', async () => {

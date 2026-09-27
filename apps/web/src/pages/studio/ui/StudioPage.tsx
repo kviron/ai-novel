@@ -48,17 +48,35 @@ function StudioEntry() {
     if (value) navigate(routes.studioSession(value))
   }
 
-  return <div className="studio-entry">
+  return <main className="studio-entry w-full min-w-0">
     <header className="studio-entry-header"><Badge variant="secondary">Режим автора</Badge><CreateStoryButton /></header>
-    <div className="studio-entry-content">
-      <div><p className="eyebrow">Студия</p><h1>Проверка сцен</h1><p className="muted-copy">Запустите отдельное прохождение, чтобы проверить историю, решения и состояние генерации.</p></div>
+    <div className="flex w-full min-w-0 flex-col gap-6 p-4 md:p-6 xl:p-8">
+      <div><p className="eyebrow">Рабочее пространство</p><h1 className="text-3xl font-semibold tracking-tight">Студия</h1><p className="text-muted-foreground">Управляйте новеллами и запускайте авторские проверки из одного места.</p></div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      {loading && <p role="status" className="muted-copy">Загружаем истории…</p>}
-      {!loading && !error && stories.length === 0 && <p className="muted-copy">Историй для тестирования пока нет.</p>}
-      {stories.map((story) => <Card key={story.id} className="studio-story-card"><CardHeader><CardTitle>{story.title}</CardTitle><CardDescription>{story.premise}</CardDescription></CardHeader><CardContent className="studio-story-action"><span className="muted-copy">{story.recommended_provider_id} · модель из настроек сервера</span><div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link to={routes.studioStoryCharacters(story.id)}>Состав новеллы</Link></Button><Button disabled={pending} onClick={() => void start(story)}>{pending ? 'Создаём…' : 'Новая тестовая сессия'}</Button></div></CardContent></Card>)}
-      <Card><CardHeader><CardTitle>Продолжить тест</CardTitle><CardDescription>Откройте уже созданную сессию по её ID.</CardDescription></CardHeader><CardContent><form className="studio-open-form" onSubmit={open}><Field><FieldLabel htmlFor="studio-session-id">ID сессии</FieldLabel><Input id="studio-session-id" value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder="ID сессии" /></Field><Button type="submit" disabled={!sessionId.trim()}>Открыть сессию</Button></form></CardContent></Card>
+      <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+        <section className="flex min-w-0 flex-col gap-4" aria-labelledby="studio-stories">
+          <div className="flex items-center gap-2"><h2 id="studio-stories" className="text-xl font-semibold">Новеллы</h2>{!loading && <Badge variant="outline">{stories.length}</Badge>}</div>
+          <p className="text-muted-foreground">Откройте состав истории или начните отдельную тестовую сессию.</p>
+          {loading && <p role="status" className="text-muted-foreground">Загружаем истории…</p>}
+          {!loading && !error && stories.length === 0 && <Card><CardHeader><CardTitle>Новелл пока нет</CardTitle><CardDescription>Создайте первую историю, чтобы начать работу в студии.</CardDescription></CardHeader></Card>}
+          {stories.map((story) => <Card key={story.id}>
+            <CardContent className="grid gap-4 md:grid-cols-[112px_minmax(0,1fr)]">
+              {story.cover_image_url ? <img src={story.cover_image_url} alt="" className="h-32 w-28 rounded-md object-cover" /> : <div className="flex h-32 w-28 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">Без обложки</div>}
+              <div className="flex min-w-0 flex-col gap-3">
+                <div><h3 className="text-lg font-semibold">{story.title}</h3><p className="text-muted-foreground">{story.premise}</p></div>
+                <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{story.story_mode === 'hybrid' ? 'Гибридная' : 'Свободная'}</Badge><span className="text-xs text-muted-foreground">{story.recommended_provider_id} · {story.recommended_model_id}</span></div>
+                <div className="flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link to={routes.studioStoryCharacters(story.id)}>Состав новеллы</Link></Button><Button size="sm" disabled={pending} onClick={() => void start(story)}>{pending ? 'Создаём…' : 'Новая тестовая сессия'}</Button></div>
+              </div>
+            </CardContent>
+          </Card>)}
+        </section>
+        <aside className="flex min-w-0 flex-col gap-4" aria-label="Действия студии">
+          <Card><CardHeader><CardTitle>Продолжить тест</CardTitle><CardDescription>Откройте уже созданную сессию по её ID.</CardDescription></CardHeader><CardContent><form className="flex flex-col gap-3" onSubmit={open}><Field><FieldLabel htmlFor="studio-session-id">ID сессии</FieldLabel><Input id="studio-session-id" value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder="ID сессии" /></Field><Button type="submit" disabled={!sessionId.trim()}>Открыть сессию</Button></form></CardContent></Card>
+          <Card><CardHeader><CardTitle>Порядок работы</CardTitle><CardDescription>Создайте черновик, проверьте замечания, запустите тест сцены и опубликуйте готовую версию.</CardDescription></CardHeader></Card>
+        </aside>
+      </div>
     </div>
-  </div>
+  </main>
 }
 
 function Inspector({ session, phase, inSheet = false }: { session: StorySession | null; phase: ReturnType<typeof useStoryPlayer>['phase']; inSheet?: boolean }) {

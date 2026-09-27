@@ -106,13 +106,8 @@ button, input, textarea { font: inherit; }
 .player-input-part[data-kind=speech] { background: color-mix(in srgb, #4eb5ff 20%, var(--card)); }
 .player-input-part[data-kind=thought] { background: color-mix(in srgb, #ba91ff 20%, var(--card)); }
 .studio-entry { min-height: 100dvh; background: var(--background); }
-.studio-entry-content { width: min(850px, calc(100% - 40px)); margin: 48px auto; display: grid; gap: 20px; }
-.studio-entry-content h1 { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -.03em; }
 .eyebrow { color: var(--primary); font-size: .75rem; text-transform: uppercase; letter-spacing: .13em; margin: 0 0 8px; }
 .muted-copy { font-size: .8125rem; color: var(--muted-foreground); line-height: 1.5; }
-.studio-story-action { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.studio-open-form { display: flex; align-items: end; gap: 12px; }
-.studio-open-form [data-slot=field] { flex: 1; }
 .studio-header-title { display: flex; align-items: center; gap: 12px; }
 .studio-header-actions { display: flex; align-items: center; gap: 8px; }
 .studio-inspector-trigger { display: none; }
@@ -142,8 +137,6 @@ button, input, textarea { font: inherit; }
   .scene-message { padding: 22px 14px 10px; }
   .story-copy { max-height: min(31dvh, 260px); }
   .line { font-size: .9375rem; }
-  .studio-open-form, .studio-story-action { align-items: stretch; flex-direction: column; }
-  .studio-entry-content { margin-top: 28px; }
 }
 @media (max-width: 640px) {
   .studio-workspace { grid-template-columns: minmax(0, 1fr); }
