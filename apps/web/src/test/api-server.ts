@@ -359,6 +359,7 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     lastProvider = providerQueue.shift() ?? lastProvider
     return json(lastProvider ? [lastProvider] : [])
   }
+  if (method === 'GET' && pathname === '/api/providers/profiles') return json([], 200)
 
   const startMatch = pathname.match(/^\/api\/stories\/([^/]+)\/sessions$/)
   if (method === 'POST' && startMatch) {

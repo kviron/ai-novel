@@ -5,7 +5,7 @@ from sqlmodel import Session
 from app.core.errors import ProviderResponseError
 from app.db.models import CharacterRevision, Story
 from app.modules.llm_harness.executor import GenerationTask, LLMHarness
-from app.modules.llm_harness.models import ModelCatalog
+from app.modules.llm_harness.models import catalog_for_model
 from app.modules.providers.contracts import TextProposal
 from app.modules.providers.model_selection import available_models, choose_model
 from app.modules.providers.service import ProviderRegistry
@@ -112,7 +112,7 @@ def _generate_text(
     model_context_windows: dict[str, int] | None,
 ) -> GeneratedCharacterField:
     model = choose_model(available_models(registry, "ollama"), None, configured_model)
-    harness = LLMHarness(registry, ModelCatalog(context_tokens, model_context_windows))
+    harness = LLMHarness(registry, catalog_for_model(registry, context_tokens, model_context_windows, "ollama", model))
     result = harness.run(
         GenerationTask(
             task_kind=task_kind,

@@ -10,6 +10,7 @@ from app.db.engine import get_session
 from app.db.models import CharacterMaterial
 from app.modules.llm_harness.budget import ContextBudgetError
 from app.modules.llm_harness.executor import GenerationRejectedError
+from app.modules.llm_harness.models import UnknownModelProfileError
 from app.modules.providers.model_selection import NoAvailableModelError
 from app.modules.providers.router import ProviderRegistryDep
 
@@ -167,6 +168,8 @@ def generate_field(
         raise ApiError(
             502, "invalid_model_response", "Модель дважды вернула некорректный черновик.", retryable=True
         ) from error
+    except UnknownModelProfileError as error:
+        raise ApiError(422, "model_profile_unavailable", "Для этой модели не задан размер контекста.") from error
 
 
 @router.get("/characters/{character_id}", response_model=CharacterHistory, responses={404: {"model": ErrorResponse}})
@@ -285,6 +288,8 @@ def generate_role(
         raise ApiError(
             502, "invalid_model_response", "Модель дважды вернула некорректный черновик.", retryable=True
         ) from error
+    except UnknownModelProfileError as error:
+        raise ApiError(422, "model_profile_unavailable", "Для этой модели не задан размер контекста.") from error
 
 
 @router.put("/stories/{story_id}/characters/{character_id}", response_model=StoryCharacterProfile)

@@ -30,6 +30,8 @@ class GenerationContext:
     protagonist: dict[str, Any]
     characters: list[dict[str, Any]]
     recent_turns: list[dict[str, Any]]
+    older_turns: list[dict[str, Any]] | None = None
+    memory_summary: str = ""
     completed_beat_ids: frozenset[str] = frozenset()
     available_beat_ids: frozenset[str] = frozenset()
 

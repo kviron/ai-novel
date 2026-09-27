@@ -88,6 +88,34 @@ def test_ollama_sends_schema_and_parses_turn():
     assert proposal._usage == (180, 42)
 
 
+def test_ollama_reports_native_model_context_window():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/show"
+        assert json.loads(request.content) == {"model": "qwen3:14b-q4_K_M"}
+        return httpx.Response(200, json={"model_info": {"qwen3.context_length": 32768}})
+
+    provider = OllamaProvider("http://ollama.test", 5, httpx.Client(transport=httpx.MockTransport(handler)))
+
+    assert provider.model_context_window("qwen3:14b-q4_K_M") == 32768
+
+
+def test_profile_endpoint_exposes_configured_working_window(client, fake_provider):
+    client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 32768
+
+    response = client.get("/api/providers/profiles")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "provider_id": "ollama",
+            "model_id": "qwen3:14b-q4_K_M",
+            "usable": True,
+            "native_window": None,
+            "working_window": 32768,
+        }
+    ]
+
+
 def test_ollama_generates_structured_character_text():
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)

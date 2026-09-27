@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen3:14b-q4_K_M"
     ollama_context_tokens: int = 16384
     model_context_windows: dict[str, int] = Field(default_factory=dict)
+    memory_provider_id: str | None = None
+    memory_model_id: str | None = None
     provider_timeout_seconds: float = 120.0
     cors_origins: str = "http://localhost:5173"
 

@@ -6,6 +6,7 @@ import type {
   CharacterWrite,
   CharacterTextField,
   CreateTurnRequest,
+  ModelProfile,
   ProviderStatus,
   SessionSummary,
   StartSessionRequest,
@@ -226,6 +227,9 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
       },
     providers(signal?: AbortSignal) {
       return request<ProviderStatus[]>('/api/providers', { baseUrl, signal })
+    },
+    modelProfiles(signal?: AbortSignal) {
+      return request<ModelProfile[]>('/api/providers/profiles', { baseUrl, signal })
     },
     createTurn(sessionId: string, body: CreateTurnRequest, signal?: AbortSignal) {
       return request<TurnResult>(`/api/sessions/${encodeURIComponent(sessionId)}/turns`, {

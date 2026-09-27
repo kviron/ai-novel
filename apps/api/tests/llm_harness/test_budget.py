@@ -74,6 +74,16 @@ def test_catalog_selects_context_by_provider_and_model():
         catalog.resolve("cloud", "unknown")
 
 
+def test_native_limit_clamps_configured_ollama_window():
+    catalog = ModelCatalog(16384, {"ollama:small": 32768}, {"ollama:small": 8192})
+
+    profile = catalog.resolve("ollama", "small")
+
+    assert profile.context_window == 8192
+    assert profile.working_window == 8192
+    assert profile.native_window == 8192
+
+
 def test_response_schema_consumes_budget_without_becoming_user_text():
     layers = [
         PromptLayer(key="instruction", role="system", text="respond", required=True),

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { CornerUpLeft, List, LoaderCircle, Send, Settings2 } from 'lucide-react'
 
 import { resolveStoryTheme } from '@/shared/config'
-import { api, ApiRequestError } from '@/shared/api'
+import { api, ApiRequestError, type ModelProfile } from '@/shared/api'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog'
@@ -22,6 +22,7 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
   const [choicesOpen, setChoicesOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState('')
+  const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>([])
   const [selectedCharacter, setSelectedCharacter] = useState('')
   const [extractedName, setExtractedName] = useState('')
   const [extractError, setExtractError] = useState('')
@@ -72,18 +73,21 @@ export function StoryScene({ player }: { player: ReturnType<typeof useStoryPlaye
         </div>
         <Drawer open={choicesOpen} onOpenChange={setChoicesOpen} direction="bottom">
           <form className="action-form" onSubmit={(event) => { event.preventDefault(); void player.submit(player.action) }}>
-            <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) { setSelectedModel(player.models.includes(session.model_id) ? session.model_id : ''); setSelectedCharacter(session.characters[0]?.id ?? ''); setExtractedName(''); setExtractError('') } }}>
+            <Dialog open={toolsOpen} onOpenChange={(open) => { setToolsOpen(open); if (open) { setSelectedModel(player.models.includes(session.model_id) ? session.model_id : ''); setSelectedCharacter(session.characters[0]?.id ?? ''); setExtractedName(''); setExtractError(''); void api.modelProfiles().then(setModelProfiles).catch(() => setModelProfiles([])) } }}>
               <DialogTrigger asChild><Button type="button" variant="outline" size="icon-lg" aria-label="Настройки прохождения" title="Настройки прохождения" disabled={working}><Settings2 aria-hidden="true" /></Button></DialogTrigger>
               <DialogContent className="max-h-[90dvh] overflow-y-auto" style={resolveStoryTheme(session.story.slug).variables}>
                 <DialogHeader><DialogTitle>Настройки прохождения</DialogTitle><DialogDescription>Модель можно сменить между ходами без потери истории.</DialogDescription></DialogHeader>
                 <div className="flex flex-col gap-3">
                   <FieldGroup><Field>
-                    <FieldLabel htmlFor="story-model">Модель Ollama</FieldLabel>
+                    <FieldLabel htmlFor="story-model">Модель {session.provider_id === 'ollama' ? 'Ollama' : session.provider_id}</FieldLabel>
                     <Select value={selectedModel} onValueChange={setSelectedModel} disabled={working || player.models.length === 0}>
                       <SelectTrigger id="story-model" className="w-full"><SelectValue placeholder="Выберите установленную модель" /></SelectTrigger>
-                      <SelectContent><SelectGroup>{player.models.map((model) => <SelectItem key={model} value={model}>{model}</SelectItem>)}</SelectGroup></SelectContent>
+                      <SelectContent><SelectGroup>{player.models.map((model) => {
+                        const profile = modelProfiles.find((item) => item.provider_id === session.provider_id && item.model_id === model)
+                        return <SelectItem key={model} value={model}>{model}{profile?.working_window ? ` · ${profile.working_window.toLocaleString('ru-RU')} токенов` : ''}</SelectItem>
+                      })}</SelectGroup></SelectContent>
                     </Select>
-                    <FieldDescription>Сейчас: {session.model_id}{player.models.includes(session.model_id) ? '' : ' — не установлена'}</FieldDescription>
+                    <FieldDescription>Сейчас: {session.model_id}{player.models.includes(session.model_id) ? '' : ' — не установлена'}. Контекст зависит от выбранной модели.</FieldDescription>
                   </Field></FieldGroup>
                   {player.models.length === 0 && <p className="text-muted-foreground">Ollama не сообщает об установленных моделях. Проверьте подключение.</p>}
                   <Separator />

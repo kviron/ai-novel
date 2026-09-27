@@ -1,6 +1,6 @@
 # Shared LLM Harness Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Route every existing LLM call through one bounded, observable execution path without changing story-engine ownership of canon.
 
@@ -31,7 +31,7 @@
 - Produces: `ModelProfile(provider_id, model_id, context_window, output_limit, working_window, token_safety_margin)` and `fit_layers(profile, layers, output_reserve) -> PromptPackage`.
 - `PromptLayer(key, text, required, priority)` is immutable; `PromptPackage` contains ordered layers, estimated tokens and omitted layer IDs.
 
-- [ ] **Step 1: Write failing tests** for a 4K model that retains required layers and drops optional layers, a 16K model that retains both, and an impossible required layer that raises `ContextBudgetError`.
+- [x] **Step 1: Write failing tests** for a 4K model that retains required layers and drops optional layers, a 16K model that retains both, and an impossible required layer that raises `ContextBudgetError`.
 
 ```python
 def test_small_model_keeps_required_content():
@@ -43,10 +43,10 @@ def test_required_content_never_truncates():
         fit_layers(profile(512), [required_layer(1000)], 128)
 ```
 
-- [ ] **Step 2: Run** `uv run --directory apps/api --extra test pytest tests/llm_harness/test_budget.py -q` and confirm failure from missing behavior.
-- [ ] **Step 3: Implement** frozen contracts, conservative UTF-8-based estimator with explicit safety margin, and selection in descending priority after mandatory layers. Send chosen `working_window` as Ollama `num_ctx`; retain provider identity in profile.
-- [ ] **Step 4: Run** targeted tests and `uv run --directory apps/api --extra test ruff check app tests`.
-- [ ] **Step 5: Commit** the task files.
+- [x] **Step 2: Run** `uv run --directory apps/api --extra test pytest tests/llm_harness/test_budget.py -q` and confirm failure from missing behavior.
+- [x] **Step 3: Implement** frozen contracts, conservative UTF-8-based estimator with explicit safety margin, and selection in descending priority after mandatory layers. Send chosen `working_window` as Ollama `num_ctx`; retain provider identity in profile.
+- [x] **Step 4: Run** targeted tests and `uv run --directory apps/api --extra test ruff check app tests`.
+- [x] **Step 5: Commit** the task files.
 
 ### Task 2: One executor and task policies
 
@@ -60,7 +60,7 @@ def test_required_content_never_truncates():
 - `TaskPolicy.prepare(snapshot) -> list[PromptLayer]`; `TaskPolicy.validate(proposal, snapshot) -> typed result`.
 - `GenerationTrace` records model, layer sizes, dropped IDs, attempts and provider usage.
 
-- [ ] **Step 1: Write failing tests** showing a character draft and a turn use the same executor, preserve their domain outcomes, and reject an oversized repair before the second provider call.
+- [x] **Step 1: Write failing tests** showing a character draft and a turn use the same executor, preserve their domain outcomes, and reject an oversized repair before the second provider call.
 
 ```python
 def test_repair_is_bounded(harness, invalid_provider):
@@ -69,10 +69,10 @@ def test_repair_is_bounded(harness, invalid_provider):
     assert invalid_provider.calls == 1
 ```
 
-- [ ] **Step 2: Run** the new test to confirm the expected missing executor failure.
-- [ ] **Step 3: Implement** executor with one correction, bounded diagnostics and policy adapters. Route game and character calls through it while keeping database writes in their current services.
-- [ ] **Step 4: Run** targeted tests, API tests, Ruff and the full API suite.
-- [ ] **Step 5: Commit** the task files.
+- [x] **Step 2: Run** the new test to confirm the expected missing executor failure.
+- [x] **Step 3: Implement** executor with one correction, bounded diagnostics and policy adapters. Route game and character calls through it while keeping database writes in their current services.
+- [x] **Step 4: Run** targeted tests, API tests, Ruff and the full API suite.
+- [x] **Step 5: Commit** the task files.
 
 ### Task 3: Diagnostics and compatibility
 
@@ -84,7 +84,7 @@ def test_repair_is_bounded(harness, invalid_provider):
 - Adapter returns provider response metadata including actual input/output token usage where available.
 - `TaskResult.trace` has no raw user text or secrets; an inspection endpoint exposes layer sizes and source IDs to local developer UI.
 
-- [ ] **Step 1: Write failing tests** that simulate Ollama `prompt_eval_count` and `eval_count` and verify safe trace fields.
+- [x] **Step 1: Write failing tests** that simulate Ollama `prompt_eval_count` and `eval_count` and verify safe trace fields.
 
 ```python
 def test_trace_records_actual_usage_without_prompt_text(client, fake_ollama):
@@ -93,10 +93,10 @@ def test_trace_records_actual_usage_without_prompt_text(client, fake_ollama):
     assert "secret text" not in str(trace)
 ```
 
-- [ ] **Step 2: Run** the test to confirm the missing trace behavior.
-- [ ] **Step 3: Implement** usage propagation and bounded trace storage; keep the existing public turn response stable.
-- [ ] **Step 4: Run** all API tests and Ruff.
-- [ ] **Step 5: Commit** the task files.
+- [x] **Step 2: Run** the test to confirm the missing trace behavior.
+- [x] **Step 3: Implement** usage propagation and bounded trace storage; keep the existing public turn response stable.
+- [x] **Step 4: Run** all API tests and Ruff.
+- [x] **Step 5: Commit** the task files.
 
 ## Exit gate
 

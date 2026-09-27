@@ -176,6 +176,14 @@ export type ProviderStatus = {
   models: string[]
 }
 
+export type ModelProfile = {
+  provider_id: string
+  model_id: string
+  usable: boolean
+  native_window?: number
+  working_window?: number
+}
+
 export type ApiError = {
   code: string
   detail: string

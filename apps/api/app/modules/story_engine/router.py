@@ -7,17 +7,28 @@ from app.core.config import RuntimeSettingsDep
 from app.core.errors import ApiError, ErrorResponse, ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
 from app.modules.llm_harness.budget import ContextBudgetError
+from app.modules.llm_harness.models import UnknownModelProfileError
 from app.modules.providers.model_selection import NoAvailableModelError, UnsupportedModelError
 from app.modules.providers.router import ProviderRegistryDep
 from app.modules.stories.schemas import SessionDetail
 from app.modules.stories.service import SessionNotFoundError
 
 from .contracts import ModelChangeRequest, RewindRequest, TurnCreate, TurnResult
+from .memory import inspect_active_memory
 from .repository import RewindUnavailableError, StateConflictError, list_active_dialogue
 from .service import TurnGenerationFailedError, change_session_model, create_turn, rewind_session
 
 router = APIRouter(prefix="/api/sessions", tags=["Story turns"])
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/{session_id}/memory")
+def get_memory_inspection(session_id: str, session: SessionDep) -> dict:
+    try:
+        return inspect_active_memory(session, session_id)
+    except SessionNotFoundError:
+        raise ApiError(404, "not_found", "Игровая сессия не найдена.") from None
+
 
 
 @router.get("/{session_id}/dialogue-history", response_model=list[TurnResult])
@@ -96,7 +107,14 @@ def post_turn(
 ) -> TurnResult:
     try:
         result, created = create_turn(
-            session, registry, session_id, payload, settings.ollama_context_tokens, settings.model_context_windows
+            session,
+            registry,
+            session_id,
+            payload,
+            settings.ollama_context_tokens,
+            settings.model_context_windows,
+            settings.memory_provider_id,
+            settings.memory_model_id,
         )
     except SessionNotFoundError:
         raise ApiError(404, "not_found", "Игровая сессия не найдена. Начните новую игру.") from None
@@ -133,6 +151,10 @@ def post_turn(
             422,
             "context_requirements_exceed_model",
             "Контекст этой модели слишком мал для обязательных данных истории.",
+        ) from None
+    except UnknownModelProfileError:
+        raise ApiError(
+            422, "model_profile_unavailable", "Для этой модели не задан проверенный размер контекста."
         ) from None
     if not created:
         response.status_code = 200

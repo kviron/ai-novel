@@ -28,6 +28,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             {**turn, "player_parts": [part.model_dump() for part in parse_player_input(turn["action"])]}
             for turn in context.recent_turns
         ],
+        "earlier_confirmed_memory": context.memory_summary,
         "action": request.action,
         "player_parts": [part.model_dump() for part in parse_player_input(request.action)],
     }

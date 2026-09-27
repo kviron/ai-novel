@@ -44,7 +44,7 @@ def test_upgrade_repairs_early_character_materials_schema(tmp_path):
         columns = {row[1] for row in db.execute("PRAGMA table_info(characters)")}
         version = db.execute("SELECT version_num FROM alembic_version").fetchone()
     assert "origin_character_id" in columns
-    assert version == ("20260927_14",)
+    assert version == ("20260927_15",)
 
 
 def test_story_version_upgrade_preserves_occupied_database(tmp_path):
@@ -89,7 +89,7 @@ def test_story_version_upgrade_preserves_occupied_database(tmp_path):
         autosave = db.execute("SELECT story_id, session_id FROM autosaves").fetchone()
         broken_foreign_keys = db.execute("PRAGMA foreign_key_check").fetchall()
 
-    assert version == ("20260927_14",)
+    assert version == ("20260927_15",)
     assert published == ("legacy-story:v1", "legacy-story", 1, "published", "hybrid", 1)
     assert current == ("legacy-story:v1", "Legacy premise", "Arrival")
     assert version_content == ("Legacy premise", "Arrival", "choice", "ollama", "qwen3:14b-q4_K_M")
@@ -134,7 +134,7 @@ def test_session_beat_identity_is_snapshot_safe_and_downgrade_restores_old_forei
         assert "story_beats" not in foreign_tables
         assert {"story_sessions", "turns"} <= foreign_tables
         assert "ix_session_beats_session_status" in indexes
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_14",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_15",)
 
     command.downgrade(config, "20260927_13")
     with sqlite3.connect(database_path) as db:
@@ -229,7 +229,7 @@ def test_snapshot_only_beat_blocks_downgrade_without_schema_or_data_changes(tmp_
         command.downgrade(config, "20260927_13")
 
     with sqlite3.connect(database_path) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_14",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260927_15",)
         assert db.execute("SELECT * FROM session_beats").fetchall() == [
             ("session", "snapshot-only", "completed", "turn")
         ]

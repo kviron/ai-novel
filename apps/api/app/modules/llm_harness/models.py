@@ -2,6 +2,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from app.modules.providers.service import ProviderRegistry
+
+
+class UnknownModelProfileError(ValueError):
+    pass
+
 
 @dataclass(frozen=True)
 class ModelProfile:
@@ -13,6 +19,7 @@ class ModelProfile:
     working_window: int
     output_limit: int
     token_safety_margin: int
+    native_window: int | None = None
 
     def __post_init__(self) -> None:
         if not self.provider_id or not self.model_id:
@@ -26,28 +33,60 @@ class ModelProfile:
 class ModelCatalog:
     """Resolve configured working windows without guessing cloud model limits."""
 
-    def __init__(self, default_ollama_window: int, windows: Mapping[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        default_ollama_window: int,
+        windows: Mapping[str, int] | None = None,
+        native_windows: Mapping[str, int] | None = None,
+    ) -> None:
         if default_ollama_window <= 0:
             raise ValueError("Default Ollama context must be positive")
         self._default_ollama_window = default_ollama_window
         self._windows = dict(windows or {})
+        self._native_windows = dict(native_windows or {})
         if any(window <= 0 for window in self._windows.values()):
             raise ValueError("Model windows must be positive")
+        if any(window <= 0 for window in self._native_windows.values()):
+            raise ValueError("Native model windows must be positive")
 
     def resolve(self, provider_id: str, model_id: str) -> ModelProfile:
         window = self._windows.get(f"{provider_id}:{model_id}")
         if window is None and (provider_id == "ollama" or (provider_id, model_id) == ("legacy", "legacy")):
             window = self._default_ollama_window
         if window is None:
-            raise ValueError(f"No verified context window for {provider_id}/{model_id}")
+            raise UnknownModelProfileError(f"No verified context window for {provider_id}/{model_id}")
+        native = self._native_windows.get(f"{provider_id}:{model_id}")
+        working = min(window, native) if native is not None else window
         return ModelProfile(
             provider_id=provider_id,
             model_id=model_id,
-            context_window=window,
-            working_window=window,
-            output_limit=min(4096, max(256, window // 4)),
-            token_safety_margin=max(128, window * 15 // 100),
+            context_window=native or window,
+            working_window=working,
+            output_limit=min(4096, max(256, working // 4)),
+            token_safety_margin=max(128, working * 15 // 100),
+            native_window=native,
         )
+
+
+def catalog_for_model(
+    registry: ProviderRegistry,
+    default_ollama_window: int,
+    windows: Mapping[str, int] | None,
+    provider_id: str,
+    model_id: str,
+) -> ModelCatalog:
+    """Pin the native limit for this invocation when the adapter can report it."""
+    try:
+        provider = registry.get(provider_id)
+    except KeyError:
+        return ModelCatalog(default_ollama_window, windows)
+    read_limit = getattr(provider, "model_context_window", None)
+    native = read_limit(model_id) if callable(read_limit) else None
+    return ModelCatalog(
+        default_ollama_window,
+        windows,
+        {f"{provider_id}:{model_id}": native} if native is not None else None,
+    )
 
 
 @dataclass(frozen=True)

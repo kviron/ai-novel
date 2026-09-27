@@ -11,6 +11,7 @@ export type {
   StoryCharacterLink,
   CreateTurnRequest,
   ProviderStatus,
+  ModelProfile,
   SessionTurn,
   SessionSummary,
   StartSessionRequest,

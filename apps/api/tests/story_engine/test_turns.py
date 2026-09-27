@@ -19,7 +19,7 @@ from versioned_story_helpers import publish_cast
 from app.core.config import Settings
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
 from app.db.engine import get_session
-from app.db.models import StorySession, Turn
+from app.db.models import MemorySegment, StorySession, Turn
 from app.main import create_app
 from app.modules.providers.ollama import OllamaProvider
 from app.modules.providers.router import get_provider_registry
@@ -413,6 +413,7 @@ def test_rewind_first_turn_restores_initial_scene_and_rejects_stale_revision(cli
 
 def test_rewind_stops_after_ten_steps_and_preserves_all_turns(client, fake_provider, akane_session):
     fake_provider.responses = [proposal() for _ in range(11)]
+    fake_provider.text_responses = ["Сводка ранних ходов." for _ in range(3)]
     for index in range(11):
         result = post_turn(
             client,
@@ -508,6 +509,100 @@ def test_game_turn_uses_selected_model_context_window(client, fake_provider, aka
     assert requests[0].context_tokens == 32768
 
 
+def test_old_confirmed_turn_is_summarized_before_it_leaves_recent_context(
+    client, fake_provider, akane_session, monkeypatch
+):
+    client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 32768
+    turn_requests = []
+    text_requests = []
+    original_turn = fake_provider.generate_turn
+    original_text = fake_provider.generate_text
+
+    def capture_turn(request):
+        turn_requests.append(request)
+        return original_turn(request)
+
+    def capture_text(request):
+        text_requests.append(request)
+        return original_text(request)
+
+    monkeypatch.setattr(fake_provider, "generate_turn", capture_turn)
+    monkeypatch.setattr(fake_provider, "generate_text", capture_text)
+    fake_provider.responses = [proposal() for _ in range(10)]
+    fake_provider.text_responses = ["Под мостом спрятан ключ."]
+    for index in range(10):
+        action = "Спрятать ключ под мостом" if index == 0 else "Продолжить"
+        response = post_turn(
+            client,
+            akane_session,
+            request_id=f"memory-turn-{index}",
+            expected_state_version=index + 1,
+            action=action,
+        )
+        assert response.status_code == 201, response.text
+
+    assert len(text_requests) == 1
+    assert "Спрятать ключ под мостом" in text_requests[0].user_prompt
+    assert "Под мостом спрятан ключ." in turn_requests[-1].user_prompt
+    with Session(client.app.state.engine) as db:
+        segments = list(db.exec(select(MemorySegment).where(MemorySegment.session_id == akane_session.id)))
+    assert len(segments) == 1
+    assert len(json.loads(segments[0].source_turn_ids)) == 1
+    inspection = client.get(f"/api/sessions/{akane_session.id}/memory")
+    assert inspection.status_code == 200
+    assert inspection.json()["covered_turn_count"] == 1
+    assert inspection.json()["summary"] == "Под мостом спрятан ключ."
+
+
+def test_smaller_model_window_moves_more_recent_turns_into_memory(client, fake_provider, akane_session, monkeypatch):
+    key = "ollama:qwen3:14b-q4_K_M"
+    client.app.state.settings.model_context_windows[key] = 32768
+    fake_provider.responses = [proposal() for _ in range(10)]
+    fake_provider.text_responses = ["Подтверждённые события." for _ in range(10)]
+    requests = []
+    original = fake_provider.generate_turn
+
+    def capture(request):
+        requests.append(request)
+        return original(request)
+
+    monkeypatch.setattr(fake_provider, "generate_turn", capture)
+    for index in range(9):
+        assert post_turn(
+            client, akane_session, request_id=f"sized-{index}", expected_state_version=index + 1
+        ).status_code == 201
+    client.app.state.settings.model_context_windows[key] = 14000
+
+    response = post_turn(client, akane_session, request_id="smaller-window", expected_state_version=10)
+
+    assert response.status_code == 201, response.text
+    context = json.loads(requests[-1].user_prompt)
+    assert requests[-1].context_tokens == 14000
+    assert len(context["recent_turns"]) < 8
+    assert context["earlier_confirmed_memory"] == "Подтверждённые события."
+    with Session(client.app.state.engine) as db:
+        latest = list(db.exec(select(MemorySegment).where(MemorySegment.session_id == akane_session.id)))[-1]
+    assert len(json.loads(latest.source_turn_ids)) + len(context["recent_turns"]) == 9
+
+
+def test_memory_generation_failure_never_commits_game_turn(client, fake_provider, akane_session):
+    client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 32768
+    fake_provider.responses = [proposal() for _ in range(10)]
+    for index in range(9):
+        assert post_turn(
+            client, akane_session, request_id=f"memory-base-{index}", expected_state_version=index + 1
+        ).status_code == 201
+    fake_provider.errors = [ProviderUnavailableError()]
+
+    failed = post_turn(client, akane_session, request_id="memory-failure", expected_state_version=10)
+
+    assert failed.status_code == 503
+    restored = client.get(f"/api/sessions/{akane_session.id}").json()
+    assert restored["state_version"] == 10
+    with Session(client.app.state.engine) as db:
+        assert len(list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))) == 9
+
+
 def test_invalid_json_twice_has_no_state_change(client, fake_provider, akane_session, caplog):
     fake_provider.errors = [ProviderResponseError(raw_response="SECRET RAW") for _ in range(2)]
     response = post_turn(client, akane_session)
@@ -575,6 +670,8 @@ def test_schema_choice_count_failure_rejects_after_one_repair(client, akane_sess
 
     def respond(request):
         calls.append(request)
+        if request.url.path == "/api/show":
+            return httpx.Response(200, json={"model_info": {"qwen.context_length": 32768}})
         return httpx.Response(200, json={"message": {"content": json.dumps(raw)}})
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as http_client:
@@ -582,7 +679,7 @@ def test_schema_choice_count_failure_rejects_after_one_repair(client, akane_sess
         client.app.dependency_overrides[get_provider_registry] = lambda: ProviderRegistry([provider])
         response = post_turn(client, akane_session)
     assert response.status_code == 502
-    assert len(calls) == 2
+    assert len([call for call in calls if call.url.path == "/api/chat"]) == 2
     assert_unchanged(client, akane_session)
 
 
@@ -719,7 +816,7 @@ def test_concurrent_requests_commit_only_once(client, fake_provider, akane_sessi
         assert len(list(db.exec(select(Turn).where(Turn.session_id == akane_session.id)))) == 1
 
 
-def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
+def test_prompt_contains_state_facts_memory_and_eight_recent_complete_turns(
     client, fake_provider, akane_session, monkeypatch
 ):
     requests = []
@@ -729,6 +826,7 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
         return proposal()
 
     monkeypatch.setattr(fake_provider, "generate_turn", generate)
+    fake_provider.text_responses = ["Подтверждённый ранний ход." for _ in range(2)]
     for number in range(10):
         response = post_turn(
             client,
@@ -750,6 +848,7 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
     assert context["action"] == "Действие 9"
     assert context["state"]["state_version"] == 10
     assert len(context["recent_turns"]) == 8
+    assert context["earlier_confirmed_memory"] == "Подтверждённый ранний ход."
     assert [turn["action"] for turn in context["recent_turns"]] == [f"Действие {n}" for n in range(1, 9)]
     assert all({"segments", "choices", "visual_directive"} <= turn.keys() for turn in context["recent_turns"])
     assert all("narration" not in turn and "dialogue" not in turn for turn in context["recent_turns"])

@@ -75,8 +75,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
             raise StateConflictError
         active_turn_ids.add(turn.id)
         active_turn_count += 1
-        if len(turns) < 8:
-            turns.append(turn)
+        turns.append(turn)
         turn_id = turn.parent_turn_id
     completed_beat_ids = frozenset(
         row.beat_id
@@ -138,9 +137,20 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         recent_turns=[
             _turn_result(session, turn).model_dump(
                 mode="json",
-                include={"request_id", "state_version", "action", "segments", "choices", "visual_directive"},
+                include={"id", "request_id", "state_version", "action", "segments", "choices", "visual_directive"},
             )
-            for turn in reversed(turns)
+            for turn in reversed(turns[:8])
+        ],
+        older_turns=[
+            {
+                "id": turn.id,
+                "action": turn.action,
+                "segments": (
+                    json.loads(turn.segments) if turn.segments else [{"kind": "narration", "text": turn.narration}]
+                ),
+                "scene_after": turn.scene_after,
+            }
+            for turn in reversed(turns[8:])
         ],
         completed_beat_ids=completed_beat_ids,
         available_beat_ids=available_beat_ids,

@@ -1,9 +1,12 @@
+import json
+from dataclasses import replace
+
 from sqlmodel import Session
 
 from app.core.errors import ProviderResponseError, ProviderUnavailableError
-from app.modules.llm_harness.budget import ContextBudgetError
+from app.modules.llm_harness.budget import ContextBudgetError, fit_layers
 from app.modules.llm_harness.executor import GenerationRejectedError, GenerationTask, LLMHarness
-from app.modules.llm_harness.models import ModelCatalog
+from app.modules.llm_harness.models import ModelCatalog, PromptLayer, UnknownModelProfileError, catalog_for_model
 from app.modules.providers.model_selection import UnsupportedModelError, available_models
 from app.modules.providers.service import ProviderRegistry
 from app.modules.stories.schemas import SessionDetail
@@ -11,6 +14,7 @@ from app.modules.stories.service import get_session_detail
 
 from . import repository
 from .contracts import AcceptedTurn, TurnCreate, TurnResult
+from .memory import ensure_memory
 from .prompt import build_prompt
 from .rules import GenerationContext, InvalidProposalError, validate_proposal
 
@@ -30,6 +34,8 @@ def create_turn(
     request: TurnCreate,
     context_tokens: int,
     model_context_windows: dict[str, int] | None = None,
+    memory_provider_id: str | None = None,
+    memory_model_id: str | None = None,
 ) -> tuple[TurnResult, bool]:
     """Generate, repair at most once, and save one canonical turn, or replay its saved result.
 
@@ -52,8 +58,37 @@ def create_turn(
         # The context contains plain values: release the read transaction before I/O.
         session.rollback()
     try:
-        accepted, raw_response = _generate_turn(registry, context, request, context_tokens, model_context_windows)
-    except (ProviderUnavailableError, ProviderResponseError, TurnGenerationFailedError, ContextBudgetError):
+        catalog = catalog_for_model(
+            registry, context_tokens, model_context_windows, context.provider_id, context.model_id
+        )
+        context = _select_history(context, request, catalog)
+        summary_provider = memory_provider_id or context.provider_id
+        summary_model = memory_model_id or context.model_id
+        if context.older_turns:
+            summary_catalog = (
+                catalog
+                if (summary_provider, summary_model) == (context.provider_id, context.model_id)
+                else catalog_for_model(registry, context_tokens, model_context_windows, summary_provider, summary_model)
+            )
+            try:
+                context = ensure_memory(
+                    session,
+                    registry,
+                    context,
+                    summary_catalog,
+                    provider_id=summary_provider,
+                    model_id=summary_model,
+                )
+            except GenerationRejectedError as error:
+                raise TurnGenerationFailedError(raw_response=error.raw_response) from None
+        accepted, raw_response = _generate_turn(registry, context, request, catalog)
+    except (
+        ProviderUnavailableError,
+        ProviderResponseError,
+        TurnGenerationFailedError,
+        ContextBudgetError,
+        UnknownModelProfileError,
+    ):
         # A committed duplicate wins even when this request's generation failed.
         # Discard any prior snapshot before checking, then release the fresh read.
         session.rollback()
@@ -87,12 +122,12 @@ def _generate_turn(
     registry: ProviderRegistry,
     context: GenerationContext,
     request: TurnCreate,
-    context_tokens: int,
-    model_context_windows: dict[str, int] | None = None,
+    catalog: ModelCatalog,
 ) -> tuple[AcceptedTurn, str]:
     """Propose and repair without owning or opening any database transaction."""
-    generation_request = build_prompt(context, request, context_tokens)
-    harness = LLMHarness(registry, ModelCatalog(context_tokens, model_context_windows))
+    profile = catalog.resolve(context.provider_id, context.model_id)
+    generation_request = build_prompt(context, request, profile.working_window)
+    harness = LLMHarness(registry, catalog)
     try:
         result = harness.run(
             GenerationTask(
@@ -112,3 +147,41 @@ def _generate_turn(
     except GenerationRejectedError as error:
         raise TurnGenerationFailedError(raw_response=error.raw_response) from None
     return result.value, result.raw_response
+
+
+def _select_history(context: GenerationContext, request: TurnCreate, catalog: ModelCatalog) -> GenerationContext:
+    """Move displaced recent turns into memory before constructing the game request."""
+    profile = catalog.resolve(context.provider_id, context.model_id)
+    recent = context.recent_turns
+    for keep in range(len(recent), -1, -1):
+        moved = [
+            {"id": turn["id"], "action": turn["action"], "segments": turn["segments"]}
+            for turn in recent[: len(recent) - keep]
+        ]
+        older = [*(context.older_turns or []), *moved]
+        candidate = replace(
+            context,
+            older_turns=older,
+            recent_turns=recent[-keep:] if keep else [],
+            memory_summary="М" * 2500 if older else "",
+        )
+        prompt = build_prompt(candidate, request, profile.working_window)
+        layers = [
+            PromptLayer("system", "system", prompt.system_prompt, required=True),
+            PromptLayer("user", "user", prompt.user_prompt, required=True),
+            PromptLayer(
+                "schema",
+                "schema",
+                json.dumps(
+                    prompt.model_dump(mode="json", include={"response_schema"})["response_schema"],
+                    ensure_ascii=False,
+                ),
+                required=True,
+            ),
+        ]
+        try:
+            fit_layers(profile, layers, min(1024, profile.output_limit))
+            return replace(candidate, memory_summary="")
+        except ContextBudgetError:
+            continue
+    raise ContextBudgetError("Required game context exceeds the selected model window")

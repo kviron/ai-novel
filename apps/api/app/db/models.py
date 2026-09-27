@@ -307,6 +307,20 @@ class Turn(SQLModel, table=True):
     created_at: str = Field(default_factory=utc_timestamp)
 
 
+class MemorySegment(SQLModel, table=True):
+    """Derived summary for one exact prefix of a session's accepted-turn branch."""
+
+    __tablename__ = "memory_segments"
+    __table_args__ = (UniqueConstraint("session_id", "end_turn_id"),)
+
+    id: str = Field(default_factory=new_public_id, primary_key=True)
+    session_id: str = Field(foreign_key="story_sessions.id", index=True)
+    end_turn_id: str = Field(foreign_key="turns.id", index=True)
+    source_turn_ids: str
+    summary: str
+    created_at: str = Field(default_factory=utc_timestamp)
+
+
 class Autosave(SQLModel, table=True):
     __tablename__ = "autosaves"
 

@@ -55,6 +55,20 @@ class OllamaProvider:
         except (KeyError, TypeError, ValueError) as error:
             raise ProviderResponseError(raw_response=response.text) from error
 
+    def model_context_window(self, model_id: str) -> int | None:
+        """Read the model's native context limit from Ollama's model metadata."""
+        response = self._request("POST", "/api/show", model_id=model_id, json={"model": model_id})
+        try:
+            info = response.json()["model_info"]
+            windows = [
+                value
+                for key, value in info.items()
+                if key.endswith(".context_length") and isinstance(value, int) and value > 0
+            ]
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            raise ProviderResponseError(raw_response=response.text) from error
+        return min(windows) if windows else None
+
     def generate_turn(self, request: TurnGenerationRequest) -> TurnProposal:
         response_schema = request.model_dump(
             mode="json",
