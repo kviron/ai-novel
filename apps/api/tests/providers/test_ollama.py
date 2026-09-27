@@ -208,7 +208,7 @@ def test_ollama_malformed_payload_has_diagnostic_body_but_safe_message(response)
 def test_validation_failure_traceback_does_not_expose_generated_content():
     sensitive_marker = "SENSITIVE_GENERATED_CONTENT_47A1"
     invalid_turn = json.loads(VALID_TURN_JSON)
-    invalid_turn["suggested_choices"] = [sensitive_marker]
+    invalid_turn["suggested_choices"] = [sensitive_marker] * 7
     provider = OllamaProvider(
         "http://ollama.test",
         1,

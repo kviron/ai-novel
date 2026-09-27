@@ -724,7 +724,7 @@ def test_prompt_contains_state_facts_and_only_eight_recent_complete_turns(
     assert request.model_id == akane_session.model_id
     assert "Аканэ Куроха" not in request.system_prompt
     assert "чужое воспоминание" not in request.system_prompt
-    assert "2–4" in request.system_prompt
+    assert "choice_range=2..4" in request.system_prompt
     assert "suggested_choices" in request.response_schema["properties"]
     context = json.loads(request.user_prompt)
     assert context["story"]["premise"] == "В дождливом неоновом городе Аканэ помогает распутать чужое воспоминание."
