@@ -36,7 +36,7 @@ test('режим сцены прячет и возвращает инспект�
 })
 
 test('длинный инспектор прокручивается внутри экрана, не прокручивая всю студию', async ({ page }) => {
-  await page.setViewportSize({ width: 900, height: 600 })
+  await page.setViewportSize({ width: 900, height: 400 })
   await page.goto('/')
   await startStory(page)
   await page.getByTestId('story-player-route').getByRole('link', { name: 'Студия' }).click()

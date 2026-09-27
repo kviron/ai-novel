@@ -100,6 +100,19 @@ def test_ollama_reports_native_model_context_window():
     assert provider.model_context_window("qwen3:14b-q4_K_M") == 32768
 
 
+def test_ollama_reports_model_configured_context_window():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/show"
+        return httpx.Response(
+            200,
+            json={"model_info": {"gemma4.context_length": 262144}, "parameters": "temperature 0.8\nnum_ctx 32768\n"},
+        )
+
+    provider = OllamaProvider("http://ollama.test", 5, httpx.Client(transport=httpx.MockTransport(handler)))
+
+    assert provider.model_configured_context_window("gemma4-local:32k") == 32768
+
+
 def test_profile_endpoint_exposes_configured_working_window(client, fake_provider):
     client.app.state.settings.model_context_windows["ollama:qwen3:14b-q4_K_M"] = 32768
 

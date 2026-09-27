@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -68,6 +69,19 @@ class OllamaProvider:
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise ProviderResponseError(raw_response=response.text) from error
         return min(windows) if windows else None
+
+    def model_configured_context_window(self, model_id: str) -> int | None:
+        """Read num_ctx set in an Ollama model's parameters, when present."""
+        response = self._request("POST", "/api/show", model_id=model_id, json={"model": model_id})
+        try:
+            parameters = response.json().get("parameters", "")
+            if not isinstance(parameters, str):
+                raise TypeError("parameters must be text")
+        except (TypeError, ValueError) as error:
+            raise ProviderResponseError(raw_response=response.text) from error
+        match = re.search(r"(?m)^\s*num_ctx\s+(\d+)\s*$", parameters)
+        value = int(match.group(1)) if match else None
+        return value if value and value > 0 else None
 
     def generate_turn(self, request: TurnGenerationRequest) -> TurnProposal:
         response_schema = request.model_dump(

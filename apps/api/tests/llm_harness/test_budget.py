@@ -1,7 +1,9 @@
 import pytest
 
 from app.modules.llm_harness.budget import ContextBudgetError, fit_layers
-from app.modules.llm_harness.models import ModelCatalog, ModelProfile, PromptLayer
+from app.modules.llm_harness.models import ModelCatalog, ModelProfile, PromptLayer, catalog_for_model
+from app.modules.providers.service import ProviderRegistry
+from tests.fakes import FakeLLMProvider
 
 
 def profile(window: int) -> ModelProfile:
@@ -82,6 +84,19 @@ def test_native_limit_clamps_configured_ollama_window():
     assert profile.context_window == 8192
     assert profile.working_window == 8192
     assert profile.native_window == 8192
+
+
+def test_catalog_uses_ollama_model_num_ctx_before_generic_default():
+    provider = FakeLLMProvider(models=["gemma4-local:32k"])
+    provider.model_context_window = lambda _model_id: 262144
+    provider.model_configured_context_window = lambda _model_id: 32768
+
+    profile = catalog_for_model(ProviderRegistry([provider]), 16384, {}, "ollama", "gemma4-local:32k").resolve(
+        "ollama", "gemma4-local:32k"
+    )
+
+    assert profile.native_window == 262144
+    assert profile.working_window == 32768
 
 
 def test_response_schema_consumes_budget_without_becoming_user_text():

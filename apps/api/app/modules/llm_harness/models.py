@@ -38,24 +38,31 @@ class ModelCatalog:
         default_ollama_window: int,
         windows: Mapping[str, int] | None = None,
         native_windows: Mapping[str, int] | None = None,
+        configured_windows: Mapping[str, int] | None = None,
     ) -> None:
         if default_ollama_window <= 0:
             raise ValueError("Default Ollama context must be positive")
         self._default_ollama_window = default_ollama_window
         self._windows = dict(windows or {})
         self._native_windows = dict(native_windows or {})
+        self._configured_windows = dict(configured_windows or {})
         if any(window <= 0 for window in self._windows.values()):
             raise ValueError("Model windows must be positive")
         if any(window <= 0 for window in self._native_windows.values()):
             raise ValueError("Native model windows must be positive")
+        if any(window <= 0 for window in self._configured_windows.values()):
+            raise ValueError("Configured model windows must be positive")
 
     def resolve(self, provider_id: str, model_id: str) -> ModelProfile:
-        window = self._windows.get(f"{provider_id}:{model_id}")
+        key = f"{provider_id}:{model_id}"
+        window = self._windows.get(key)
+        if window is None:
+            window = self._configured_windows.get(key)
         if window is None and (provider_id == "ollama" or (provider_id, model_id) == ("legacy", "legacy")):
             window = self._default_ollama_window
         if window is None:
             raise UnknownModelProfileError(f"No verified context window for {provider_id}/{model_id}")
-        native = self._native_windows.get(f"{provider_id}:{model_id}")
+        native = self._native_windows.get(key)
         working = min(window, native) if native is not None else window
         return ModelProfile(
             provider_id=provider_id,
@@ -82,10 +89,14 @@ def catalog_for_model(
         return ModelCatalog(default_ollama_window, windows)
     read_limit = getattr(provider, "model_context_window", None)
     native = read_limit(model_id) if callable(read_limit) else None
+    read_configured = getattr(provider, "model_configured_context_window", None)
+    configured = read_configured(model_id) if callable(read_configured) else None
+    key = f"{provider_id}:{model_id}"
     return ModelCatalog(
         default_ollama_window,
         windows,
-        {f"{provider_id}:{model_id}": native} if native is not None else None,
+        {key: native} if native is not None else None,
+        {key: configured} if configured is not None else None,
     )
 
 
