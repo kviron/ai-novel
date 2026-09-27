@@ -252,7 +252,8 @@ def test_ending_gate_only_requires_beats_with_both_required_and_gate_flags():
         story.beats[0].model_copy(update={"id": "gate-only", "required": False, "ending_gate": True}),
     ]
     story = story.model_copy(update={"beats": beats})
-    ctx = context(story=story, completed=("required-only", "gate-only"))
+    # Only the conjunctive gate should matter: the other two beats deliberately remain incomplete.
+    ctx = context(story=story)
     ctx = GenerationContext(**{**ctx.__dict__, "available_beat_ids": frozenset({"both"})})
     accepted = validate_proposal(proposal(completed_beat_ids=["both"], requests_ending=True), ctx)
     assert accepted.completed_beat_ids == ["both"]
