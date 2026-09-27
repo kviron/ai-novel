@@ -52,10 +52,13 @@ let lastHeroSave: unknown = null
 let saves: Save[] = []
 let rewinds = new Map<string, Session>()
 let modelChanges = new Map<string, Session>()
-let storyDrafts = new Map<string, StoryDraft>()
+let activeStoryDrafts = new Map<string, StoryDraft>()
+let publishedStoryVersions = new Map<string, Map<string, StoryDraft>>()
+let nextStoryNumber = 1
 let authoringRequestLog: { method: string; path: string; body: unknown }[] = []
 let lastSectionRequest: { storyId: string; section: string; expected_revision: number; data: unknown } | null = null
 let nextDraftDiagnostics: DraftDiagnostic[] = []
+let lastCoverUpload: { storyId: string; mimeType: string; size: number; filename: string; creator: string; license: string; source: string } | null = null
 
 function defaultStoryDraft(storyId = 'story-1'): StoryDraft {
   return {
@@ -123,16 +126,17 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
     const body = await requestBody(input, init)
     authoringRequestLog.push({ method, path: pathname, body })
     if (method === 'POST' && pathname === '/api/author/stories') {
+      const storyId = `story-${nextStoryNumber++}`
       const created = mergeDraftSeed({
-        story_id: `story-${storyDrafts.size + 1}`,
+        story_id: storyId,
         identity: body && typeof body === 'object' ? body as Partial<StoryDraft['identity']> : {},
       })
-      storyDrafts.set(created.story_id, created)
+      activeStoryDrafts.set(created.story_id, created)
       return json(created, 201)
     }
     const draftMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft$/)
     if (method === 'GET' && draftMatch) {
-      const draft = storyDrafts.get(decodeURIComponent(draftMatch[1]))
+      const draft = activeStoryDrafts.get(decodeURIComponent(draftMatch[1]))
       return draft ? json(draft) : json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
     }
     const sectionMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft\/(identity|mode|hero|cast|rules|canon)$/)
@@ -141,7 +145,7 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       const section = sectionMatch[2] as keyof Pick<StoryDraft, 'identity' | 'mode' | 'hero' | 'cast' | 'rules' | 'canon'>
       const request = body as { expected_revision: number; data: StoryDraft[typeof section] }
       lastSectionRequest = { storyId, section, expected_revision: request.expected_revision, data: request.data }
-      const draft = storyDrafts.get(storyId)
+      const draft = activeStoryDrafts.get(storyId)
       if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
       if (request.expected_revision !== draft.draft_revision) {
         return json({
@@ -150,52 +154,86 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
         }, 409)
       }
       const updated = { ...draft, [section]: request.data, draft_revision: draft.draft_revision + 1 }
-      storyDrafts.set(storyId, updated)
+      activeStoryDrafts.set(storyId, updated)
       return json(updated)
     }
     const validateMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/validate$/)
     if (method === 'POST' && validateMatch) {
       const storyId = decodeURIComponent(validateMatch[1])
-      if (!storyDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      if (!activeStoryDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
       return json({ valid: !nextDraftDiagnostics.some(({ severity }) => severity === 'error'), diagnostics: nextDraftDiagnostics })
     }
     const publishMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/publish$/)
     if (method === 'POST' && publishMatch) {
       const storyId = decodeURIComponent(publishMatch[1])
-      const draft = storyDrafts.get(storyId)
+      const draft = activeStoryDrafts.get(storyId)
       if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
       if (nextDraftDiagnostics.some(({ severity }) => severity === 'error')) {
         return json({ code: 'draft_invalid', detail: 'Исправьте ошибки черновика перед продолжением.', retryable: false, diagnostics: nextDraftDiagnostics }, 422)
       }
       const published = { ...draft, status: 'published' as const, published_at: '2026-09-27T01:00:00Z' }
-      storyDrafts.set(storyId, published)
+      activeStoryDrafts.delete(storyId)
+      const versions = publishedStoryVersions.get(storyId) ?? new Map<string, StoryDraft>()
+      versions.set(published.version_id, published)
+      publishedStoryVersions.set(storyId, versions)
       return json(published)
     }
     const testMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/test-sessions$/)
     if (method === 'POST' && testMatch) {
       const storyId = decodeURIComponent(testMatch[1])
-      const draft = storyDrafts.get(storyId)
+      const draft = activeStoryDrafts.get(storyId)
       if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
       if (nextDraftDiagnostics.some(({ severity }) => severity === 'error')) {
         return json({ code: 'draft_invalid', detail: 'Исправьте ошибки черновика перед продолжением.', retryable: false, diagnostics: nextDraftDiagnostics }, 422)
       }
-      return json({ ...nextSession, id: nextSession.id, state_version: nextSession.state_version }, 201)
+      const createdSession = { ...nextSession, id: nextSession.id, state_version: nextSession.state_version }
+      sessions.set(createdSession.id, createdSession)
+      return json(createdSession, 201)
     }
     const cloneMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft-from\/([^/]+)$/)
     if (method === 'POST' && cloneMatch) {
       const storyId = decodeURIComponent(cloneMatch[1])
-      const source = storyDrafts.get(storyId)
+      const versionId = decodeURIComponent(cloneMatch[2])
+      const source = publishedStoryVersions.get(storyId)?.get(versionId)
       if (!source) return json({ code: 'version_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
-      const cloned = { ...source, status: 'draft' as const, version_id: `${storyId}-draft-clone`, based_on_version_id: decodeURIComponent(cloneMatch[2]), published_at: null, draft_revision: 1 }
-      storyDrafts.set(storyId, cloned)
+      const active = activeStoryDrafts.get(storyId)
+      if (active) return json({
+        code: 'draft_conflict', detail: 'Черновик был изменён. Обновите его и повторите сохранение.',
+        retryable: false, latest_revision: active.draft_revision,
+      }, 409)
+      const versionNumber = Math.max(...[...publishedStoryVersions.get(storyId)!.values()].map(({ version_number }) => version_number)) + 1
+      const cloned = {
+        ...source, status: 'draft' as const, version_id: `${storyId}-draft-v${versionNumber}`,
+        version_number: versionNumber, based_on_version_id: source.version_id, published_at: null, draft_revision: 1,
+      }
+      activeStoryDrafts.set(storyId, cloned)
       return json(cloned, 201)
     }
     const coverMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft\/cover$/)
     if (method === 'POST' && coverMatch) {
       const storyId = decodeURIComponent(coverMatch[1])
-      if (!storyDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
-      return json({ id: 'cover-1', sha256: 'cover-sha', mime_type: init?.headers instanceof Headers ? init.headers.get('Content-Type') : 'image/png', filename: searchParams.get('filename'), creator: searchParams.get('creator'), license: searchParams.get('license'), source: searchParams.get('source') }, 201)
+      if (!activeStoryDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      const blob = input instanceof Request ? await input.clone().blob() : init?.body
+      const headers = input instanceof Request ? input.headers : new Headers(init?.headers)
+      const mimeType = blob instanceof Blob && blob.type ? blob.type : headers.get('Content-Type') ?? ''
+      const filename = searchParams.get('filename') ?? ''
+      const creator = searchParams.get('creator') ?? ''
+      const license = searchParams.get('license') ?? ''
+      const source = searchParams.get('source') ?? ''
+      if (!(blob instanceof Blob) || blob.size === 0 || !['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || !filename || !creator || !license || !source) {
+        return json({ code: 'invalid_material', detail: 'Нужна обложка PNG, JPEG или WebP и сведения об авторстве.', retryable: false }, 422)
+      }
+      lastCoverUpload = { storyId, mimeType, size: blob.size, filename, creator, license, source }
+      return json({ id: 'cover-1', sha256: 'cover-sha', mime_type: mimeType, filename, creator, license, source }, 201)
     }
+  }
+
+  const publishedVersionMatch = pathname.match(/^\/api\/stories\/([^/]+)\/versions\/([^/]+)$/)
+  if (method === 'GET' && publishedVersionMatch) {
+    const version = publishedStoryVersions
+      .get(decodeURIComponent(publishedVersionMatch[1]))
+      ?.get(decodeURIComponent(publishedVersionMatch[2]))
+    return version ? json(version) : json({ code: 'version_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
   }
 
   if (method === 'GET' && pathname === '/api/characters') {
@@ -402,11 +440,12 @@ export const apiServer = {
   lastHeroSaveRequest() { return lastHeroSave },
   storyDraft(seed: StoryDraftSeed) {
     const draft = mergeDraftSeed(seed)
-    storyDrafts.set(draft.story_id, draft)
+    activeStoryDrafts.set(draft.story_id, draft)
   },
   draftDiagnostics(value: DraftDiagnostic[]) { nextDraftDiagnostics = value },
   authoringRequests() { return authoringRequestLog },
   lastAuthoringSectionRequest() { return lastSectionRequest },
+  lastCoverUploadRequest() { return lastCoverUpload },
   reset() {
     stories = []
     characters = []
@@ -427,10 +466,13 @@ export const apiServer = {
     saves = []
     rewinds = new Map()
     modelChanges = new Map()
-    storyDrafts = new Map()
+    activeStoryDrafts = new Map()
+    publishedStoryVersions = new Map()
+    nextStoryNumber = 1
     authoringRequestLog = []
     lastSectionRequest = null
     nextDraftDiagnostics = []
+    lastCoverUpload = null
     vi.mocked(fetch).mockReset()
     vi.mocked(fetch).mockImplementation(handler)
   },
