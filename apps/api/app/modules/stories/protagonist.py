@@ -30,6 +30,7 @@ def story_setup(session: Session, story: RuntimeStoryDefinition) -> StorySetup:
             raise HeroSelectionError("fixed_hero_missing")
         fixed_hero = FixedHeroDetail(
             id=revision.character_id,
+            revision_id=revision.id,
             name=revision.name,
             gender=revision.gender,
             age=revision.age,

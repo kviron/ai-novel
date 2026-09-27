@@ -75,6 +75,7 @@ class StorySummary(BaseModel):
 
 class CharacterDetail(BaseModel):
     id: str
+    revision_id: str
     name: str
     gender: str
     age: int
