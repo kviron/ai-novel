@@ -9,5 +9,7 @@ export const routes = {
   storySetup: (storyId: string) => `/stories/${encodeURIComponent(storyId)}/setup`,
   studio: '/studio',
   studioStoryCharacters: (storyId: string) => `/studio/stories/${encodeURIComponent(storyId)}/characters`,
+  studioStoryNew: '/studio/stories/new',
+  studioStoryEdit: (storyId: string) => `/studio/stories/${encodeURIComponent(storyId)}/edit`,
   studioSession: (sessionId: string) => `/studio/${encodeURIComponent(sessionId)}`,
 } as const

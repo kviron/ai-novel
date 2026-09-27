@@ -1,5 +1,7 @@
 import { vi } from 'vitest'
 
+import type { DraftDiagnostic, StoryDraft } from '@/shared/api/contracts'
+
 type Story = {
   id: string
   slug: string
@@ -50,6 +52,49 @@ let lastHeroSave: unknown = null
 let saves: Save[] = []
 let rewinds = new Map<string, Session>()
 let modelChanges = new Map<string, Session>()
+let storyDrafts = new Map<string, StoryDraft>()
+let authoringRequestLog: { method: string; path: string; body: unknown }[] = []
+let lastSectionRequest: { storyId: string; section: string; expected_revision: number; data: unknown } | null = null
+let nextDraftDiagnostics: DraftDiagnostic[] = []
+
+function defaultStoryDraft(storyId = 'story-1'): StoryDraft {
+  return {
+    story_id: storyId,
+    version_id: `${storyId}-draft-v1`,
+    version_number: 1,
+    status: 'draft',
+    draft_revision: 1,
+    based_on_version_id: null,
+    rules_version: 1,
+    created_at: '2026-09-27T00:00:00Z',
+    published_at: null,
+    identity: {
+      title: '', slug: '', short_description: '', premise: '', cover_material_id: null,
+      genres: [], tone: [], setting: '', opening_situation: '', content_rating: 'adult_18_plus',
+    },
+    mode: { mode: 'freeform' },
+    hero: { hero_policy: 'choice', hero_allowed_sources: ['catalog', 'draft'], fixed_hero_revision_id: null },
+    cast: { characters: [] },
+    rules: {
+      themes_allowed: [], themes_blocked: [], ending_policy: 'open_ended',
+      generation_policy: {
+        narration_perspective: 'second_person', prose_density: 'balanced', choice_policy: 'choices_and_free_input',
+        min_choices: 2, max_choices: 4, allow_romance: true, allow_violence: true, allow_horror: true,
+        allow_sexual_themes: false, desired_themes: '', forbidden_outcomes: '',
+      },
+      recommended_provider_id: 'ollama', recommended_model_id: 'qwen3:14b-q4_K_M',
+    },
+    canon: { creative_goals: '', facts: [], beats: [] },
+    character_revisions: [], diagnostics: [],
+  }
+}
+
+type StoryDraftSeed = Omit<Partial<StoryDraft>, 'identity'> & { identity?: Partial<StoryDraft['identity']> }
+
+function mergeDraftSeed(seed: StoryDraftSeed): StoryDraft {
+  const base = defaultStoryDraft(seed.story_id)
+  return { ...base, ...seed, identity: { ...base.identity, ...seed.identity } }
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -73,6 +118,85 @@ async function handler(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   const url = input instanceof Request ? input.url : String(input)
   const method = input instanceof Request ? input.method : init?.method ?? 'GET'
   const { pathname, searchParams } = new URL(url, 'http://api.test')
+
+  if (pathname.startsWith('/api/author/stories')) {
+    const body = await requestBody(input, init)
+    authoringRequestLog.push({ method, path: pathname, body })
+    if (method === 'POST' && pathname === '/api/author/stories') {
+      const created = mergeDraftSeed({
+        story_id: `story-${storyDrafts.size + 1}`,
+        identity: body && typeof body === 'object' ? body as Partial<StoryDraft['identity']> : {},
+      })
+      storyDrafts.set(created.story_id, created)
+      return json(created, 201)
+    }
+    const draftMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft$/)
+    if (method === 'GET' && draftMatch) {
+      const draft = storyDrafts.get(decodeURIComponent(draftMatch[1]))
+      return draft ? json(draft) : json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+    }
+    const sectionMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft\/(identity|mode|hero|cast|rules|canon)$/)
+    if (method === 'PUT' && sectionMatch) {
+      const storyId = decodeURIComponent(sectionMatch[1])
+      const section = sectionMatch[2] as keyof Pick<StoryDraft, 'identity' | 'mode' | 'hero' | 'cast' | 'rules' | 'canon'>
+      const request = body as { expected_revision: number; data: StoryDraft[typeof section] }
+      lastSectionRequest = { storyId, section, expected_revision: request.expected_revision, data: request.data }
+      const draft = storyDrafts.get(storyId)
+      if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      if (request.expected_revision !== draft.draft_revision) {
+        return json({
+          code: 'draft_conflict', detail: 'Черновик был изменён. Обновите его и повторите сохранение.',
+          retryable: false, latest_revision: draft.draft_revision,
+        }, 409)
+      }
+      const updated = { ...draft, [section]: request.data, draft_revision: draft.draft_revision + 1 }
+      storyDrafts.set(storyId, updated)
+      return json(updated)
+    }
+    const validateMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/validate$/)
+    if (method === 'POST' && validateMatch) {
+      const storyId = decodeURIComponent(validateMatch[1])
+      if (!storyDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      return json({ valid: !nextDraftDiagnostics.some(({ severity }) => severity === 'error'), diagnostics: nextDraftDiagnostics })
+    }
+    const publishMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/publish$/)
+    if (method === 'POST' && publishMatch) {
+      const storyId = decodeURIComponent(publishMatch[1])
+      const draft = storyDrafts.get(storyId)
+      if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      if (nextDraftDiagnostics.some(({ severity }) => severity === 'error')) {
+        return json({ code: 'draft_invalid', detail: 'Исправьте ошибки черновика перед продолжением.', retryable: false, diagnostics: nextDraftDiagnostics }, 422)
+      }
+      const published = { ...draft, status: 'published' as const, published_at: '2026-09-27T01:00:00Z' }
+      storyDrafts.set(storyId, published)
+      return json(published)
+    }
+    const testMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/test-sessions$/)
+    if (method === 'POST' && testMatch) {
+      const storyId = decodeURIComponent(testMatch[1])
+      const draft = storyDrafts.get(storyId)
+      if (!draft) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      if (nextDraftDiagnostics.some(({ severity }) => severity === 'error')) {
+        return json({ code: 'draft_invalid', detail: 'Исправьте ошибки черновика перед продолжением.', retryable: false, diagnostics: nextDraftDiagnostics }, 422)
+      }
+      return json({ ...nextSession, id: nextSession.id, state_version: nextSession.state_version }, 201)
+    }
+    const cloneMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft-from\/([^/]+)$/)
+    if (method === 'POST' && cloneMatch) {
+      const storyId = decodeURIComponent(cloneMatch[1])
+      const source = storyDrafts.get(storyId)
+      if (!source) return json({ code: 'version_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      const cloned = { ...source, status: 'draft' as const, version_id: `${storyId}-draft-clone`, based_on_version_id: decodeURIComponent(cloneMatch[2]), published_at: null, draft_revision: 1 }
+      storyDrafts.set(storyId, cloned)
+      return json(cloned, 201)
+    }
+    const coverMatch = pathname.match(/^\/api\/author\/stories\/([^/]+)\/draft\/cover$/)
+    if (method === 'POST' && coverMatch) {
+      const storyId = decodeURIComponent(coverMatch[1])
+      if (!storyDrafts.has(storyId)) return json({ code: 'story_not_found', detail: 'История или версия не найдена.', retryable: false }, 404)
+      return json({ id: 'cover-1', sha256: 'cover-sha', mime_type: init?.headers instanceof Headers ? init.headers.get('Content-Type') : 'image/png', filename: searchParams.get('filename'), creator: searchParams.get('creator'), license: searchParams.get('license'), source: searchParams.get('source') }, 201)
+    }
+  }
 
   if (method === 'GET' && pathname === '/api/characters') {
     if (failNextCharacterList) {
@@ -276,6 +400,13 @@ export const apiServer = {
     return lastStartRequest
   },
   lastHeroSaveRequest() { return lastHeroSave },
+  storyDraft(seed: StoryDraftSeed) {
+    const draft = mergeDraftSeed(seed)
+    storyDrafts.set(draft.story_id, draft)
+  },
+  draftDiagnostics(value: DraftDiagnostic[]) { nextDraftDiagnostics = value },
+  authoringRequests() { return authoringRequestLog },
+  lastAuthoringSectionRequest() { return lastSectionRequest },
   reset() {
     stories = []
     characters = []
@@ -296,6 +427,10 @@ export const apiServer = {
     saves = []
     rewinds = new Map()
     modelChanges = new Map()
+    storyDrafts = new Map()
+    authoringRequestLog = []
+    lastSectionRequest = null
+    nextDraftDiagnostics = []
     vi.mocked(fetch).mockReset()
     vi.mocked(fetch).mockImplementation(handler)
   },

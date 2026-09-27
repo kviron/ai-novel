@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  AuthorTestSessionRequest,
   CatalogCharacter,
   CharacterHistory,
   CharacterWrite,
@@ -10,6 +11,13 @@ import type {
   StartSessionRequest,
   StorySession,
   StoryDetail,
+  StoryDraft,
+  StoryDraftSectionMap,
+  StoryDraftSectionName,
+  StoryCoverMaterial,
+  StoryIdentitySection,
+  DraftDiagnostic,
+  DraftValidationResult,
   StoryCharacterLink,
   StorySummary,
   StorySetup,
@@ -22,6 +30,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     readonly retryable: boolean,
+    readonly diagnostics?: DraftDiagnostic[],
+    readonly latestRevision?: number,
   ) {
     super(message)
     this.name = 'ApiRequestError'
@@ -42,6 +52,14 @@ function isApiError(value: unknown): value is ApiError {
     && typeof (value as ApiError).code === 'string'
     && typeof (value as ApiError).detail === 'string'
     && typeof (value as ApiError).retryable === 'boolean'
+}
+
+function errorDetails(value: ApiError): Pick<ApiRequestError, 'diagnostics' | 'latestRevision'> {
+  const candidate = value as ApiError & { diagnostics?: unknown; latest_revision?: unknown }
+  return {
+    diagnostics: Array.isArray(candidate.diagnostics) ? candidate.diagnostics as DraftDiagnostic[] : undefined,
+    latestRevision: typeof candidate.latest_revision === 'number' ? candidate.latest_revision : undefined,
+  }
 }
 
 async function readJson(response: Response): Promise<unknown | undefined> {
@@ -75,7 +93,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const payload = await readJson(response)
   if (!response.ok) {
     if (isApiError(payload)) {
-      throw new ApiRequestError(payload.detail, response.status, payload.code, payload.retryable)
+      const { diagnostics, latestRevision } = errorDetails(payload)
+      throw new ApiRequestError(payload.detail, response.status, payload.code, payload.retryable, diagnostics, latestRevision)
     }
     throw new ApiRequestError(
       response.status >= 500 ? 'Сервис временно недоступен. Повторите попытку позже.' : 'Не удалось выполнить запрос.',
@@ -230,6 +249,51 @@ export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
         method: 'POST',
         body: { model_id: modelId, expected_state_version: expectedStateVersion },
         signal,
+      })
+    },
+    createStoryDraft(body?: StoryIdentitySection, signal?: AbortSignal) {
+      return request<StoryDraft>('/api/author/stories', { baseUrl, method: 'POST', body, signal })
+    },
+    getStoryDraft(storyId: string, signal?: AbortSignal) {
+      return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/draft`, { baseUrl, signal })
+    },
+    saveStoryDraftSection<K extends StoryDraftSectionName>(
+      storyId: string,
+      section: K,
+      data: StoryDraftSectionMap[K],
+      expectedRevision: number,
+      options: { confirmModeChange?: boolean; signal?: AbortSignal } = {},
+    ) {
+      const query = options.confirmModeChange ? '?confirm_mode_change=true' : ''
+      return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/draft/${section}${query}`, {
+        baseUrl, method: 'PUT', body: { expected_revision: expectedRevision, data }, signal: options.signal,
+      })
+    },
+    async uploadStoryCover(storyId: string, file: File, metadata: { creator: string; license: string; source: string }) {
+      const query = new URLSearchParams({ filename: file.name, ...metadata })
+      const response = await fileRequest(`/api/author/stories/${encodeURIComponent(storyId)}/draft/cover?${query}`, baseUrl, {
+        method: 'POST', headers: { 'Content-Type': file.type }, body: file,
+      })
+      return response.json() as Promise<StoryCoverMaterial>
+    },
+    validateStoryDraft(storyId: string, signal?: AbortSignal) {
+      return request<DraftValidationResult>(`/api/author/stories/${encodeURIComponent(storyId)}/validate`, {
+        baseUrl, method: 'POST', signal,
+      })
+    },
+    startDraftTest(storyId: string, body: AuthorTestSessionRequest = {}, signal?: AbortSignal) {
+      return request<StorySession>(`/api/author/stories/${encodeURIComponent(storyId)}/test-sessions`, {
+        baseUrl, method: 'POST', body, signal,
+      })
+    },
+    publishStoryDraft(storyId: string, signal?: AbortSignal) {
+      return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/publish`, {
+        baseUrl, method: 'POST', signal,
+      })
+    },
+    createDraftFromVersion(storyId: string, versionId: string, signal?: AbortSignal) {
+      return request<StoryDraft>(`/api/author/stories/${encodeURIComponent(storyId)}/draft-from/${encodeURIComponent(versionId)}`, {
+        baseUrl, method: 'POST', signal,
       })
     },
   }

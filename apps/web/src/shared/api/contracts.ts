@@ -182,6 +182,174 @@ export type ApiError = {
   retryable: boolean
 }
 
+export type StoryIdentitySection = {
+  title: string
+  slug: string
+  short_description: string
+  premise: string
+  cover_material_id: string | null
+  genres: string[]
+  tone: string[]
+  setting: string
+  opening_situation: string
+  content_rating: 'adult_18_plus'
+}
+
+export type StoryModeSection = { mode: 'freeform' | 'hybrid' }
+
+export type StoryHeroSection = {
+  hero_policy: 'fixed' | 'choice'
+  hero_allowed_sources: ('catalog' | 'draft')[]
+  fixed_hero_revision_id: string | null
+}
+
+export type StoryDraftCastMember = {
+  id: string
+  character_id: string
+  revision_id: string
+  order_index: number
+  role: string
+  color: string
+  playable: boolean
+}
+
+export type StoryCastSection = { characters: StoryDraftCastMember[] }
+
+export type StoryGenerationPolicy = {
+  narration_perspective: 'first_person' | 'second_person' | 'third_person'
+  prose_density: 'concise' | 'balanced' | 'detailed'
+  choice_policy: 'choices_and_free_input' | 'choices_only' | 'free_input_only'
+  min_choices: number
+  max_choices: number
+  allow_romance: boolean
+  allow_violence: boolean
+  allow_horror: boolean
+  allow_sexual_themes: boolean
+  desired_themes: string
+  forbidden_outcomes: string
+}
+
+export type StoryRulesSection = {
+  themes_allowed: string[]
+  themes_blocked: string[]
+  ending_policy: 'open_ended' | 'model_may_end' | 'required_beats_then_end'
+  generation_policy: StoryGenerationPolicy
+  recommended_provider_id: string
+  recommended_model_id: string
+}
+
+export type StoryBeatCondition =
+  | { kind: 'always' }
+  | { kind: 'after_turn_count'; turn_count: number }
+  | { kind: 'after_beat'; beat_id: string }
+
+export type StoryCanonFact = {
+  id: string
+  order_index: number
+  title: string
+  statement: string
+  severity: 'hard' | 'soft'
+  scope: 'world' | 'character' | 'relationship' | 'plot'
+  referenced_character_ids: string[]
+}
+
+export type StoryBeat = {
+  id: string
+  order_index: number
+  title: string
+  description: string
+  activation_condition: StoryBeatCondition
+  completion_evidence: string
+  required: boolean
+  ending_gate: boolean
+}
+
+export type StoryCanonSection = {
+  creative_goals: string
+  facts: StoryCanonFact[]
+  beats: StoryBeat[]
+}
+
+export type DraftDiagnostic = {
+  code: string
+  severity: 'error' | 'warning'
+  step: 'identity' | 'mode' | 'hero' | 'cast' | 'rules' | 'canon' | 'review'
+  field: string
+  item_id: string | null
+  message: string
+}
+
+export type DraftValidationResult = { valid: boolean; diagnostics: DraftDiagnostic[] }
+
+export type CharacterRevisionSnapshot = {
+  id: string
+  character_id: string
+  revision_number: number
+  name: string
+  gender: string
+  age: number
+  personality: string
+  appearance: string
+  biography: string
+  speech: string
+  role: string
+}
+
+export type StoryDraft = {
+  story_id: string
+  version_id: string
+  version_number: number
+  status: 'draft' | 'published'
+  draft_revision: number
+  based_on_version_id: string | null
+  rules_version: number
+  created_at: string
+  published_at: string | null
+  identity: StoryIdentitySection
+  mode: StoryModeSection
+  hero: StoryHeroSection
+  cast: StoryCastSection
+  rules: StoryRulesSection
+  canon: StoryCanonSection
+  character_revisions: CharacterRevisionSnapshot[]
+  diagnostics: DraftDiagnostic[]
+}
+
+export type StoryDraftSectionMap = {
+  identity: StoryIdentitySection
+  mode: StoryModeSection
+  hero: StoryHeroSection
+  cast: StoryCastSection
+  rules: StoryRulesSection
+  canon: StoryCanonSection
+}
+
+export type StoryDraftSectionName = keyof StoryDraftSectionMap
+
+export type SaveStoryDraftSectionRequest<K extends StoryDraftSectionName> = {
+  expected_revision: number
+  data: StoryDraftSectionMap[K]
+}
+
+export type DraftInvalidResponse = ApiError & { diagnostics: DraftDiagnostic[] }
+export type DraftConflictResponse = ApiError & { latest_revision: number }
+
+export type StoryCoverMaterial = {
+  id: string
+  sha256: string
+  mime_type: string
+  filename: string
+  creator: string
+  license: string
+  source: string
+}
+
+export type AuthorTestSessionRequest = {
+  provider_id?: string
+  model_id?: string | null
+  hero?: HeroChoice | null
+}
+
 export type StartSessionRequest = {
   provider_id: string
   model_id?: string

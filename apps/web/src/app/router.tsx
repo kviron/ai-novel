@@ -10,6 +10,7 @@ import { StoryPlayerRoute } from '@/pages/story-player'
 import { StudioRoute } from '@/pages/studio'
 import { StoryCastPage } from '@/pages/story-cast'
 import { StorySetupPage } from '@/pages/story-setup'
+import { StoryEditorRoute } from '@/pages/story-editor'
 import { routes } from '@/shared/config'
 
 export const routeObjects: RouteObject[] = [
@@ -22,6 +23,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'stories/:storyId/setup', element: <StorySetupPage /> },
       { path: 'studio', element: <StudioRoute /> },
       { path: 'studio/stories/:storyId/characters', element: <StoryCastPage /> },
+      { path: 'studio/stories/new', element: <StoryEditorRoute /> },
+      { path: 'studio/stories/:storyId/edit', element: <StoryEditorRoute /> },
       { path: 'studio/:sessionId', element: <StudioRoute /> },
       { path: 'characters', element: <CharactersPage /> },
       { path: 'characters/new', element: <CharacterEditorPage /> },
