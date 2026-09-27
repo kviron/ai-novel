@@ -18,6 +18,12 @@ def tags() -> dict:
     return {"models": [{"name": "qwen3:14b-q4_K_M"}, {"name": "gemma4-local:32k"}]}
 
 
+@app.post("/api/show")
+def show(request: dict[str, str]) -> dict:
+    context_length = 32768 if request.get("model") == "gemma4-local:32k" else 40960
+    return {"model_info": {"fake.context_length": context_length}}
+
+
 @app.post("/api/chat")
 def chat(request: ChatRequest) -> dict:
     draft = json.loads(request.messages[-1]["content"])
