@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 app = FastAPI()
+requests_log: list[dict] = []
 
 
 class ChatRequest(BaseModel):
@@ -16,6 +17,17 @@ class ChatRequest(BaseModel):
 @app.get("/api/tags")
 def tags() -> dict:
     return {"models": [{"name": "qwen3:14b-q4_K_M"}, {"name": "gemma4-local:32k"}]}
+
+
+@app.post("/test/reset")
+def reset() -> dict:
+    requests_log.clear()
+    return {"ok": True}
+
+
+@app.get("/test/requests")
+def requests() -> list[dict]:
+    return requests_log
 
 
 @app.post("/api/chat")
@@ -42,20 +54,38 @@ def chat(request: ChatRequest) -> dict:
     proposal = {
         "segments": [
             {"kind": "narration", "text": "Аканэ раскрыла веер и взглянула на неон за окном."},
-            {"kind": "dialogue", "character_id": speaker_id, "text": f"Я ждала этого вопроса. {action}"},
+            {
+                "kind": "dialogue",
+                "character_id": speaker_id,
+                "text": (
+                    "Исправленный ответ после проверки канона." if repaired else f"Я ждала этого вопроса. {action}"
+                ),
+            },
         ],
         "visual_directive": {
-            "mode": "sprite_scene", "emotion": "fan", "pose": "fan_open" if legacy else "default",
-            "outfit": "red_dress" if legacy else "none", "present_character_ids": [speaker_id],
+            "mode": "sprite_scene",
+            "emotion": "fan",
+            "pose": "fan_open" if legacy else "default",
+            "outfit": "red_dress" if legacy else ("dark_coat" if speaker_id == "mark" else "none"),
+            "present_character_ids": [speaker_id],
             "protagonist_emotion": "neutral",
         },
         "suggested_choices": ["Уточнить подробности", "Посмотреть на улицу", "Продолжить разговор"],
         "proposed_effects": [],
         "canon_assessments": [
-            {"fact_id": fact["id"], "status": "upheld", "evidence": "Сцена сохраняет факт."}
-            for fact in hard_facts
-        ] if hybrid else [],
+            {"fact_id": fact["id"], "status": "upheld", "evidence": "Сцена сохраняет факт."} for fact in hard_facts
+        ]
+        if hybrid
+        else [],
         "completed_beat_ids": [beat["id"] for beat in available_beats] if early_ending and repaired else [],
         "requests_ending": early_ending,
     }
+    requests_log.append(
+        {
+            "model": request.model,
+            "prompt": content,
+            "repaired": repaired,
+            "proposal": proposal,
+        }
+    )
     return {"message": {"role": "assistant", "content": json.dumps(proposal, ensure_ascii=False)}, "done": True}

@@ -113,22 +113,27 @@ test('добавляет точную ревизию персонажа с во�
   }))
 })
 
-test('сохраняет локальный текст при конфликте и перезагружает только по явному действию', async () => {
-  apiServer.storyDraft({ story_id: 'story-1', identity: { title: 'Сервер' } })
+test('сохраняет локальный текст при конфликте и перезагружает все поля только по явному действию', async () => {
+  apiServer.storyDraft({ story_id: 'story-1', identity: { title: 'Сервер', tone: ['серверный'] } })
   render(<TestRouter initialEntries={['/studio/stories/story-1/edit']} />)
   const title = await screen.findByRole('textbox', { name: 'Название' })
+  const tone = screen.getByRole('textbox', { name: 'Тон' })
   await userEvent.clear(title)
   await userEvent.type(title, 'Мой текст')
+  await userEvent.clear(tone)
+  await userEvent.type(tone, 'мой тон')
   await fetch('/api/author/stories/story-1/draft/identity', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expected_revision: 1, data: { title: 'Чужое изменение' } }),
+    body: JSON.stringify({ expected_revision: 1, data: { title: 'Чужое изменение', tone: ['чужой тон'] } }),
   })
   await userEvent.click(screen.getByRole('button', { name: 'Сохранить раздел' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Черновик был изменён')
   expect(title).toHaveValue('Мой текст')
+  expect(tone).toHaveValue('мой тон')
   await userEvent.click(screen.getByRole('button', { name: 'Загрузить версию сервера' }))
   await waitFor(() => expect(title).toHaveValue('Чужое изменение'))
+  expect(tone).toHaveValue('чужой тон')
 })
 
 test('предупреждает браузер о несохранённых изменениях и показывает русские состояния восстановления', async () => {

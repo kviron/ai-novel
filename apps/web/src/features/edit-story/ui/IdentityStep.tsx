@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { api, ApiRequestError, type StoryIdentitySection } from '@/shared/api'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
@@ -25,6 +25,17 @@ export function IdentityStep({ storyId, value, saving, onChange, onSave }: Props
   const [toneText, setToneText] = useState((value.tone ?? []).join(', '))
   const [uploadError, setUploadError] = useState('')
   const coverInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const next = (value.genres ?? []).join(', ')
+    const local = genresText.split(',').map((item) => item.trim()).filter(Boolean).join(', ')
+    if (next !== local) setGenresText(next)
+  }, [genresText, value.genres])
+  useEffect(() => {
+    const next = (value.tone ?? []).join(', ')
+    const local = toneText.split(',').map((item) => item.trim()).filter(Boolean).join(', ')
+    if (next !== local) setToneText(next)
+  }, [toneText, value.tone])
 
   const change = <K extends keyof StoryIdentitySection>(field: K, next: StoryIdentitySection[K]) => onChange({ ...value, [field]: next })
   async function submit(event: FormEvent) {
