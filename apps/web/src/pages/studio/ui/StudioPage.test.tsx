@@ -60,3 +60,9 @@ test('открывает существующую сессию по ID', async (
   await userEvent.click(screen.getByRole('button', { name: 'Открыть сессию' }))
   expect(await screen.findByText('Крыша')).toBeInTheDocument()
 })
+
+test('открывает создание новой новеллы из Студии', async () => {
+  render(<TestRouter initialEntries={['/studio']} />)
+  const link = await screen.findByRole('link', { name: 'Создать новеллу' })
+  expect(link).toHaveAttribute('href', '/studio/stories/new')
+})

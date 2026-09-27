@@ -3,6 +3,7 @@ import { PanelRight } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { DialogueHistory, StoryScene, useStoryPlayer } from '@/features/play-story'
+import { CreateStoryButton } from '@/features/edit-story'
 import { api, type StorySession, type StorySummary } from '@/shared/api'
 import { resolveStoryTheme, routes } from '@/shared/config'
 import { Alert, AlertDescription } from '@/shared/ui/alert'
@@ -48,7 +49,7 @@ function StudioEntry() {
   }
 
   return <div className="studio-entry">
-    <header className="studio-entry-header"><Badge variant="secondary">Режим автора</Badge></header>
+    <header className="studio-entry-header"><Badge variant="secondary">Режим автора</Badge><CreateStoryButton /></header>
     <div className="studio-entry-content">
       <div><p className="eyebrow">Студия</p><h1>Проверка сцен</h1><p className="muted-copy">Запустите отдельное прохождение, чтобы проверить историю, решения и состояние генерации.</p></div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { StoryEditorShell } from '@/features/edit-story'
 import { api, ApiRequestError, type StoryDraft } from '@/shared/api'
 import { routes } from '@/shared/config'
 
@@ -39,7 +40,10 @@ export function StoryEditorRoute() {
       if (!active) return
       loadedStoryId.current = nextDraft.story_id
       setDraft(nextDraft)
-      if (creating) navigate(routes.studioStoryEdit(nextDraft.story_id), { replace: true })
+      if (creating) {
+        createDraftRequest.current = null
+        navigate(routes.studioStoryEdit(nextDraft.story_id), { replace: true })
+      }
     }).catch((cause: unknown) => {
       if (!active) return
       if (cause instanceof DOMException && cause.name === 'AbortError') return
@@ -60,10 +64,6 @@ export function StoryEditorRoute() {
     </main>
   )
 
-  return (
-    <main>
-      <h1>{draft ? draft.identity.title || 'Новая новелла' : creating ? 'Новая новелла' : 'Редактор новеллы'}</h1>
-      {!draft && <p>Загружаем черновик…</p>}
-    </main>
-  )
+  if (!draft) return <main><h1>{creating ? 'Новая новелла' : 'Редактор новеллы'}</h1><p role="status">Загружаем черновик…</p></main>
+  return <StoryEditorShell key={draft.version_id} storyId={draft.story_id} initialDraft={draft} />
 }
