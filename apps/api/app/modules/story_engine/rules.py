@@ -34,6 +34,7 @@ class GenerationContext:
     memory_summary: str = ""
     completed_beat_ids: frozenset[str] = frozenset()
     available_beat_ids: frozenset[str] = frozenset()
+    dialogue_speaker_limit: int | None = None
 
 
 class InvalidProposalError(Exception):

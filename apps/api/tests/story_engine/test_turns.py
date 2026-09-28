@@ -117,6 +117,116 @@ def test_interleaved_scene_preserves_two_speakers_in_history(client, fake_provid
     assert restored["latest_turn"]["segments"] == result.json()["segments"]
 
 
+def test_after_group_exchange_harness_prefers_one_speaker_without_blocking_turn(client, fake_provider, akane_session):
+    group = proposal(
+        segments=[
+            {"kind": "narration", "text": "Марк и Аканэ оглядываются."},
+            {"kind": "dialogue", "character_id": "mark", "text": "Я проверю путь."},
+            {"kind": "dialogue", "character_id": "akane", "text": "А я прикрою нас."},
+        ],
+        visual_directive={
+            "emotion": "neutral", "pose": "default", "outfit": "red_dress",
+            "present_character_ids": ["mark", "akane"],
+        },
+    )
+    single = proposal(
+        segments=[
+            {"kind": "narration", "text": "Марк молча следит за дорогой."},
+            {"kind": "dialogue", "character_id": "akane", "text": "Путь свободен."},
+        ],
+        visual_directive={
+            "emotion": "neutral", "pose": "default", "outfit": "red_dress",
+            "present_character_ids": ["mark", "akane"],
+        },
+    )
+    fake_provider.responses = [group, group, single]
+
+    first = post_turn(client, akane_session)
+    second = post_turn(
+        client, akane_session, request_id="turn-2", expected_state_version=2, action="Осматриваюсь."
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert fake_provider.call_count == 3
+    assert {part["character_id"] for part in second.json()["segments"] if part["kind"] == "dialogue"} == {"akane"}
+    assert second.json()["visual_directive"]["present_character_ids"] == ["mark", "akane"]
+
+
+def test_group_address_allows_two_speakers_after_group_exchange(client, fake_provider, akane_session):
+    group = proposal(
+        segments=[
+            {"kind": "dialogue", "character_id": "mark", "text": "Я проверю путь."},
+            {"kind": "dialogue", "character_id": "akane", "text": "А я прикрою нас."},
+        ],
+        visual_directive={
+            "emotion": "neutral", "pose": "default", "outfit": "red_dress",
+            "present_character_ids": ["mark", "akane"],
+        },
+    )
+    fake_provider.responses = [group, group]
+
+    assert post_turn(client, akane_session).status_code == 201
+    second = post_turn(
+        client, akane_session, request_id="turn-2", expected_state_version=2,
+        action="Аканэ и Марк, что вы думаете?",
+    )
+
+    assert second.status_code == 201
+    assert fake_provider.call_count == 2
+    assert {part["character_id"] for part in second.json()["segments"] if part["kind"] == "dialogue"} == {
+        "mark", "akane"
+    }
+
+
+def test_speaker_preference_never_rejects_otherwise_valid_turn(client, fake_provider, akane_session):
+    group = proposal(
+        segments=[
+            {"kind": "dialogue", "character_id": "mark", "text": "Я проверю путь."},
+            {"kind": "dialogue", "character_id": "akane", "text": "А я прикрою нас."},
+        ],
+        visual_directive={
+            "emotion": "neutral", "pose": "default", "outfit": "red_dress",
+            "present_character_ids": ["mark", "akane"],
+        },
+    )
+    fake_provider.responses = [group, group, group]
+
+    assert post_turn(client, akane_session).status_code == 201
+    second = post_turn(
+        client, akane_session, request_id="turn-2", expected_state_version=2, action="Осматриваюсь."
+    )
+
+    assert second.status_code == 201
+    assert fake_provider.call_count == 3
+
+
+def test_speaker_correction_keeps_first_valid_turn_if_retry_is_invalid(client, fake_provider, akane_session):
+    group = proposal(
+        segments=[
+            {"kind": "dialogue", "character_id": "mark", "text": "Я проверю путь."},
+            {"kind": "dialogue", "character_id": "akane", "text": "А я прикрою нас."},
+        ],
+        visual_directive={
+            "emotion": "neutral", "pose": "default", "outfit": "red_dress",
+            "present_character_ids": ["mark", "akane"],
+        },
+    )
+    invalid = proposal(dialogue={"character_id": "outsider", "text": "Я здесь."})
+    fake_provider.responses = [group, group, invalid]
+
+    assert post_turn(client, akane_session).status_code == 201
+    second = post_turn(
+        client, akane_session, request_id="turn-2", expected_state_version=2, action="Осматриваюсь."
+    )
+
+    assert second.status_code == 201
+    assert fake_provider.call_count == 3
+    assert {part["character_id"] for part in second.json()["segments"] if part["kind"] == "dialogue"} == {
+        "mark", "akane"
+    }
+
+
 def test_silent_character_remains_present_and_rewind_restores_cast(client, fake_provider, akane_session):
     fake_provider.responses = [
         proposal(

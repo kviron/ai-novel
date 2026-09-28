@@ -50,6 +50,23 @@ def test_generation_context_separates_player_hero_from_npcs(client):
     assert '"character_id": "mark"' not in prompt.system_prompt
 
 
+def test_prompt_does_not_require_every_present_npc_to_speak(client, akane_session):
+    with Session(client.app.state.engine) as session:
+        context = load_context(session, akane_session.id, 1)
+
+    prompt = build_prompt(
+        context,
+        TurnCreate(request_id="scene-ensemble", expected_state_version=1, action="Обращаюсь к Марку"),
+        8192,
+    )
+
+    assert len(context.characters) == 2
+    assert "Обычно выбирай одного говорящего NPC" in prompt.system_prompt
+    assert "Молчащий NPC может оставаться в present_character_ids" in prompt.system_prompt
+    assert "Не добавляй второму NPC реплику" in prompt.system_prompt
+    assert "не чередуй их механически" in prompt.system_prompt
+
+
 def test_player_thought_is_structured_and_hero_emotion_is_limited_to_saved_sprites(client, akane_session):
     with Session(client.app.state.engine) as session:
         loaded = load_context(session, akane_session.id, 1)

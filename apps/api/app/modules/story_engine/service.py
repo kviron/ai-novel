@@ -15,7 +15,7 @@ from app.modules.stories.service import get_session_detail
 from . import repository
 from .contracts import AcceptedTurn, TurnCreate, TurnResult
 from .memory import ensure_memory
-from .prompt import build_prompt
+from .prompt import build_prompt, preferred_speaker_limit
 from .rules import GenerationContext, InvalidProposalError, validate_proposal
 
 
@@ -128,6 +128,20 @@ def _generate_turn(
     profile = catalog.resolve(context.provider_id, context.model_id)
     generation_request = build_prompt(context, request, profile.working_window)
     harness = LLMHarness(registry, catalog)
+    speaker_limit = context.dialogue_speaker_limit or preferred_speaker_limit(context, request.action)
+    validation_attempt = 0
+    valid_fallback: tuple[AcceptedTurn, str] | None = None
+
+    def validate_with_speaker_preference(proposal):
+        nonlocal validation_attempt, valid_fallback
+        validation_attempt += 1
+        accepted = validate_proposal(proposal, context)
+        speakers = {segment.character_id for segment in accepted.segments if segment.kind == "dialogue"}
+        if validation_attempt == 1 and len(speakers) > speaker_limit:
+            valid_fallback = (accepted, proposal.model_dump_json())
+            raise InvalidProposalError("prefer_single_speaker")
+        return accepted
+
     try:
         result = harness.run(
             GenerationTask(
@@ -140,12 +154,18 @@ def _generate_turn(
                 response_schema=generation_request.model_dump(mode="json", include={"response_schema"})[
                     "response_schema"
                 ],
-                validator=lambda proposal: validate_proposal(proposal, context),
+                validator=validate_with_speaker_preference,
                 retryable_errors=(InvalidProposalError,),
             )
         )
     except GenerationRejectedError as error:
+        if valid_fallback is not None:
+            return valid_fallback
         raise TurnGenerationFailedError(raw_response=error.raw_response) from None
+    except (ProviderUnavailableError, ProviderResponseError):
+        if valid_fallback is not None:
+            return valid_fallback
+        raise
     return result.value, result.raw_response
 
 
@@ -153,6 +173,7 @@ def _select_history(context: GenerationContext, request: TurnCreate, catalog: Mo
     """Move displaced recent turns into memory before constructing the game request."""
     profile = catalog.resolve(context.provider_id, context.model_id)
     recent = context.recent_turns
+    speaker_limit = preferred_speaker_limit(context, request.action)
     for keep in range(len(recent), -1, -1):
         moved = [
             {"id": turn["id"], "action": turn["action"], "segments": turn["segments"]}
@@ -164,6 +185,7 @@ def _select_history(context: GenerationContext, request: TurnCreate, catalog: Mo
             older_turns=older,
             recent_turns=recent[-keep:] if keep else [],
             memory_summary="М" * 2500 if older else "",
+            dialogue_speaker_limit=speaker_limit,
         )
         prompt = build_prompt(candidate, request, profile.working_window)
         layers = [

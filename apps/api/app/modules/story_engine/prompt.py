@@ -9,6 +9,27 @@ from .rules import GenerationContext
 
 PROMPT_VERSION = "v2"
 
+GROUP_ADDRESS_PHRASES = ("вы оба", "вас обоих", "вам обоим", "к вам обоим", "ко всем", "всем вам")
+
+
+def preferred_speaker_limit(context: GenerationContext, action: str) -> int:
+    """Give a group exchange room, then let at least one later turn breathe."""
+    available = len(context.characters)
+    if available < 2:
+        return 1
+    addressed = action.casefold()
+    named = sum(
+        bool(character["name"].split()) and character["name"].split()[0].casefold() in addressed
+        for character in context.characters
+    )
+    if named >= 2 or any(phrase in addressed for phrase in GROUP_ADDRESS_PHRASES):
+        return available
+    recent_group_exchange = any(
+        len({part.get("character_id") for part in turn.get("segments", []) if part.get("kind") == "dialogue"}) > 1
+        for turn in context.recent_turns[-2:]
+    )
+    return 1 if recent_group_exchange else min(2, available)
+
 
 def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens: int) -> TurnGenerationRequest:
     response_schema = TurnProposal.model_json_schema()
@@ -19,6 +40,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
     }
     hero_visual["required"].append("protagonist_emotion")
     policy = context.story.generation_policy
+    dialogue_speaker_limit = context.dialogue_speaker_limit or preferred_speaker_limit(context, request.action)
     choice_min, choice_max = (
         (0, 0) if policy.choice_policy == "free_input_only" else (policy.min_choices, policy.max_choices)
     )
@@ -38,6 +60,7 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
         "earlier_confirmed_memory": context.memory_summary,
         "action": request.action,
         "player_parts": [part.model_dump() for part in parse_player_input(request.action)],
+        "dialogue_speaker_limit": dialogue_speaker_limit,
     }
     mode_rules = "Следуй творческим целям истории."
     if context.story.mode == "hybrid":
@@ -104,11 +127,20 @@ def build_prompt(context: GenerationContext, request: TurnCreate, context_tokens
             "в текущей сцене, включая молчащих; не включай героя игрока. "
             "Сохраняй присутствующих из предыдущего хода, пока они не ушли; при смене локации "
             "переоцени состав. Все говорящие NPC обязательно должны входить в этот список. "
+            "Обычно выбирай одного говорящего NPC на ход: того, к кому обратился игрок, или того, чья реакция "
+            "двигает сцену. Молчащий NPC может оставаться в present_character_ids и реагировать жестом в narration. "
+            "Не добавляй второму NPC реплику ради согласия, пересказа сказанного или чередования голосов. "
+            "Второй NPC говорит, когда игрок обратился к нескольким, между персонажами нужен важный обмен "
+            "или второй сообщает новую существенную информацию. Присутствие в кадре не обязывает говорить. "
+            "dialogue_speaker_limit в пользовательском контексте ограничивает число разных говорящих NPC "
+            "в этом ходе; при значении 1 не давай реплик другим персонажам. "
+            f"Лимит разных говорящих NPC в этом ходе: {dialogue_speaker_limit}. "
             "Если у героя есть available_emotions, выбери visual_directive.protagonist_emotion "
             "только из этого списка по его явно выраженному состоянию, действиям, речи и мыслям; "
             "не считай эмоцию NPC эмоцией героя. При неуверенности выбери neutral. "
             "Верни suggested_choices строго в количестве choice_range; каждый выбор должен быть непустым и уникальным. "
-            "Верни segments в порядке сцены, чередуя narration и dialogue управляемых NPC. "
+            "Верни segments в порядке сцены: narration для событий и немых реакций, dialogue только для "
+            "необходимых реплик NPC; не чередуй их механически. "
             "У каждой dialogue укажи character_id; в narration его не указывай. "
             "Не повторяй прямую речь в описании и не вставляй её в narration. "
             "proposed_effects должен быть пустым: изменения канона в этой истории не разрешены. "
