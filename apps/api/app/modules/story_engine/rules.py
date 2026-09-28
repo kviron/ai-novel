@@ -119,11 +119,14 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
     directive = proposal.visual_directive
     uses_legacy_visuals = character["id"] == "akane" or character.get("source_type") == "legacy"
     allowed_poses = AKANE_POSES if uses_legacy_visuals else frozenset({"default"})
-    if directive.pose not in allowed_poses:
-        raise InvalidProposalError("unknown_pose_id")
     allowed_outfit = AKANE_OUTFIT if uses_legacy_visuals else MARK_OUTFIT if character["id"] == "mark" else "none"
-    if directive.outfit != allowed_outfit:
+    # Known asset IDs can be corrected to the speaking character's own sprite.
+    # Arbitrary strings remain invalid and can never become asset paths.
+    if directive.pose not in AKANE_POSES:
+        raise InvalidProposalError("unknown_pose_id")
+    if directive.outfit not in {AKANE_OUTFIT, MARK_OUTFIT, "none"}:
         raise InvalidProposalError("unknown_outfit_id")
+    pose = directive.pose if directive.pose in allowed_poses else "default"
     choices = [choice.strip() for choice in proposal.suggested_choices]
     policy = context.story.generation_policy
     minimum, maximum = (0, 0) if policy.choice_policy == "free_input_only" else (policy.min_choices, policy.max_choices)
@@ -168,8 +171,8 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
         visual_directive=CanonicalVisualDirective(
             character_id=character["id"],
             emotion=directive.emotion if directive.emotion in AKANE_EMOTIONS else "neutral",
-            pose=directive.pose,
-            outfit=directive.outfit,
+            pose=pose,
+            outfit=allowed_outfit,
             background=background,
             present_character_ids=present_ids,
             protagonist_emotion=(

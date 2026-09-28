@@ -402,6 +402,22 @@ def test_mark_can_speak_with_his_own_outfit(client, fake_provider, akane_session
     assert result.json()["visual_directive"]["outfit"] == "dark_coat"
 
 
+def test_invalid_visual_ids_fall_back_to_speakers_known_assets(client, fake_provider, akane_session):
+    fake_provider.responses = [
+        proposal(
+            dialogue={"character_id": "mark", "text": "Идём к выходу."},
+            visual_directive={"emotion": "neutral", "pose": "fan_open", "outfit": "none"},
+        )
+    ]
+
+    result = post_turn(client, akane_session)
+
+    assert result.status_code == 201
+    assert result.json()["visual_directive"]["pose"] == "default"
+    assert result.json()["visual_directive"]["outfit"] == "dark_coat"
+    assert fake_provider.call_count == 1
+
+
 def test_newly_attached_character_can_speak_without_borrowing_demo_assets(client, fake_provider):
     story_id = client.get("/api/stories").json()[0]["id"]
     created = client.post(

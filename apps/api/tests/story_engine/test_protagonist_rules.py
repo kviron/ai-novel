@@ -65,6 +65,7 @@ def test_prompt_does_not_require_every_present_npc_to_speak(client, akane_sessio
     assert "Молчащий NPC может оставаться в present_character_ids" in prompt.system_prompt
     assert "Не добавляй второму NPC реплику" in prompt.system_prompt
     assert "не чередуй их механически" in prompt.system_prompt
+    assert "Для Марка (id: mark) используй outfit: dark_coat, pose: default" in prompt.system_prompt
 
 
 def test_player_thought_is_structured_and_hero_emotion_is_limited_to_saved_sprites(client, akane_session):
