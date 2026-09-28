@@ -6,9 +6,10 @@ from dataclasses import replace
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.core.errors import ProviderUnavailableError
 from app.db.models import MemorySegment, StorySession, Turn
 from app.modules.llm_harness.budget import ContextBudgetError, estimate_tokens
-from app.modules.llm_harness.executor import GenerationTask, LLMHarness
+from app.modules.llm_harness.executor import GenerationRejectedError, GenerationTask, LLMHarness
 from app.modules.llm_harness.models import ModelCatalog
 from app.modules.providers.contracts import TextProposal
 from app.modules.providers.service import ProviderRegistry
@@ -26,6 +27,29 @@ def _validated_summary(proposal: TextProposal) -> str:
     if not summary or len(summary) > 2500 or estimate_tokens(summary) > 2500:
         raise InvalidMemorySummaryError("memory_summary_length")
     return summary
+
+
+def _shorten(text: str, limit: int) -> str:
+    clean = " ".join(text.split())
+    return clean if len(clean) <= limit else clean[: limit - 1].rstrip() + "…"
+
+
+def _confirmed_turn_fallback(previous: str, turns: list[dict]) -> str:
+    """Keep play moving when a model cannot format a memory summary.
+
+    This memory contains only saved player actions and accepted scene text.
+    Its fixed bounds fit the placeholder reserved by history selection.
+    """
+    lines = [f"Ранее: {_shorten(previous, 650)}"] if previous else []
+    for turn in turns:
+        narration = next((part["text"] for part in turn["segments"] if part["kind"] == "narration"), "")
+        dialogue = [part["text"] for part in turn["segments"] if part["kind"] == "dialogue"]
+        lines.append(
+            f"Игрок: {_shorten(turn['action'], 100)}; "
+            f"Сцена: {_shorten(narration, 100)}; "
+            f"Реплики: {' / '.join(_shorten(text, 110) for text in dialogue[:2])}"
+        )
+    return "\n".join(lines)[:2500]
 
 
 def select_cached_prefix(cached: list[MemorySegment], source_ids: list[str]) -> tuple[MemorySegment | None, int]:
@@ -117,12 +141,21 @@ def ensure_memory(
                         retryable_errors=(InvalidMemorySummaryError,),
                     )
                 )
+                next_summary = result.value
                 break
             except ContextBudgetError:
                 if chunk_size == 1:
                     raise
                 chunk_size = max(1, chunk_size // 2)
-        summary = result.value
+            except GenerationRejectedError:
+                next_summary = _confirmed_turn_fallback(summary, chunk)
+                break
+            except ProviderUnavailableError as error:
+                if not error.raw_response:
+                    raise
+                next_summary = _confirmed_turn_fallback(summary, chunk)
+                break
+        summary = next_summary
         ids = source_ids[: start + len(chunk)]
         segment = MemorySegment(
             session_id=context.session_id,

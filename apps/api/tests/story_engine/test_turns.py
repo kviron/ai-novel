@@ -986,6 +986,37 @@ def test_prompt_contains_state_facts_memory_and_bounded_recent_complete_turns(
     assert all("narration" not in turn and "dialogue" not in turn for turn in context["recent_turns"])
 
 
+@pytest.mark.parametrize("provider_failure", ["malformed_summary", "generation_aborted"])
+def test_failed_memory_generation_uses_confirmed_turns_and_game_continues(
+    client, fake_provider, akane_session, monkeypatch, provider_failure
+):
+    monkeypatch.setattr(fake_provider, "generate_turn", lambda _request: proposal())
+    summary_attempts = []
+
+    def failed_summary(_request):
+        summary_attempts.append(1)
+        if provider_failure == "generation_aborted":
+            raise ProviderUnavailableError(raw_response='{"error":"prediction aborted, token repeat limit reached"}')
+        raise ProviderResponseError(raw_response='{"message":{"content":"{\\"text\\":\\""}}')
+
+    monkeypatch.setattr(fake_provider, "generate_text", failed_summary)
+    for number in range(10):
+        response = post_turn(
+            client,
+            akane_session,
+            request_id=f"memory-fallback-{number}",
+            expected_state_version=number + 1,
+            action=f"Действие {number}",
+        )
+        assert response.status_code == 201
+
+    assert summary_attempts
+    memory = client.get(f"/api/sessions/{akane_session.id}/memory").json()
+    assert memory["covered_turn_count"] > 0
+    assert "Действие" in memory["summary"]
+    assert len(memory["summary"]) <= 2500
+
+
 @pytest.mark.parametrize("failure", ["unavailable", "model_unavailable", "invalid_twice", "domain_invalid_twice"])
 def test_late_duplicate_failure_replays_committed_winner(
     client,
