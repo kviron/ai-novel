@@ -144,6 +144,32 @@ def test_player_thought_is_structured_and_hero_emotion_is_limited_to_saved_sprit
     assert unsupported.visual_directive.protagonist_emotion == "neutral"
 
 
+@pytest.mark.parametrize("action", ["*я немного смущаюсь* да конечно Марк", "Я смутилась. «Всё хорошо»"])
+def test_explicit_player_embarrassment_overrides_model_emotion_when_sprite_exists(client, akane_session, action):
+    with Session(client.app.state.engine) as session:
+        loaded = load_context(session, akane_session.id, 1)
+    context = replace(
+        loaded, protagonist={**loaded.protagonist, "available_emotions": ["neutral", "determined", "embarrassed"]}
+    )
+    proposal = TurnProposal.model_validate({
+        "segments": [
+            {"kind": "narration", "text": "Марк оборачивается."},
+            {"kind": "dialogue", "character_id": "mark", "text": "Идём дальше."},
+        ],
+        "visual_directive": {
+            "emotion": "neutral", "pose": "default", "outfit": "dark_coat", "protagonist_emotion": "determined",
+        },
+        "suggested_choices": ["Пойти за Марком", "Осмотреть дорогу"],
+        "proposed_effects": [],
+    })
+
+    accepted = validate_proposal(proposal, context, player_action=action)
+
+    assert accepted.visual_directive.protagonist_emotion == "embarrassed"
+    negated = validate_proposal(proposal, context, player_action="Я не смущаюсь")
+    assert negated.visual_directive.protagonist_emotion == "determined"
+
+
 def test_model_cannot_give_player_hero_a_dialogue_segment(client):
     game = playable_akane_game(client)
     with Session(client.app.state.engine) as session:

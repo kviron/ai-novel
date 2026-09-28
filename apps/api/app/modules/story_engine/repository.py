@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app.db.models import SessionBeat, SessionProtagonist, StorySession, Turn, utc_timestamp
 from app.modules.characters import repository as character_repository
+from app.modules.characters.sprite_catalog import sprite_entries
 from app.modules.stories import repository as stories
 from app.modules.stories.service import SessionNotFoundError
 from app.modules.story_authoring.runtime import load_runtime_story_definition
@@ -59,9 +60,7 @@ def load_context(session: Session, session_id: str, expected_version: int) -> Ge
         if protagonist.source_revision_id
         else []
     )
-    protagonist_emotions = sorted(
-        {material.kind.split(":", 2)[1] for material in materials if material.kind.startswith("sprite:")}
-    )
+    protagonist_emotions = sorted({emotion for emotion, _, _ in sprite_entries(materials)})
     characters = stories.list_session_characters(session, session_id)
     turns: list[Turn] = []
     active_turn_ids: set[str] = set()

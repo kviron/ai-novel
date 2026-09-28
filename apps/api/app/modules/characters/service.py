@@ -23,6 +23,7 @@ from .schemas import (
     SpriteVariant,
     StoryCharacterProfile,
 )
+from .sprite_catalog import sprite_entries
 
 
 class CharacterNotFoundError(Exception):
@@ -76,10 +77,7 @@ def _material_profile(material: CharacterMaterial | None) -> MaterialProfile | N
 
 def _revision_profile(session: Session, revision: CharacterRevision) -> RevisionProfile:
     sprites: dict[str, list[SpriteVariant]] = {}
-    for material in repository.materials_for_revision(session, revision.id):
-        if not material.kind.startswith("sprite:"):
-            continue
-        _, emotion, variant = material.kind.split(":", 2)
+    for emotion, variant, material in sprite_entries(repository.materials_for_revision(session, revision.id)):
         sprites.setdefault(emotion, []).append(SpriteVariant(variant=variant, material=_material_profile(material)))
     return RevisionProfile.model_validate(
         {

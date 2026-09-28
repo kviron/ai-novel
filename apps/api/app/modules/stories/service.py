@@ -5,6 +5,7 @@ from sqlmodel import Session
 from app.db.models import Autosave, Character, CharacterRevision, SessionProtagonist, Story, StorySession, Turn
 from app.modules.characters import repository as character_repository
 from app.modules.characters.service import _material_profile
+from app.modules.characters.sprite_catalog import sprite_entries
 from app.modules.providers.model_selection import (
     UnsupportedModelError,
     available_models,
@@ -278,10 +279,6 @@ def _session_detail(
 def _sprites_for_revision(session: Session, revision_id: str) -> dict:
     materials = character_repository.materials_for_revision(session, revision_id)
     sprites = {}
-    for material in materials:
-        if material.kind.startswith("sprite:"):
-            _, emotion, variant = material.kind.split(":", 2)
-            sprites.setdefault(emotion, []).append(
-                {"variant": variant, "material": _material_profile(material)}
-            )
+    for emotion, variant, material in sprite_entries(materials):
+        sprites.setdefault(emotion, []).append({"variant": variant, "material": _material_profile(material)})
     return sprites

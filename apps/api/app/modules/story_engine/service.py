@@ -135,7 +135,7 @@ def _generate_turn(
     def validate_with_speaker_preference(proposal):
         nonlocal validation_attempt, valid_fallback
         validation_attempt += 1
-        accepted = validate_proposal(proposal, context)
+        accepted = validate_proposal(proposal, context, player_action=request.action)
         speakers = {segment.character_id for segment in accepted.segments if segment.kind == "dialogue"}
         if validation_attempt == 1 and len(speakers) > speaker_limit:
             valid_fallback = (accepted, proposal.model_dump_json())

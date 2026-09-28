@@ -47,9 +47,16 @@ PROTAGONIST_ACTION_PATTERN = re.compile(
     r"\b(?:ты|вы)\s+(?:решил(?:а|и)?|сказал(?:а|и)?|ответил(?:а|и)?|спросил(?:а|и)?)\b",
     re.IGNORECASE,
 )
+EXPLICIT_EMBARRASSMENT_PATTERN = re.compile(
+    r"\bя\s+(?:(?:немного|слегка|очень|сильно)\s+)?"
+    r"(?:смущаюсь|смущался|смущалась|смущен|смущена|смущён|смущённая|смутился|смутилась)\b",
+    re.IGNORECASE,
+)
 
 
-def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> AcceptedTurn:
+def validate_proposal(
+    proposal: TurnProposal, context: GenerationContext, *, player_action: str | None = None
+) -> AcceptedTurn:
     """Accept only known identifiers and meaningful choices; normalize missing emotion assets."""
     completed_beat_ids: list[str] = []
     if context.story.mode == "hybrid":
@@ -162,6 +169,12 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
         inherited = previous_directive.get("present_character_ids", []) if previous_background == background else []
         present_ids = list(dict.fromkeys([*inherited, *[segment.character_id for segment in dialogue_segments]]))
         present_ids = [character_id for character_id in present_ids if character_id in characters]
+    available_emotions = context.protagonist.get("available_emotions", [])
+    protagonist_emotion = (
+        directive.protagonist_emotion if directive.protagonist_emotion in available_emotions else "neutral"
+    )
+    if player_action and "embarrassed" in available_emotions and EXPLICIT_EMBARRASSMENT_PATTERN.search(player_action):
+        protagonist_emotion = "embarrassed"
     return AcceptedTurn(
         speaker=character["name"],
         narration="\n".join(segment.text.strip() for segment in narration_segments),
@@ -175,11 +188,7 @@ def validate_proposal(proposal: TurnProposal, context: GenerationContext) -> Acc
             outfit=allowed_outfit,
             background=background,
             present_character_ids=present_ids,
-            protagonist_emotion=(
-                directive.protagonist_emotion
-                if directive.protagonist_emotion in context.protagonist.get("available_emotions", [])
-                else "neutral"
-            ),
+            protagonist_emotion=protagonist_emotion,
         ),
         completed_beat_ids=completed_beat_ids,
     )
